@@ -1,0 +1,25 @@
+"use client";
+
+import AuthRedirectPage from "@/src/bpa/components/AuthRedirectPage";
+
+/**
+ * Producer Registration Page - Redirects to Central Auth
+ * 
+ * This page redirects to the central auth server for producer registration.
+ * After successful registration, users are redirected back to /producer.
+ * 
+ * Query Parameters:
+ * - ?returnTo=<url> - Custom return URL (must be same-origin or allowed localhost port)
+ * - ?next=<path> - Relative path to redirect to after registration
+ * 
+ * @see lib/authRedirect.ts for URL building and security validation
+ */
+export default function ProducerRegisterPage() {
+  return (
+    <AuthRedirectPage
+      panelName="producer"
+      action="register"
+      defaultLandingPath="/producer"
+    />
+  );
+}

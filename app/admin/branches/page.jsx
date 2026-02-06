@@ -1,365 +1,280 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { apiGet, apiPatch, apiPost } from "../../../lib/api";
+import Link from "next/link";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { Icon } from "@iconify/react";
+import PageHeader from "@/src/bpa/components/PageHeader";
+import { apiGet, apiPatch } from "@/lib/api";
+import SectionCard from "@/src/bpa/admin/components/SectionCard";
+import StatCard from "@/src/bpa/admin/components/StatCard";
+import FilterPanel from "@/src/bpa/admin/components/FilterPanel";
+import StatusChip from "@/src/bpa/admin/components/StatusChip";
 
-const CAPS = [
-  "clinic",
-  "shop",
-  "online_sales",
-  "delivery_hub",
-  "hq_warehouse",
-];
+const STATUS = ["", "DRAFT", "PENDING_REVIEW", "ACTIVE", "INACTIVE", "BLOCKED"];
+const TYPE_CODES = ["", "CLINIC", "PET_SHOP", "DELIVERY_HUB", "ONLINE_HUB"];
 
-function Pill({ children }) {
-  return (
-    <span
-      style={{
-        fontSize: 12,
-        padding: "4px 8px",
-        borderRadius: 999,
-        border: "1px solid #e5e7eb",
-        background: "#fafafa",
-      }}
-    >
-      {children}
-    </span>
-  );
-}
-
-function Section({ title, children }) {
-  return (
-    <div
-      style={{
-        border: "1px solid #e5e7eb",
-        borderRadius: 12,
-        padding: 12,
-        background: "#fff",
-      }}
-    >
-      <div style={{ fontWeight: 800, marginBottom: 10 }}>{title}</div>
-      {children}
-    </div>
-  );
-}
-
-export default function Page() {
-  const [items, setItems] = useState([]);
+export default function AdminBranchesPage() {
+  const [rows, setRows] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [status, setStatus] = useState("");
+  const [orgId, setOrgId] = useState("");
+  const [typeCode, setTypeCode] = useState("");
+  const [q, setQ] = useState("");
+  const [pauseModal, setPauseModal] = useState({ open: false, branch: null, reason: "" });
+  const [pauseLoading, setPauseLoading] = useState(false);
 
-  // Create
-  const [name, setName] = useState("");
-  const [code, setCode] = useState("");
-  const [address, setAddress] = useState("");
-  const [caps, setCaps] = useState(["clinic"]);
+  const query = useMemo(() => {
+    const p = new URLSearchParams();
+    if (status) p.set("status", status);
+    if (orgId) p.set("orgId", orgId);
+    if (q) p.set("q", q);
+    return p.toString() ? `?${p.toString()}` : "";
+  }, [status, orgId, q]);
 
-  // Edit
-  const [editing, setEditing] = useState(null);
-
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
-      const res = await apiGet("/api/v1/admin/branches");
-      setItems(res?.data || []);
+      const r = await apiGet(`/api/v1/admin/branches${query}`);
+      setRows(r?.data ?? []);
     } catch (e) {
-      setError(e?.message || "Failed to load");
+      setError(e?.message ?? "Failed to load branches");
     } finally {
       setLoading(false);
     }
-  }
+  }, [query]);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
-  const canWrite = true; // UI already hidden by permissions in nav; keep simple.
-
-  const editingCaps = useMemo(() => {
-    if (!editing) return [];
-    return (editing.capabilities || []).map((x) => x.capability);
-  }, [editing]);
-
-  async function onCreate(e) {
-    e.preventDefault();
-    setError("");
-    if (!name.trim() || !code.trim()) {
-      setError("Name and code are required");
-      return;
+  const filtered = useMemo(() => {
+    let result = rows;
+    if (typeCode) {
+      result = result.filter((r) =>
+        (r.typeLinks ?? []).some((t) => t.branchType?.code === typeCode)
+      );
     }
+    return result;
+  }, [rows, typeCode]);
+
+  const kpis = useMemo(() => {
+    const active = rows.filter((r) => String(r.status) === "ACTIVE").length;
+    const paused = rows.filter((r) => ["INACTIVE", "BLOCKED"].includes(String(r.status))).length;
+    return { total: rows.length, active, paused };
+  }, [rows]);
+
+  const handlePause = async () => {
+    const b = pauseModal.branch;
+    if (!b) return;
+    setPauseLoading(true);
     try {
-      await apiPost("/api/v1/admin/branches", {
-        name: name.trim(),
-        code: code.trim(),
-        address: address.trim() || undefined,
-        capabilities: caps,
+      await apiPatch(`/api/v1/admin/branches/${b.id}`, {
+        status: "INACTIVE",
+        ...(pauseModal.reason.trim() ? { featuresJson: { ...(b.featuresJson || {}), pauseReason: pauseModal.reason.trim(), pausedAt: new Date().toISOString() } } : {}),
       });
-      setName("");
-      setCode("");
-      setAddress("");
-      setCaps(["clinic"]);
+      setPauseModal({ open: false, branch: null, reason: "" });
       await load();
-    } catch (e2) {
-      setError(e2?.message || "Create failed");
+    } catch (e) {
+      alert(e?.message ?? "Pause failed");
+    } finally {
+      setPauseLoading(false);
     }
-  }
-
-  async function onSaveEdit(e) {
-    e.preventDefault();
-    if (!editing) return;
-    setError("");
-    try {
-      await apiPatch(`/api/v1/admin/branches/${editing.id}`, {
-        name: editing.name,
-        address: editing.address,
-        isActive: editing.isActive,
-        capabilities: editingCaps,
-      });
-      setEditing(null);
-      await load();
-    } catch (e2) {
-      setError(e2?.message || "Update failed");
-    }
-  }
+  };
 
   return (
-    <div style={{ padding: 18 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", gap: 12 }}>
-        <div>
-          <h2 style={{ margin: 0, marginBottom: 6 }}>Branches</h2>
-          <div style={{ color: "#6b7280", fontSize: 13 }}>
-            Create/update branches and set capabilities (clinic/shop/online etc.).
-          </div>
+    <div className="container-fluid">
+      <PageHeader
+        title="Branches"
+        subtitle="Search, filter, and manage branches. Pause operations or open staff roster."
+        right={
+          <button
+            type="button"
+            className="btn btn-outline-primary d-flex align-items-center gap-2"
+            onClick={load}
+            disabled={loading}
+          >
+            <Icon icon="solar:refresh-outline" />
+            {loading ? "Loading" : "Refresh"}
+          </button>
+        }
+      />
+
+      {error ? <div className="alert alert-danger">{error}</div> : null}
+
+      <div className="row g-3 mb-3">
+        <div className="col-6 col-md-4">
+          <StatCard title="Total branches" value={kpis.total} icon={<Icon icon="solar:shop-2-bold" />} tone="primary" />
         </div>
-        <button
-          onClick={load}
-          style={{
-            padding: "10px 12px",
-            borderRadius: 10,
-            border: "1px solid #e5e7eb",
-            background: "#fff",
-            height: "fit-content",
-          }}
-        >
-          {loading ? "Refreshing…" : "Refresh"}
-        </button>
+        <div className="col-6 col-md-4">
+          <StatCard title="Active" value={kpis.active} icon={<Icon icon="solar:verify-bold" />} tone="success" />
+        </div>
+        <div className="col-6 col-md-4">
+          <StatCard title="Paused / inactive" value={kpis.paused} icon={<Icon icon="solar:pause-circle-bold" />} tone="warning" />
+        </div>
       </div>
 
-      {error ? (
-        <div
-          style={{
-            marginTop: 12,
-            padding: 10,
-            borderRadius: 10,
-            border: "1px solid #fecaca",
-            background: "#fff1f2",
-            color: "#991b1b",
-          }}
-        >
-          {error}
+      <div className="row g-3">
+        <div className="col-12 col-md-4 col-lg-3">
+          <FilterPanel title="Filters">
+            <div className="d-flex flex-column gap-2">
+              <label className="small text-secondary">Status</label>
+              <select className="form-select form-select-sm" value={status} onChange={(e) => setStatus(e.target.value)}>
+                {STATUS.map((s) => (
+                  <option key={s || "all"} value={s}>{s || "All"}</option>
+                ))}
+              </select>
+              <label className="small text-secondary mt-2">Type</label>
+              <select className="form-select form-select-sm" value={typeCode} onChange={(e) => setTypeCode(e.target.value)}>
+                {TYPE_CODES.map((c) => (
+                  <option key={c || "all"} value={c}>{c || "All"}</option>
+                ))}
+              </select>
+              <label className="small text-secondary mt-2">Org ID</label>
+              <input
+                type="text"
+                className="form-control form-control-sm"
+                placeholder="Org ID"
+                value={orgId}
+                onChange={(e) => setOrgId(e.target.value)}
+              />
+              <label className="small text-secondary mt-2">Search</label>
+              <input
+                type="text"
+                className="form-control form-control-sm"
+                placeholder="Name, code..."
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+              />
+            </div>
+          </FilterPanel>
         </div>
-      ) : null}
-
-      <div style={{ display: "grid", gridTemplateColumns: "420px 1fr", gap: 14, marginTop: 14 }}>
-        <Section title={editing ? `Edit Branch #${editing.id}` : "Create Branch"}>
-          {editing ? (
-            <form onSubmit={onSaveEdit} style={{ display: "grid", gap: 10 }}>
-              <label style={{ display: "grid", gap: 6 }}>
-                <div style={{ fontSize: 12, color: "#6b7280" }}>Name</div>
-                <input
-                  value={editing.name || ""}
-                  onChange={(e) => setEditing({ ...editing, name: e.target.value })}
-                  style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                />
-              </label>
-
-              <label style={{ display: "grid", gap: 6 }}>
-                <div style={{ fontSize: 12, color: "#6b7280" }}>Address</div>
-                <input
-                  value={editing.address || ""}
-                  onChange={(e) => setEditing({ ...editing, address: e.target.value })}
-                  style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                />
-              </label>
-
-              <label style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                <input
-                  type="checkbox"
-                  checked={!!editing.isActive}
-                  onChange={(e) => setEditing({ ...editing, isActive: e.target.checked })}
-                />
-                <span style={{ fontSize: 13 }}>Active</span>
-              </label>
-
-              <div>
-                <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>
-                  Capabilities
-                </div>
-                <div style={{ display: "grid", gap: 8 }}>
-                  {CAPS.map((c) => {
-                    const checked = editingCaps.includes(c);
+        <div className="col-12 col-md-8 col-lg-9">
+          <SectionCard title="Branches" right={<span className="text-secondary small">{filtered.length} branch(es)</span>}>
+            <div className="table-responsive">
+              <table className="table align-middle mb-0">
+                <thead>
+                  <tr>
+                    <th>Branch</th>
+                    <th>Organization</th>
+                    <th>Types</th>
+                    <th>Status</th>
+                    <th>Verification</th>
+                    <th className="text-end">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filtered.map((r) => {
+                    const types = (r.typeLinks ?? [])
+                      .map((t) => t.branchType?.code)
+                      .filter(Boolean)
+                      .join(", ");
                     return (
-                      <label key={c} style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                        <input
-                          type="checkbox"
-                          checked={checked}
-                          onChange={(e) => {
-                            const next = e.target.checked
-                              ? Array.from(new Set([...editingCaps, c]))
-                              : editingCaps.filter((x) => x !== c);
-                            setEditing({
-                              ...editing,
-                              capabilities: next.map((cap) => ({ capability: cap })),
-                            });
-                          }}
-                        />
-                        <span style={{ fontSize: 13 }}>{c}</span>
-                      </label>
+                      <tr key={r.id}>
+                        <td>
+                          <div className="fw-semibold">{r.name ?? "—"}</div>
+                          <div className="text-secondary" style={{ fontSize: 12 }}>Branch #{r.id}</div>
+                        </td>
+                        <td>
+                          <div>{r.org?.name ?? "—"}</div>
+                          <div className="text-secondary" style={{ fontSize: 12 }}>Org #{r.orgId ?? "—"}</div>
+                        </td>
+                        <td>
+                          {types ? (
+                            <span className="badge bg-primary bg-opacity-25">{types}</span>
+                          ) : (
+                            <span className="text-secondary">—</span>
+                          )}
+                        </td>
+                        <td><StatusChip status={r.status} /></td>
+                        <td><StatusChip status={r.verificationStatus} /></td>
+                        <td className="text-end">
+                          <div className="d-flex gap-1 justify-content-end flex-wrap">
+                            <Link className="btn btn-sm btn-primary" href={`/admin/branches/${r.id}`}>
+                              View
+                            </Link>
+                            <Link
+                              className="btn btn-sm btn-outline-secondary"
+                              href={`/admin/branches/${r.id}#staff`}
+                              title="Staff roster"
+                            >
+                              <Icon icon="solar:users-group-rounded-bold" />
+                            </Link>
+                            {r.status === "ACTIVE" && (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-outline-warning"
+                                title="Pause operations"
+                                onClick={() => setPauseModal({ open: true, branch: r, reason: "" })}
+                              >
+                                <Icon icon="solar:pause-circle-bold" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
                     );
                   })}
-                </div>
-              </div>
+                  {!filtered.length && !loading ? (
+                    <tr>
+                      <td colSpan={6} className="text-secondary text-center py-4">No branches found.</td>
+                    </tr>
+                  ) : null}
+                </tbody>
+              </table>
+            </div>
+          </SectionCard>
+        </div>
+      </div>
 
-              <div style={{ display: "flex", gap: 10, marginTop: 4 }}>
-                <button
-                  type="submit"
-                  style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "#111827", color: "#fff" }}
-                >
-                  Save
-                </button>
+      {pauseModal.open && (
+        <div className="modal d-block" style={{ background: "rgba(0,0,0,0.5)" }} tabIndex={-1}>
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content rounded">
+              <div className="modal-header">
+                <h5 className="modal-title">Pause operations</h5>
                 <button
                   type="button"
-                  onClick={() => setEditing(null)}
-                  style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #e5e7eb", background: "#fff" }}
+                  className="btn-close"
+                  onClick={() => setPauseModal({ open: false, branch: null, reason: "" })}
+                  aria-label="Close"
+                />
+              </div>
+              <div className="modal-body">
+                <p className="mb-2">
+                  Pause operations for <strong>{pauseModal.branch?.name ?? "—"}</strong>? Set status to Inactive.
+                </p>
+                <label className="form-label small">Reason (optional)</label>
+                <textarea
+                  className="form-control"
+                  rows={2}
+                  placeholder="Reason for pausing…"
+                  value={pauseModal.reason}
+                  onChange={(e) => setPauseModal((s) => ({ ...s, reason: e.target.value }))}
+                />
+              </div>
+              <div className="modal-footer">
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary"
+                  onClick={() => setPauseModal({ open: false, branch: null, reason: "" })}
                 >
                   Cancel
                 </button>
+                <button
+                  type="button"
+                  className="btn btn-warning"
+                  onClick={handlePause}
+                  disabled={pauseLoading}
+                >
+                  {pauseLoading ? "Pausing..." : "Pause"}
+                </button>
               </div>
-            </form>
-          ) : (
-            <form onSubmit={onCreate} style={{ display: "grid", gap: 10 }}>
-              <label style={{ display: "grid", gap: 6 }}>
-                <div style={{ fontSize: 12, color: "#6b7280" }}>Name *</div>
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  placeholder="e.g. Rampura Branch"
-                  style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                />
-              </label>
-
-              <label style={{ display: "grid", gap: 6 }}>
-                <div style={{ fontSize: 12, color: "#6b7280" }}>Code *</div>
-                <input
-                  value={code}
-                  onChange={(e) => setCode(e.target.value)}
-                  placeholder="Unique in org (e.g. CS-01)"
-                  style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                />
-              </label>
-
-              <label style={{ display: "grid", gap: 6 }}>
-                <div style={{ fontSize: 12, color: "#6b7280" }}>Address</div>
-                <input
-                  value={address}
-                  onChange={(e) => setAddress(e.target.value)}
-                  placeholder="Optional"
-                  style={{ padding: 10, borderRadius: 10, border: "1px solid #e5e7eb" }}
-                />
-              </label>
-
-              <div>
-                <div style={{ fontSize: 12, color: "#6b7280", marginBottom: 6 }}>
-                  Capabilities
-                </div>
-                <div style={{ display: "grid", gap: 8 }}>
-                  {CAPS.map((c) => (
-                    <label key={c} style={{ display: "flex", gap: 10, alignItems: "center" }}>
-                      <input
-                        type="checkbox"
-                        checked={caps.includes(c)}
-                        onChange={(e) => {
-                          setCaps((prev) =>
-                            e.target.checked
-                              ? Array.from(new Set([...prev, c]))
-                              : prev.filter((x) => x !== c)
-                          );
-                        }}
-                      />
-                      <span style={{ fontSize: 13 }}>{c}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <button
-                type="submit"
-                disabled={!canWrite}
-                style={{
-                  padding: "10px 12px",
-                  borderRadius: 10,
-                  border: "1px solid #e5e7eb",
-                  background: canWrite ? "#111827" : "#e5e7eb",
-                  color: canWrite ? "#fff" : "#6b7280",
-                }}
-              >
-                Create
-              </button>
-            </form>
-          )}
-        </Section>
-
-        <Section title={`All Branches (${items.length})`}>
-          <div style={{ overflowX: "auto" }}>
-            <table style={{ width: "100%", borderCollapse: "collapse" }}>
-              <thead>
-                <tr>
-                  <th align="left" style={{ padding: 10, borderBottom: "1px solid #e5e7eb" }}>Name</th>
-                  <th align="left" style={{ padding: 10, borderBottom: "1px solid #e5e7eb" }}>Code</th>
-                  <th align="left" style={{ padding: 10, borderBottom: "1px solid #e5e7eb" }}>Capabilities</th>
-                  <th align="left" style={{ padding: 10, borderBottom: "1px solid #e5e7eb" }}>Status</th>
-                  <th style={{ padding: 10, borderBottom: "1px solid #e5e7eb" }} />
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((b) => (
-                  <tr key={b.id} style={{ borderBottom: "1px solid #f3f4f6" }}>
-                    <td style={{ padding: 10, fontWeight: 700 }}>{b.name}</td>
-                    <td style={{ padding: 10, fontFamily: "monospace", fontSize: 13 }}>{b.code}</td>
-                    <td style={{ padding: 10 }}>
-                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-                        {(b.capabilities || []).length ? (
-                          b.capabilities.map((c) => <Pill key={c.capability}>{c.capability}</Pill>)
-                        ) : (
-                          <span style={{ color: "#6b7280", fontSize: 13 }}>—</span>
-                        )}
-                      </div>
-                    </td>
-                    <td style={{ padding: 10 }}>{b.isActive ? "Active" : "Inactive"}</td>
-                    <td style={{ padding: 10 }}>
-                      <button
-                        onClick={() => setEditing(b)}
-                        style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e7eb", background: "#fff" }}
-                      >
-                        Edit
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-
-                {!items.length ? (
-                  <tr>
-                    <td colSpan={5} style={{ padding: 12, color: "#6b7280" }}>
-                      No branches yet.
-                    </td>
-                  </tr>
-                ) : null}
-              </tbody>
-            </table>
+            </div>
           </div>
-        </Section>
-      </div>
+        </div>
+      )}
     </div>
   );
 }

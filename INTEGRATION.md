@@ -1,1 +1,0 @@
-Add under app/partner

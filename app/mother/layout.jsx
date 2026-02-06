@@ -1,9 +1,5 @@
-import SiteShell from "@/components/SiteShell";
+import MasterLayout from "@/src/masterLayout/MasterLayout";
 
 export default function MotherLayout({ children }) {
-  return (
-    <SiteShell site="mother" title="bangladeshpetassociation.com">
-      {children}
-    </SiteShell>
-  );
+  return <MasterLayout>{children}</MasterLayout>;
 }

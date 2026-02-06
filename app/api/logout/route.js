@@ -29,3 +29,16 @@ export async function POST() {
 
   return res;
 }
+
+export async function GET(request) {
+  // Allow logout via browser navigation (redirects to login)
+  const loginUrl = new URL("/auth/login", request.url);
+  const res = NextResponse.redirect(loginUrl);
+
+  clearCookie(res, "access_token");
+  clearCookie(res, "token");
+  clearCookie(res, "jwt");
+  clearCookie(res, "refresh_token");
+
+  return res;
+}

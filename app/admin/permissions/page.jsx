@@ -1,99 +1,81 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { apiGet } from "../../../lib/api";
+import { useCallback, useEffect, useState } from "react";
+import PageHeader from "@/src/bpa/components/PageHeader";
+import { apiGet } from "@/lib/api";
+import SectionCard from "@/src/bpa/admin/components/SectionCard";
 
-function Card({ children }) {
-  return (
-    <div
-      style={{
-        border: "1px solid #e5e7eb",
-        borderRadius: 12,
-        padding: 12,
-        background: "#fff",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-export default function Page() {
+export default function PermissionsPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [items, setItems] = useState([]);
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true);
     setError("");
     try {
       const res = await apiGet("/api/v1/admin/permissions");
-      setItems(res?.data || []);
+      setItems(res?.data ?? []);
     } catch (e) {
-      setError(e?.message || "Failed");
+      setError(e?.message ?? "Failed");
     } finally {
       setLoading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     load();
-  }, []);
+  }, [load]);
 
   return (
-    <div style={{ padding: 18 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-        <div>
-          <h2 style={{ margin: 0, marginBottom: 6 }}>Permissions</h2>
-          <div style={{ color: "#6b7280", fontSize: 13 }}>
-            Read-only catalog. Roles are configured on the Roles page.
-          </div>
-        </div>
+    <div className="container-fluid">
+      <PageHeader
+        title="Permissions"
+        subtitle="Read-only catalog. Assign via Roles."
+        right={
+          <button
+            type="button"
+            className="btn btn-outline-primary"
+            onClick={load}
+            disabled={loading}
+          >
+            Refresh
+          </button>
+        }
+      />
 
-        <button
-          onClick={load}
-          disabled={loading}
-          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e7eb", background: "#fff" }}
-        >
-          Refresh
-        </button>
-      </div>
+      {error ? <div className="alert alert-danger">{error}</div> : null}
 
-      {error ? (
-        <div style={{ marginTop: 12, padding: 10, borderRadius: 10, border: "1px solid #fecaca", background: "#fff1f2" }}>
-          <b style={{ color: "#b91c1c" }}>Error:</b> {error}
-        </div>
-      ) : null}
-
-      <div style={{ marginTop: 14 }}>
-        <Card>
-          <table style={{ width: "100%", borderCollapse: "collapse" }}>
+      <SectionCard title="Permission list">
+        <div className="table-responsive">
+          <table className="table align-middle mb-0">
             <thead>
               <tr>
-                <th align="left" style={{ padding: 10, borderBottom: "1px solid #e5e7eb" }}>Key</th>
-                <th align="left" style={{ padding: 10, borderBottom: "1px solid #e5e7eb" }}>Description</th>
+                <th>Key</th>
+                <th>Label</th>
+                <th>Description</th>
               </tr>
             </thead>
             <tbody>
               {items.map((p) => (
-                <tr key={p.id || p.key}>
-                  <td style={{ padding: 10, borderBottom: "1px solid #f3f4f6", fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }}>
-                    {p.key}
-                  </td>
-                  <td style={{ padding: 10, borderBottom: "1px solid #f3f4f6", color: "#6b7280" }}>
-                    {p.description || "—"}
-                  </td>
+                <tr key={p.id ?? p.key}>
+                  <td className="font-monospace">{p.key}</td>
+                  <td>{p.label ?? "—"}</td>
+                  <td className="text-secondary">{p.description ?? "—"}</td>
                 </tr>
               ))}
-              {!items.length ? (
+              {!items.length && !loading ? (
                 <tr>
-                  <td colSpan={2} style={{ padding: 12, color: "#6b7280" }}>No permissions found.</td>
+                  <td colSpan={3} className="text-secondary text-center">
+                    No permissions found.
+                  </td>
                 </tr>
               ) : null}
             </tbody>
           </table>
-        </Card>
-      </div>
+        </div>
+        {loading ? <div className="text-center text-secondary py-2">Loading...</div> : null}
+      </SectionCard>
     </div>
   );
 }

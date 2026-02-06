@@ -1,9 +1,5 @@
-import SiteShell from "@/components/SiteShell";
+import MasterLayout from "@/src/masterLayout/MasterLayout";
 
-export default function ShopLayout({ children }: { children }) {
-  return (
-    <SiteShell site="shop" title="communitypetshop.com">
-      {children}
-    </SiteShell>
-  );
+export default function ShopLayout({ children }) {
+  return <MasterLayout>{children}</MasterLayout>;
 }

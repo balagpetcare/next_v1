@@ -1,55 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
+import { Icon } from '@iconify/react';
+import PageHeader from '@/src/bpa/components/PageHeader';
 import { apiGet, apiPost } from "../../../lib/api";
-
-function Card({ children }) {
-  return (
-    <div
-      style={{
-        border: "1px solid #e5e7eb",
-        borderRadius: 12,
-        padding: 12,
-        background: "#fff",
-      }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function Row({ label, children }) {
-  return (
-    <div style={{
-      display: "grid",
-      gridTemplateColumns: "140px 1fr",
-      gap: 10,
-      alignItems: "center",
-      marginBottom: 10,
-    }}>
-      <div style={{ fontSize: 13, color: "#6b7280" }}>{label}</div>
-      <div>{children}</div>
-    </div>
-  );
-}
-
-function SmallPill({ text }) {
-  return (
-    <span
-      style={{
-        fontSize: 12,
-        padding: "2px 8px",
-        borderRadius: 999,
-        border: "1px solid #e5e7eb",
-        background: "#fafafa",
-        marginRight: 6,
-        display: "inline-block",
-      }}
-    >
-      {text}
-    </span>
-  );
-}
+import SectionCard from '@/src/bpa/admin/components/SectionCard';
+import StatusChip from '@/src/bpa/admin/components/StatusChip';
+import StatCard from '@/src/bpa/admin/components/StatCard';
+import TrendChart from '@/src/bpa/admin/components/charts/TrendChart';
 
 export default function Page() {
   const [loading, setLoading] = useState(false);
@@ -57,15 +15,19 @@ export default function Page() {
   const [staff, setStaff] = useState([]);
   const [roles, setRoles] = useState([]);
   const [branches, setBranches] = useState([]);
+  const [search, setSearch] = useState("");
 
   const [createForm, setCreateForm] = useState({
+    branchId: "",
     userId: "",
-    fullName: "",
+    email: "",
     phone: "",
-    title: "",
+    displayName: "",
+    role: "",
+    password: "",
   });
 
-  const canWrite = true; // server-side nav already hides page, but keep UI permissive for now
+  const canWrite = true;
 
   async function load() {
     setLoading(true);
@@ -90,6 +52,60 @@ export default function Page() {
     load();
   }, []);
 
+  const filtered = useMemo(() => {
+    if (!search) return staff;
+    const q = search.toLowerCase();
+    return staff.filter((s) => {
+      const name = (s.user?.profile?.displayName || s.user?.profile?.username || '').toLowerCase();
+      const email = (s.user?.auth?.email || '').toLowerCase();
+      const phone = (s.user?.auth?.phone || '').toLowerCase();
+      const userId = String(s.userId || '');
+      const staffId = String(s.id || '');
+      return name.includes(q) || email.includes(q) || phone.includes(q) || userId.includes(q) || staffId.includes(q);
+    });
+  }, [staff, search]);
+
+  // Analytics calculations
+  const analytics = useMemo(() => {
+    const total = staff.length;
+    const active = staff.filter(s => s.status === 'ACTIVE').length;
+    const suspended = staff.filter(s => s.status === 'SUSPENDED').length;
+    const invited = staff.filter(s => s.status === 'INVITED').length;
+    
+    // Role distribution
+    const roleCounts = {};
+    staff.forEach(s => {
+      const role = s.role || 'UNKNOWN';
+      roleCounts[role] = (roleCounts[role] || 0) + 1;
+    });
+
+    // Branch distribution
+    const branchCounts = {};
+    staff.forEach(s => {
+      if (s.branch?.name) {
+        branchCounts[s.branch.name] = (branchCounts[s.branch.name] || 0) + 1;
+      }
+    });
+
+    // Recent activity (last 7 days)
+    const sevenDaysAgo = new Date();
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    const recent = staff.filter(s => {
+      if (!s.createdAt) return false;
+      return new Date(s.createdAt) >= sevenDaysAgo;
+    }).length;
+
+    return {
+      total,
+      active,
+      suspended,
+      invited,
+      roleCounts,
+      branchCounts,
+      recent,
+    };
+  }, [staff]);
+
   const roleOptions = useMemo(() => roles.map((r) => ({ id: r.id, label: `${r.key} — ${r.name}` })), [roles]);
   const branchOptions = useMemo(() => branches.map((b) => ({ id: b.id, label: `${b.code} — ${b.name}` })), [branches]);
 
@@ -97,21 +113,44 @@ export default function Page() {
     e.preventDefault();
     setError("");
 
-    const userId = Number(createForm.userId);
-    if (!userId) {
-      setError("userId is required");
+    const branchId = Number(createForm.branchId);
+    if (!branchId) {
+      setError("Branch is required");
+      return;
+    }
+
+    const role = createForm.role;
+    if (!role) {
+      setError("Role is required");
+      return;
+    }
+
+    const userId = createForm.userId ? Number(createForm.userId) : null;
+    const email = createForm.email?.trim() || null;
+    const phone = createForm.phone?.trim() || null;
+
+    if (!userId && !email && !phone) {
+      setError("Either User ID or Email/Phone is required");
+      return;
+    }
+
+    if (!userId && !createForm.password) {
+      setError("Password is required when creating new user");
       return;
     }
 
     setLoading(true);
     try {
       await apiPost("/api/v1/admin/staff", {
-        userId,
-        fullName: createForm.fullName || undefined,
-        phone: createForm.phone || undefined,
-        title: createForm.title || undefined,
+        branchId,
+        userId: userId || undefined,
+        email: email || undefined,
+        phone: phone || undefined,
+        displayName: createForm.displayName?.trim() || undefined,
+        role,
+        password: createForm.password || undefined,
       });
-      setCreateForm({ userId: "", fullName: "", phone: "", title: "" });
+      setCreateForm({ branchId: "", userId: "", email: "", phone: "", displayName: "", role: "", password: "" });
       await load();
     } catch (e2) {
       setError(e2?.message || "Failed");
@@ -152,201 +191,326 @@ export default function Page() {
   }
 
   return (
-    <div style={{ padding: 18 }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12 }}>
-        <div>
-          <h2 style={{ margin: 0, marginBottom: 6 }}>Staff</h2>
-          <div style={{ color: "#6b7280", fontSize: 13 }}>
-            Create staff profiles for existing users, then assign roles and branch access.
+    <div className="container-fluid">
+      <PageHeader
+        title="Staff Management"
+        subtitle="Create staff profiles, assign roles and branch access"
+        right={
+          <button
+            onClick={load}
+            disabled={loading}
+            className="btn btn-outline-primary d-flex align-items-center gap-2"
+          >
+            <Icon icon="solar:refresh-outline" />
+            {loading ? 'Loading...' : 'Refresh'}
+          </button>
+        }
+      />
+
+      {error ? <div className="alert alert-danger">{error}</div> : null}
+
+      {/* Analytics Overview */}
+      <div className="row g-3 mb-4">
+        <div className="col-12 col-md-6 col-lg-3">
+          <StatCard
+            title="Total Staff"
+            value={analytics.total}
+            subtitle={`${analytics.active} active`}
+            icon={<Icon icon="solar:users-group-rounded-outline" width={20} />}
+            tone="primary"
+          />
+        </div>
+        <div className="col-12 col-md-6 col-lg-3">
+          <StatCard
+            title="Active Staff"
+            value={analytics.active}
+            subtitle={`${Math.round((analytics.active / Math.max(analytics.total, 1)) * 100)}% of total`}
+            icon={<Icon icon="solar:user-check-rounded-outline" width={20} />}
+            tone="success"
+          />
+        </div>
+        <div className="col-12 col-md-6 col-lg-3">
+          <StatCard
+            title="Suspended"
+            value={analytics.suspended}
+            subtitle={`${analytics.invited} invited`}
+            icon={<Icon icon="solar:user-block-rounded-outline" width={20} />}
+            tone="warning"
+          />
+        </div>
+        <div className="col-12 col-md-6 col-lg-3">
+          <StatCard
+            title="New This Week"
+            value={analytics.recent}
+            subtitle="Last 7 days"
+            icon={<Icon icon="solar:user-plus-rounded-outline" width={20} />}
+            tone="info"
+          />
+        </div>
+      </div>
+
+      {/* Role Distribution Chart */}
+      {Object.keys(analytics.roleCounts).length > 0 && (
+        <div className="row g-3 mb-4">
+          <div className="col-12 col-lg-6">
+            <SectionCard title="Staff by Role">
+              <div className="table-responsive">
+                <table className="table table-sm mb-0">
+                  <thead>
+                    <tr>
+                      <th>Role</th>
+                      <th className="text-end">Count</th>
+                      <th className="text-end">%</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(analytics.roleCounts)
+                      .sort((a, b) => b[1] - a[1])
+                      .map(([role, count]) => (
+                        <tr key={role}>
+                          <td>{role.replace(/_/g, ' ')}</td>
+                          <td className="text-end">{count}</td>
+                          <td className="text-end">
+                            {Math.round((count / analytics.total) * 100)}%
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+            </SectionCard>
+          </div>
+          <div className="col-12 col-lg-6">
+            <SectionCard title="Top Branches by Staff Count">
+              <div className="table-responsive">
+                <table className="table table-sm mb-0">
+                  <thead>
+                    <tr>
+                      <th>Branch</th>
+                      <th className="text-end">Staff Count</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {Object.entries(analytics.branchCounts)
+                      .sort((a, b) => b[1] - a[1])
+                      .slice(0, 10)
+                      .map(([branch, count]) => (
+                        <tr key={branch}>
+                          <td>{branch}</td>
+                          <td className="text-end">{count}</td>
+                        </tr>
+                      ))}
+                    {Object.keys(analytics.branchCounts).length === 0 && (
+                      <tr>
+                        <td colSpan={2} className="text-secondary text-center">
+                          No branch data available
+                        </td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+            </SectionCard>
           </div>
         </div>
+      )}
 
-        <button
-          onClick={load}
-          disabled={loading}
-          style={{ padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e7eb", background: "#fff" }}
-        >
-          Refresh
-        </button>
-      </div>
-
-      {error ? (
-        <div style={{ marginTop: 12, padding: 10, borderRadius: 10, border: "1px solid #fecaca", background: "#fff1f2" }}>
-          <b style={{ color: "#b91c1c" }}>Error:</b> {error}
-        </div>
-      ) : null}
-
-      {canWrite ? (
-        <div style={{ marginTop: 14 }}>
-          <Card>
-            <div style={{ fontWeight: 800, marginBottom: 10 }}>Create Staff</div>
-            <form onSubmit={onCreateStaff}>
-              <Row label="User ID">
+      {canWrite && (
+        <SectionCard title="Create New Staff" className="mb-3">
+          <form onSubmit={onCreateStaff}>
+            <div className="row g-3">
+              <div className="col-12 col-md-4">
+                <label className="form-label">Branch *</label>
+                <select
+                  className="form-select"
+                  value={createForm.branchId}
+                  onChange={(e) => setCreateForm((s) => ({ ...s, branchId: e.target.value }))}
+                  required
+                >
+                  <option value="">Select a branch...</option>
+                  {branches.map((b) => (
+                    <option key={b.id} value={b.id}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="col-12 col-md-4">
+                <label className="form-label">Role *</label>
+                <select
+                  className="form-select"
+                  value={createForm.role}
+                  onChange={(e) => setCreateForm((s) => ({ ...s, role: e.target.value }))}
+                  required
+                >
+                  <option value="">Select a role...</option>
+                  <option value="BRANCH_MANAGER">Branch Manager</option>
+                  <option value="BRANCH_STAFF">Branch Staff</option>
+                  <option value="SELLER">Seller</option>
+                  <option value="DELIVERY_MANAGER">Delivery Manager</option>
+                  <option value="DELIVERY_STAFF">Delivery Staff</option>
+                  <option value="ORG_ADMIN">Org Admin</option>
+                </select>
+              </div>
+              <div className="col-12 col-md-4">
+                <label className="form-label">User ID (or create new)</label>
                 <input
+                  className="form-control"
+                  type="number"
                   value={createForm.userId}
                   onChange={(e) => setCreateForm((s) => ({ ...s, userId: e.target.value }))}
-                  placeholder="e.g. 1"
-                  style={{ width: "100%", padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e7eb" }}
+                  placeholder="Leave empty to create new user"
                 />
-              </Row>
-              <Row label="Full name">
+              </div>
+              <div className="col-12 col-md-4">
+                <label className="form-label">Email {!createForm.userId && '*'}</label>
                 <input
-                  value={createForm.fullName}
-                  onChange={(e) => setCreateForm((s) => ({ ...s, fullName: e.target.value }))}
-                  placeholder="Optional"
-                  style={{ width: "100%", padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e7eb" }}
+                  className="form-control"
+                  type="email"
+                  value={createForm.email}
+                  onChange={(e) => setCreateForm((s) => ({ ...s, email: e.target.value }))}
+                  placeholder="Required if creating new user"
+                  required={!createForm.userId}
                 />
-              </Row>
-              <Row label="Phone">
+              </div>
+              <div className="col-12 col-md-4">
+                <label className="form-label">Phone {!createForm.userId && '*'}</label>
                 <input
+                  className="form-control"
+                  type="tel"
                   value={createForm.phone}
                   onChange={(e) => setCreateForm((s) => ({ ...s, phone: e.target.value }))}
-                  placeholder="Optional"
-                  style={{ width: "100%", padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e7eb" }}
+                  placeholder="Required if creating new user"
+                  required={!createForm.userId}
                 />
-              </Row>
-              <Row label="Title">
+              </div>
+              <div className="col-12 col-md-4">
+                <label className="form-label">Display Name</label>
                 <input
-                  value={createForm.title}
-                  onChange={(e) => setCreateForm((s) => ({ ...s, title: e.target.value }))}
-                  placeholder="e.g. Branch Manager"
-                  style={{ width: "100%", padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e7eb" }}
+                  className="form-control"
+                  value={createForm.displayName}
+                  onChange={(e) => setCreateForm((s) => ({ ...s, displayName: e.target.value }))}
+                  placeholder="Optional"
                 />
-              </Row>
-
-              <div style={{ display: "flex", justifyContent: "flex-end" }}>
-                <button
-                  type="submit"
-                  disabled={loading}
-                  style={{
-                    padding: "9px 12px",
-                    borderRadius: 10,
-                    border: "1px solid #e5e7eb",
-                    background: "#111827",
-                    color: "#fff",
-                    fontWeight: 700,
-                  }}
-                >
-                  Create
+              </div>
+              {!createForm.userId && (
+                <div className="col-12 col-md-4">
+                  <label className="form-label">Password *</label>
+                  <input
+                    className="form-control"
+                    type="password"
+                    value={createForm.password}
+                    onChange={(e) => setCreateForm((s) => ({ ...s, password: e.target.value }))}
+                    placeholder="Min 4 characters"
+                    required
+                  />
+                </div>
+              )}
+              <div className="col-12">
+                <button type="submit" disabled={loading} className="btn btn-primary">
+                  Create Staff
                 </button>
               </div>
-            </form>
-          </Card>
+            </div>
+          </form>
+        </SectionCard>
+      )}
+
+      <SectionCard title={`Staff List (${filtered.length})`}>
+        <div className="mb-3">
+          <input
+            type="text"
+            className="form-control"
+            placeholder="Search by name, phone, user ID..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ width: 300 }}
+          />
         </div>
-      ) : null}
 
-      <div style={{ marginTop: 14, display: "grid", gap: 12 }}>
-        {staff.map((s) => {
-          const staffRoles = (s.roles || []).map((x) => x.role?.key).filter(Boolean);
-          const staffBranches = (s.branches || []).map((x) => x.branch?.code).filter(Boolean);
+        <div className="table-responsive">
+          <table className="table align-middle mb-0">
+            <thead>
+              <tr>
+                <th>Staff</th>
+                <th>Contact</th>
+                <th>Roles</th>
+                <th>Branches</th>
+                <th>Status</th>
+                <th className="text-end">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.map((s) => {
+                const staffRoles = (s.roles || []).map((x) => x.key || x.label || x).filter(Boolean);
+                const displayName = s.user?.profile?.displayName || s.user?.profile?.username || `Staff #${s.id}`;
+                const email = s.user?.auth?.email || '—';
+                const phone = s.user?.auth?.phone || '—';
+                const branchName = s.branch?.name || s.org?.name || '—';
 
-          return (
-            <Card key={s.id}>
-              <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "flex-start" }}>
-                <div>
-                  <div style={{ fontWeight: 800 }}>Staff #{s.id}</div>
-                  <div style={{ fontSize: 13, color: "#6b7280" }}>
-                    userId: <b>{s.userId}</b>
-                    {s.fullName ? <span> — {s.fullName}</span> : null}
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ marginTop: 10 }}>
-                <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 6 }}>Roles</div>
-                <div>
-                  {staffRoles.length ? staffRoles.map((r) => <SmallPill key={r} text={r} />) : <span style={{ color: "#9ca3af" }}>—</span>}
-                </div>
-              </div>
-
-              <div style={{ marginTop: 10 }}>
-                <div style={{ fontSize: 13, color: "#6b7280", marginBottom: 6 }}>Branches</div>
-                <div>
-                  {staffBranches.length ? staffBranches.map((b) => <SmallPill key={b} text={b} />) : <span style={{ color: "#9ca3af" }}>—</span>}
-                </div>
-              </div>
-
-              {canWrite ? (
-                <div style={{ marginTop: 12, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
-                  <div style={{ border: "1px dashed #e5e7eb", borderRadius: 12, padding: 10 }}>
-                    <div style={{ fontWeight: 700, marginBottom: 8 }}>Assign role</div>
-                    <select
-                      defaultValue=""
-                      onChange={(e) => {
-                        const v = e.target.value;
-                        if (!v) return;
-                        e.target.value = "";
-                        assignRole(s.id, v);
-                      }}
-                      style={{ width: "100%", padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e7eb", background: "#fff" }}
-                    >
-                      <option value="">Select a role…</option>
-                      {roleOptions.map((r) => (
-                        <option key={r.id} value={r.id}>
-                          {r.label}
-                        </option>
-                      ))}
-                    </select>
-                    <div style={{ marginTop: 6, fontSize: 12, color: "#6b7280" }}>
-                      After assigning, refresh will show updated permissions next login.
-                    </div>
-                  </div>
-
-                  <div style={{ border: "1px dashed #e5e7eb", borderRadius: 12, padding: 10 }}>
-                    <div style={{ fontWeight: 700, marginBottom: 8 }}>Assign branch</div>
-
-                    <select
-                      defaultValue=""
-                      id={`branch-${s.id}`}
-                      style={{ width: "100%", padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e7eb", background: "#fff" }}
-                    >
-                      <option value="">Select a branch…</option>
-                      {branchOptions.map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.label}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      id={`pos-${s.id}`}
-                      placeholder="Position (optional)"
-                      style={{ width: "100%", marginTop: 8, padding: "8px 10px", borderRadius: 10, border: "1px solid #e5e7eb" }}
-                    />
-
-                    <button
-                      type="button"
-                      disabled={loading}
-                      onClick={() => {
-                        const branchId = document.getElementById(`branch-${s.id}`)?.value;
-                        const position = document.getElementById(`pos-${s.id}`)?.value;
-                        assignBranch(s.id, branchId, position);
-                      }}
-                      style={{
-                        width: "100%",
-                        marginTop: 8,
-                        padding: "9px 12px",
-                        borderRadius: 10,
-                        border: "1px solid #e5e7eb",
-                        background: "#111827",
-                        color: "#fff",
-                        fontWeight: 700,
-                      }}
-                    >
-                      Assign
-                    </button>
-                  </div>
-                </div>
+                return (
+                  <tr key={s.id}>
+                    <td>
+                      <div className="fw-semibold">{displayName}</div>
+                      <div className="text-secondary" style={{ fontSize: 12 }}>
+                        Staff #{s.id} • User #{s.userId}
+                      </div>
+                    </td>
+                    <td style={{ fontSize: 13 }}>
+                      <div>{email}</div>
+                      <div className="text-secondary">{phone}</div>
+                    </td>
+                    <td>
+                      {staffRoles.length > 0 ? (
+                        <div className="d-flex flex-wrap gap-1">
+                          {staffRoles.map((r, idx) => (
+                            <span key={idx} className="badge bg-primary-50 text-primary-600">
+                              {r}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="badge bg-secondary-50 text-secondary-600">
+                          {s.role || 'No role'}
+                        </span>
+                      )}
+                    </td>
+                    <td>
+                      <span className="badge bg-info-50 text-info-600">
+                        {branchName}
+                      </span>
+                    </td>
+                    <td><StatusChip status={s.status} /></td>
+                    <td className="text-end">
+                      <div className="d-flex gap-2 justify-content-end">
+                        <a 
+                          href={`/admin/verifications/staff/${s.id}`} 
+                          className="btn btn-sm btn-outline-primary"
+                        >
+                          Verify
+                        </a>
+                        <a 
+                          href={`/admin/staff/${s.id}`} 
+                          className="btn btn-sm btn-primary"
+                        >
+                          View
+                        </a>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+              {!filtered.length && !loading ? (
+                <tr>
+                  <td colSpan={6} className="text-secondary text-center" style={{ fontSize: 13 }}>
+                    No staff found.
+                  </td>
+                </tr>
               ) : null}
-            </Card>
-          );
-        })}
-
-        {!staff.length ? (
-          <Card>
-            <div style={{ color: "#6b7280" }}>No staff yet.</div>
-          </Card>
-        ) : null}
-      </div>
+            </tbody>
+          </table>
+        </div>
+      </SectionCard>
     </div>
   );
 }

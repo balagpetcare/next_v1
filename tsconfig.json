@@ -6,37 +6,58 @@
       "dom.iterable",
       "es2022"
     ],
-    "allowJs": true,
+    "allowJs": false,
     "skipLibCheck": true,
     "strict": true,
     "noEmit": true,
     "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
     "resolveJsonModule": true,
     "isolatedModules": true,
-    "jsx": "preserve",
+    "jsx": "react-jsx",
     "incremental": true,
-    "types": [
-      "node"
-    ],
-    "baseUrl": ".",
-    "paths": {
-      "@/*": [
-        "./*"
-      ]
-    },
     "plugins": [
       {
         "name": "next"
       }
-    ]
+    ],
+    "paths": {
+      "@/*": [
+        "./*"
+      ]
+    }
   },
   "include": [
     "next-env.d.ts",
     "**/*.ts",
     "**/*.tsx",
-    ".next/types/**/*.ts"
+    ".next/types/**/*.ts",
+    ".next/dev/types/**/*.ts",
+    ".next-admin/types/**/*.ts",
+    ".next-admin/dev/types/**/*.ts",
+    ".next-mother/types/**/*.ts",
+    ".next-mother/dev/types/**/*.ts",
+    ".next-clinic/types/**/*.ts",
+    ".next-clinic/dev/types/**/*.ts",
+    ".next-shop/types/**/*.ts",
+    ".next-shop/dev/types/**/*.ts",
+    ".next-owner/types/**/*.ts",
+    ".next-owner/dev/types/**/*.ts",
+    ".next/mother/types/**/*.ts",
+    ".next/mother/dev/types/**/*.ts",
+    ".next/clinic/types/**/*.ts",
+    ".next/clinic/dev/types/**/*.ts",
+    ".next/owner/types/**/*.ts",
+    ".next/owner/dev/types/**/*.ts",
+    ".next/admin/types/**/*.ts",
+    ".next/admin/dev/types/**/*.ts",
+    ".next/shop/types/**/*.ts",
+    ".next/shop/dev/types/**/*.ts",
+    ".next/producer/types/**/*.ts",
+    ".next/producer/dev/types/**/*.ts",
+    ".next/country/types/**/*.ts",
+    ".next/country/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules"

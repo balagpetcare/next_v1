@@ -1,10 +1,5 @@
-import SiteShell from "@/components/SiteShell";
+import MasterLayout from "@/src/masterLayout/MasterLayout";
 
 export default function ClinicLayout({ children }) {
-  return (
-    <SiteShell site="clinic" title="communitypetclinic.com">
-      {children}
-    </SiteShell>
-  );
+  return <MasterLayout>{children}</MasterLayout>;
 }
-
