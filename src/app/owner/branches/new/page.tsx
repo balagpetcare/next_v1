@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import BranchForm from "@/src/components/BranchForm";
+import BranchForm from "@/src/components/branch/BranchForm";
 import type { BranchFormValues } from "@/src/lib/branchSchema";
 
 export default function NewBranchPage() {

@@ -43,8 +43,8 @@ export default function ClinicServicesPage() {
       const url = selectedCategory
         ? `/api/v1/services?category=${selectedCategory}`
         : "/api/v1/services";
-      const data = await apiFetch(url);
-      setServices(Array.isArray(data) ? data : data?.items || data?.data || []);
+      const data = (await apiFetch(url)) as unknown[] | { items?: unknown[]; data?: unknown[] };
+      setServices((Array.isArray(data) ? data : (data && typeof data === "object" ? (Array.isArray((data as { items?: unknown[] }).items) ? (data as { items: unknown[] }).items : Array.isArray((data as { data?: unknown[] }).data) ? (data as { data: unknown[] }).data : []) : [])) as Service[]);
       setError(null);
     } catch (e: any) {
       setError(e?.message || "Failed to load services");
@@ -58,9 +58,9 @@ export default function ClinicServicesPage() {
     e.preventDefault();
     try {
       // Get branch ID from user context
-      const me = await apiFetch("/api/v1/auth/me");
-      const branchId = me?.data?.branches?.[0]?.id || me?.branches?.[0]?.id;
-      const orgId = me?.data?.organizations?.[0]?.id || me?.organizations?.[0]?.id;
+      const me = (await apiFetch("/api/v1/auth/me")) as { data?: { branches?: { id: number }[]; organizations?: { id: number }[] }; branches?: { id: number }[]; organizations?: { id: number }[] };
+      const branchId = me?.data?.branches?.[0]?.id ?? me?.branches?.[0]?.id;
+      const orgId = me?.data?.organizations?.[0]?.id ?? me?.organizations?.[0]?.id;
 
       if (!branchId || !orgId) {
         alert("You must be assigned to a branch to create services");
@@ -382,9 +382,9 @@ export default function ClinicServicesPage() {
                       <input
                         type="number"
                         className="form-control radius-12"
-                        value={formData.duration}
+                        value={formData.duration ?? ""}
                         onChange={(e) =>
-                          setFormData({ ...formData, duration: parseInt(e.target.value) || null })
+                          setFormData({ ...formData, duration: parseInt(e.target.value, 10) || 0 })
                         }
                         min="0"
                       />

@@ -41,7 +41,7 @@ export default function ShopPOSPage() {
   const loadBranch = async () => {
     try {
       // Get user's branch
-      const me = await apiFetch("/api/v1/auth/me");
+      const me = (await apiFetch("/api/v1/auth/me")) as { data?: { branches?: { id: number }[] } };
       if (me?.data?.branches && me.data.branches.length > 0) {
         const branchId = me.data.branches[0].id;
         setSelectedBranch(branchId);
@@ -55,8 +55,8 @@ export default function ShopPOSPage() {
   const loadProducts = async (branchId: number) => {
     try {
       setLoading(true);
-      const data = await apiFetch(`/api/v1/pos/products?branchId=${branchId}`);
-      setProducts(Array.isArray(data) ? data : data?.data || []);
+      const data = (await apiFetch(`/api/v1/pos/products?branchId=${branchId}`)) as unknown[] | { data?: unknown[] };
+      setProducts((Array.isArray(data) ? data : (data && typeof data === "object" && "data" in data ? (data as { data: unknown[] }).data ?? [] : [])) as Product[]);
     } catch (e: any) {
       console.error("Load products error:", e);
     } finally {
@@ -127,7 +127,7 @@ export default function ShopPOSPage() {
 
     try {
       setProcessing(true);
-      const order = await apiFetch("/api/v1/pos/sale", {
+      const order = (await apiFetch("/api/v1/pos/sale", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -142,9 +142,9 @@ export default function ShopPOSPage() {
           })),
           paymentMethod: paymentMethod,
         }),
-      });
+      })) as { data?: { orderNumber?: string } };
 
-      alert(`Sale completed! Order: ${order.data?.orderNumber || "N/A"}`);
+      alert(`Sale completed! Order: ${order?.data?.orderNumber ?? "N/A"}`);
       clearCart();
     } catch (e: any) {
       alert(e?.message || "Failed to complete sale");

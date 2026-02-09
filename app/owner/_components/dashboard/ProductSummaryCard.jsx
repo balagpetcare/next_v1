@@ -15,7 +15,7 @@ export default function ProductSummaryCard({ loading: externalLoading }) {
         setLoading(true);
         setError("");
         const res = await ownerGet("/api/v1/owner/products/summary");
-        if (res?.success && res.data) {
+        if (res && res?.success && res.data) {
           setData(res.data);
         }
       } catch (e) {

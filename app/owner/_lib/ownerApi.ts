@@ -1,11 +1,26 @@
 // Base API host (no trailing slash). Example: http://localhost:3000
 const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
 
-export async function ownerGet<T>(path: string): Promise<T> {
+export async function ownerGet<T>(path: string): Promise<T | null> {
   const res = await fetch(`${API_BASE}${path}`, { method: "GET", credentials: "include" });
   const j = await res.json().catch(() => null);
+  // 403 = no owner access (e.g. KYC onboarding) — return null to avoid console noise; callers should handle null
+  if (res.status === 403) return null;
   if (!res.ok) throw new Error(j?.message || `Request failed (${res.status})`);
   return j;
+}
+
+/** Same as ownerGet but returns null on 403/errors — use for optional UI (badges, counts) to avoid console noise */
+export async function ownerGetSafe<T>(path: string): Promise<T | null> {
+  try {
+    const res = await fetch(`${API_BASE}${path}`, { method: "GET", credentials: "include" });
+    if (res.status === 403) return null;
+    const j = await res.json().catch(() => null);
+    if (!res.ok) return null;
+    return j;
+  } catch {
+    return null;
+  }
 }
 
 export async function ownerPost<T>(path: string, body: any): Promise<T> {
@@ -17,7 +32,7 @@ export async function ownerPost<T>(path: string, body: any): Promise<T> {
   });
   const j = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const errorMsg = j?.message || j?.error || `Request failed (${res.status})`;
+    const errorMsg = j?.error || j?.message || `Request failed (${res.status})`;
     const error = new Error(errorMsg);
     (error as any).status = res.status;
     (error as any).response = j;
@@ -62,8 +77,14 @@ export async function ownerDelete<T>(path: string): Promise<T> {
     credentials: "include",
     headers: { Accept: "application/json" },
   });
-  const j = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(j?.message || `Request failed (${res.status})`);
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const errorMsg = j?.error || j?.message || `Request failed (${res.status})`;
+    const error = new Error(errorMsg);
+    (error as any).status = res.status;
+    (error as any).response = j;
+    throw error;
+  }
   return j;
 }
 

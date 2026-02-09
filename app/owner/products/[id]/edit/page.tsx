@@ -107,9 +107,9 @@ export default function ProductEditPage() {
             initialData={{
               name: product.name,
               slug: product.slug,
-              categoryId,
+              categoryId: catId != null && !Number.isNaN(Number(catId)) ? Number(catId) : undefined,
               subCategoryId,
-              brandId: brandId != null ? String(brandId) : "",
+              brandId: brandId != null && !Number.isNaN(Number(brandId)) ? Number(brandId) : undefined,
               description: product.description ?? "",
               status: product.status ?? "ACTIVE",
             }}

@@ -36,8 +36,8 @@ export default function OwnerStockReportPage() {
       const url = lowStockOnly
         ? "/api/v1/reports/stock?lowStockOnly=true"
         : "/api/v1/reports/stock";
-      const data = await apiFetch(url);
-      setReport(data?.data || data);
+      const data = (await apiFetch(url)) as { data?: unknown } | unknown;
+      setReport(((data && typeof data === "object" && "data" in data ? (data as { data: unknown }).data : data) ?? null) as StockReport | null);
       setError(null);
     } catch (e: any) {
       setError(e?.message || "Failed to load stock report");

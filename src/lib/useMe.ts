@@ -35,10 +35,21 @@ export function useMe(pathname?: string) {
     async function run() {
       setLoading(true);
       try {
-        // Try /api/v1/auth/me first (includes full profile with avatarMedia)
+        // Try /api/v1/auth/me first (includes full profile with avatarMedia, permissions, panels)
         const authMe = await fetchJson(`${API_BASE}/api/v1/auth/me`);
+        const data = authMe && typeof authMe === "object" && "data" in authMe ? (authMe as any).data : authMe;
         const normalizedAuth =
-          authMe && typeof authMe === "object" && "data" in authMe ? (authMe as any).data : authMe;
+          data && typeof data === "object"
+            ? {
+                ...data,
+                permissions: (authMe as any).permissions ?? data.permissions,
+                panels: (authMe as any).panels ?? data.panels,
+                role: (authMe as any).role ?? data.role,
+                contexts: (authMe as any).contexts ?? data.contexts ?? [],
+                defaultContext: (authMe as any).defaultContext ?? data.defaultContext ?? null,
+                onboarding: (authMe as any).onboarding ?? data.onboarding ?? null,
+              }
+            : data;
         if (!cancelled) {
           setMe(normalizedAuth);
           return;

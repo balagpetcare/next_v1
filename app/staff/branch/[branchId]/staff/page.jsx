@@ -11,6 +11,7 @@ import {
   staffBranchAccessApprove,
   staffBranchAccessRevoke,
   staffBranchInvite,
+  staffBranchInviteAllowedRoles,
 } from "@/lib/api";
 import Card from "@/src/bpa/components/ui/Card";
 import BranchHeader from "@/src/components/branch/BranchHeader";
@@ -46,8 +47,10 @@ export default function StaffBranchStaffPage() {
   const [revokeReason, setRevokeReason] = useState("");
   const [revokeSubmitting, setRevokeSubmitting] = useState(false);
   const [showInviteModal, setShowInviteModal] = useState(false);
-  const [inviteForm, setInviteForm] = useState({ email: "", phone: "", role: "STAFF" });
+  const [inviteForm, setInviteForm] = useState({ email: "", phone: "", role: "BRANCH_STAFF" });
   const [inviteSubmitting, setInviteSubmitting] = useState(false);
+  const [inviteAllowedRoles, setInviteAllowedRoles] = useState([]);
+  const [inviteAllowedRolesLoading, setInviteAllowedRolesLoading] = useState(false);
 
   useEffect(() => {
     if (errorCode === "unauthorized") router.replace("/staff/login");
@@ -73,6 +76,29 @@ export default function StaffBranchStaffPage() {
       .catch(() => { if (!cancelled) setBranchPermissions([]); });
     return () => { cancelled = true; };
   }, [branchId, canViewStaff]);
+
+  // Fetch allowed invite roles when opening invite modal (Branch Manager sees only Staff/Seller, not Branch Manager)
+  useEffect(() => {
+    if (!showInviteModal || !branchId || !canManageStaff) return;
+    let cancelled = false;
+    setInviteAllowedRolesLoading(true);
+    staffBranchInviteAllowedRoles(branchId)
+      .then(({ allowedRoles }) => {
+        if (!cancelled && Array.isArray(allowedRoles) && allowedRoles.length > 0) setInviteAllowedRoles(allowedRoles);
+        else if (!cancelled) setInviteAllowedRoles(["BRANCH_STAFF", "SELLER"]);
+      })
+      .catch(() => { if (!cancelled) setInviteAllowedRoles(["BRANCH_STAFF", "SELLER"]); })
+      .finally(() => { if (!cancelled) setInviteAllowedRolesLoading(false); });
+    return () => { cancelled = true; };
+  }, [showInviteModal, branchId, canManageStaff]);
+
+  // Keep invite form role in sync with allowed list (e.g. when API returns only Staff/Seller for manager)
+  useEffect(() => {
+    if (!showInviteModal || inviteAllowedRoles.length === 0) return;
+    if (!inviteAllowedRoles.includes(inviteForm.role)) {
+      setInviteForm((f) => ({ ...f, role: inviteAllowedRoles[0] || "BRANCH_STAFF" }));
+    }
+  }, [showInviteModal, inviteAllowedRoles, inviteForm.role]);
 
   useEffect(() => {
     if (!branchId || activeTab !== "invites") return;
@@ -159,7 +185,7 @@ export default function StaffBranchStaffPage() {
       if (res.success) {
         setToast("Invite sent.");
         setShowInviteModal(false);
-        setInviteForm({ email: "", phone: "", role: "STAFF" });
+        setInviteForm({ email: "", phone: "", role: inviteAllowedRoles[0] || "BRANCH_STAFF" });
         const [forBranch] = await Promise.all([staffBranchAccessForBranch(branchId)]);
         setBranchPermissions(Array.isArray(forBranch) ? forBranch : []);
       } else {
@@ -444,10 +470,19 @@ export default function StaffBranchStaffPage() {
                   </div>
                   <div className="mb-16">
                     <label className="form-label text-sm">Role</label>
-                    <select className="form-select form-select-sm" value={inviteForm.role} onChange={(e) => setInviteForm((f) => ({ ...f, role: e.target.value }))}>
-                      <option value="STAFF">Staff</option>
-                      <option value="BRANCH_MANAGER">Branch Manager</option>
+                    <select
+                      className="form-select form-select-sm"
+                      value={inviteForm.role}
+                      onChange={(e) => setInviteForm((f) => ({ ...f, role: e.target.value }))}
+                      disabled={inviteAllowedRolesLoading}
+                    >
+                      {(inviteAllowedRoles.length ? inviteAllowedRoles : ["BRANCH_STAFF", "SELLER"]).map((r) => (
+                        <option key={r} value={r}>
+                          {r === "BRANCH_STAFF" || r === "STAFF" ? "Staff" : r === "SELLER" ? "Seller" : r === "DELIVERY_STAFF" ? "Delivery Staff" : r.replace(/_/g, " ")}
+                        </option>
+                      ))}
                     </select>
+                    <p className="form-text small text-secondary-light mb-0">Branch managers can invite only Staff and Seller.</p>
                   </div>
                 </div>
                 <div className="modal-footer">

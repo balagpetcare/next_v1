@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { getAuthRedirectUrl, PANEL_CONFIG } from "@/lib/authRedirect";
@@ -33,7 +33,7 @@ export interface AuthRedirectPageProps {
  * }
  * ```
  */
-export default function AuthRedirectPage({
+export function AuthRedirectPageContent({
   panelName,
   action,
   defaultLandingPath,
@@ -158,5 +158,17 @@ export default function AuthRedirectPage({
         </div>
       </div>
     </section>
+  );
+}
+
+export default function AuthRedirectPage(props: AuthRedirectPageProps) {
+  return (
+    <Suspense fallback={
+      <section className="auth bg-base d-flex min-vh-100 align-items-center justify-content-center">
+        <div className="text-secondary">Loading…</div>
+      </section>
+    }>
+      <AuthRedirectPageContent {...props} />
+    </Suspense>
   );
 }

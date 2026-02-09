@@ -162,12 +162,24 @@ const CORE_OWNER_FALLBACK: MenuItem[] = [
   },
   { id: "owner.finance", label: "Finance", href: "/owner/finance", icon: "solar:wallet-outline", required: [] },
   { id: "owner.audit", label: "Audit & System", href: "/owner/audit", icon: "solar:shield-check-outline", required: [] },
+  {
+    id: "owner.teams",
+    label: "Teams & Delegation",
+    icon: "solar:users-group-two-rounded-outline",
+    required: [],
+    children: [
+      { id: "owner.team.dashboard", label: "Team dashboard", href: "/owner/team", required: [] },
+      { id: "owner.teams.list", label: "Teams", href: "/owner/teams", required: [] },
+      { id: "owner.overview", label: "Overview", href: "/owner/overview", required: [] },
+    ],
+  },
   { id: "owner.notifications", label: "Notifications", href: "/owner/notifications", icon: "solar:bell-outline", required: [] },
 ];
 
 const REGISTRY: Record<AppKey, MenuItem[]> = {
   owner: [
     { id: "owner.dashboard", label: "Dashboard", href: "/owner/dashboard", icon: "solar:home-smile-outline", required: [] },
+    { id: "owner.workspace", label: "Workspace", href: "/owner/workspace", icon: "solar:widget-5-outline", required: [] },
     {
       id: "owner.dashboards",
       label: "Dashboards",
@@ -280,6 +292,17 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
     },
     { id: "owner.finance", label: "Finance", href: "/owner/finance", icon: "solar:wallet-outline", required: [] },
     { id: "owner.audit", label: "Audit & System", href: "/owner/audit", icon: "solar:shield-check-outline", required: [] },
+    {
+      id: "owner.teams",
+      label: "Teams & Delegation",
+      icon: "solar:users-group-two-rounded-outline",
+      required: ["staff.read"],
+      children: [
+        { id: "owner.team.dashboard", label: "Team dashboard", href: "/owner/team", required: ["staff.read"] },
+        { id: "owner.teams.list", label: "Teams", href: "/owner/teams", required: ["staff.read"] },
+        { id: "owner.overview", label: "Overview", href: "/owner/overview", required: ["staff.read"] },
+      ],
+    },
     { id: "owner.notifications", label: "Notifications", href: "/owner/notifications", icon: "solar:bell-outline", required: [] },
     {
       id: "owner.orders",

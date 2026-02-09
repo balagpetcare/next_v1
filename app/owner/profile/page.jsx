@@ -59,12 +59,13 @@ export default function OwnerProfilePage() {
     nid: "",
     supportPhone: "",
     supportEmail: "",
-    divisionId: null,
-    districtId: null,
-    upazilaId: null,
-    areaId: null,
-    fullPathText: "",
+    location: null,
   });
+
+  const normalizeLoc = useCallback((loc) => {
+    const n = normalizeLocation(loc, "BD");
+    return n ? withLegacyLocationFields(n, loc || {}) : loc || { countryCode: "BD" };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -75,16 +76,29 @@ export default function OwnerProfilePage() {
         const p = await apiGet("/api/v1/owner/profile");
         if (!mounted) return;
         if (p) {
+          const addr = p.addressJson || {};
+          const loc = {
+            countryCode: addr.countryCode || p.countryCode || "BD",
+            state: addr.stateName || addr.state,
+            city: addr.cityName || addr.city,
+            postalCode: addr.postalCode,
+            addressLine: addr.addressLine,
+            formattedAddress: addr.formattedAddress,
+            lat: addr.latitude ?? addr.lat,
+            lng: addr.longitude ?? addr.lng,
+            fullPathText: addr.fullPathText || addr.formattedAddress,
+            divisionId: p.divisionId,
+            districtId: p.districtId,
+            upazilaId: p.upazilaId,
+            bdAreaId: p.areaId,
+          };
           setForm((prev) => ({
             ...prev,
             name: p.name || "",
             nid: p.nid || "",
             supportPhone: p.supportPhone || "",
             supportEmail: p.supportEmail || "",
-            divisionId: p.divisionId || null,
-            districtId: p.districtId || null,
-            upazilaId: p.upazilaId || null,
-            areaId: p.areaId || null,
+            location: normalizeLoc(loc),
           }));
         }
       } catch (e) {
@@ -97,37 +111,15 @@ export default function OwnerProfilePage() {
     return () => {
       mounted = false;
     };
-  }, []);
-
-  const normalizeLoc = useCallback((loc) => {
-    const n = normalizeLocation(loc, "BD");
-    return n ? withLegacyLocationFields(n, loc || {}) : loc || { countryCode: "BD" };
-  }, []);
+  }, [normalizeLoc]);
 
   const locationValue = useMemo(() => {
-    return normalizeLoc({
-      countryCode: "BD",
-      divisionId: form.divisionId,
-      districtId: form.districtId,
-      upazilaId: form.upazilaId,
-      areaId: form.areaId,
-      bdAreaId: form.areaId,
-      dhakaAreaId: null,
-      fullPathText: form.fullPathText,
-    });
-  }, [form.divisionId, form.districtId, form.upazilaId, form.areaId, form.fullPathText, normalizeLoc]);
+    return form.location || normalizeLoc({ countryCode: "BD" });
+  }, [form.location, normalizeLoc]);
 
   const handleLocationChange = useCallback(
     (next) => {
-      const n = normalizeLoc(next);
-      setForm((p) => ({
-        ...p,
-        divisionId: n.divisionId ?? p.divisionId,
-        districtId: n.districtId ?? p.districtId,
-        upazilaId: n.upazilaId ?? p.upazilaId,
-        areaId: n.areaId ?? n.bdAreaId ?? n.dhakaAreaId ?? p.areaId,
-        fullPathText: n.fullPathText || n.text || "",
-      }));
+      setForm((p) => ({ ...p, location: normalizeLoc(next) }));
     },
     [normalizeLoc]
   );
@@ -137,15 +129,24 @@ export default function OwnerProfilePage() {
       setLoading(true);
       setError("");
       setSavedMsg("");
+      const loc = form.location || {};
+      const n = normalizeLoc(loc);
+      const addressJson = {
+        countryCode: n.countryCode || "BD",
+        stateName: n.state || n.stateName,
+        cityName: n.city || n.cityName,
+        postalCode: n.postalCode,
+        addressLine: n.addressLine,
+        formattedAddress: n.formattedAddress || n.fullPathText || n.text,
+        latitude: n.lat ?? n.latitude,
+        longitude: n.lng ?? n.longitude,
+      };
       const payload = {
         name: form.name,
         nid: form.nid || null,
         supportPhone: form.supportPhone || null,
         supportEmail: form.supportEmail || null,
-        divisionId: form.divisionId,
-        districtId: form.districtId,
-        upazilaId: form.upazilaId,
-        areaId: form.areaId,
+        addressJson,
       };
       await apiPut("/api/v1/owner/profile", payload);
       setSavedMsg("Saved successfully");
@@ -223,7 +224,6 @@ export default function OwnerProfilePage() {
           enableRecent
           enableGPS
           enableMap
-          enableBdHierarchy
         />
       </Card>
     </div>

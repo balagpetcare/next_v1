@@ -557,6 +557,15 @@ export async function staffBranchAccessRevoke(permissionId: number, body?: { rea
   return apiPost<{ success?: boolean; data?: any; message?: string }>(`/api/v1/branch-access/${permissionId}/revoke`, body ?? {});
 }
 
+/** GET /api/v1/branches/:branchId/members/invite-allowed-roles – roles current user can invite (for dropdown) */
+export async function staffBranchInviteAllowedRoles(branchId: string): Promise<{ allowedRoles: string[] }> {
+  const res = await apiGet<{ success?: boolean; data?: { allowedRoles?: string[] } }>(
+    `/api/v1/branches/${branchId}/members/invite-allowed-roles`
+  );
+  const roles = res?.data?.allowedRoles ?? [];
+  return { allowedRoles: Array.isArray(roles) ? roles : [] };
+}
+
 /** Invite staff – try staff-scoped path; if missing, use placeholder (owner has /owner/branches/:id/members/invite) */
 export async function staffBranchInvite(branchId: string, _body: { email?: string; phone?: string; role?: string }): Promise<{ success: boolean; message?: string }> {
   try {

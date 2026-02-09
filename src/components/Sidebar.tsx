@@ -48,7 +48,7 @@ export default function Sidebar({ nav }: { nav: NavItem[] }) {
   const render = (items: NavItem[], depth: number, prefix: string) => {
     return items.map((it) => {
       const key = slugKey(prefix, it.label);
-      const Icon = it.icon;
+      const iconName = it.icon;
       const active = hasActiveChild(pathname, it);
       const isGroup = !!it.children?.length;
 
@@ -63,7 +63,7 @@ export default function Sidebar({ nav }: { nav: NavItem[] }) {
               onClick={() => toggle(key)}
             >
               <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                {Icon ? <Icon size={18} /> : null}
+                {iconName ? <Icon icon={iconName} width={18} height={18} /> : null}
                 <span>{it.label}</span>
               </span>
               <ChevronDown size={16} style={{ opacity: 0.7, transform: open[key] ? "rotate(180deg)" : "rotate(0deg)", transition: "transform 180ms" }} />
@@ -71,7 +71,7 @@ export default function Sidebar({ nav }: { nav: NavItem[] }) {
           ) : (
             <Link className={clsx("navLink", isActive(pathname, it.href) && "navLinkActive")} href={it.href || "#"}>
               <span style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                {Icon ? <Icon size={18} /> : null}
+                {iconName ? <Icon icon={iconName} width={18} height={18} /> : null}
                 <span>{it.label}</span>
               </span>
             </Link>

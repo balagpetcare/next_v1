@@ -30,8 +30,14 @@ export default function TransfersPage() {
     try {
       setLoading(true);
       setError("");
-      const res = await ownerGet("/api/v1/transfers").catch(() => ({ success: false, data: [] }));
-      const items = res?.data?.items ?? res?.data ?? (Array.isArray(res) ? res : []);
+      const res = (await ownerGet("/api/v1/transfers").catch(() => ({ success: false, data: [] }))) as {
+        data?: { items?: unknown[] } | unknown[];
+      };
+      const items = res?.data && typeof res.data === "object" && "items" in res.data
+        ? (res.data as { items: unknown[] }).items
+        : Array.isArray(res?.data)
+          ? res.data
+          : [];
       setTransfers(Array.isArray(items) ? items : []);
     } catch (err: any) {
       setError(err?.message || "Failed to load transfers");

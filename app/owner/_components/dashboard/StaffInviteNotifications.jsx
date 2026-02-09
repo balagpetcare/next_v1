@@ -12,7 +12,7 @@ export default function StaffInviteNotifications() {
     try {
       setLoading(true);
       const res = await ownerGet("/api/v1/me/notifications");
-      if (res?.success && Array.isArray(res.data)) {
+      if (res && res?.success && Array.isArray(res.data)) {
         // Filter only STAFF_INVITE notifications
         const staffInvites = res.data.filter((n) => n.type === "STAFF_INVITE");
         setNotifications(staffInvites);

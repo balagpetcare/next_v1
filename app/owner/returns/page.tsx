@@ -5,11 +5,11 @@ import Link from "next/link";
 import { ownerGet, ownerPost } from "@/app/owner/_lib/ownerApi";
 import StatusBadge from "@/app/owner/_components/StatusBadge";
 
-function formatCurrency(amount) {
+function formatCurrency(amount: number | string): string {
   return `৳${Number(amount).toLocaleString("en-BD", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-function formatDate(dateString) {
+function formatDate(dateString: string | null | undefined): string {
   if (!dateString) return "—";
   return new Date(dateString).toLocaleDateString("en-BD", {
     year: "numeric",
@@ -33,8 +33,14 @@ export default function ReturnsPage() {
     try {
       setLoading(true);
       setError("");
-      const res = await ownerGet("/api/v1/returns").catch(() => ({ success: false, data: [] }));
-      const items = res?.data?.items || res?.data || res || [];
+      const res = (await ownerGet("/api/v1/returns").catch(() => ({ success: false, data: [] }))) as {
+        data?: { items?: unknown[] } | unknown[];
+      };
+      const items = res?.data && typeof res.data === "object" && "items" in res.data
+        ? (res.data as { items: unknown[] }).items
+        : Array.isArray(res?.data)
+          ? res.data
+          : [];
       setReturns(Array.isArray(items) ? items : []);
     } catch (error: any) {
       setError(error?.message || "Failed to load returns");

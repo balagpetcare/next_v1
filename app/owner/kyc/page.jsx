@@ -1,9 +1,14 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { apiGet, apiPut, apiPost } from "../../../lib/api";
 
 import ImageUploadWithCrop from "@/src/components/common/ImageUploadWithCrop";
+import { normalizeKycStatus, isApproved } from "../_lib/ownerKycGuard";
+
+const ALLOWED_NAV_STATUSES = ["SUBMITTED", "VERIFIED", "APPROVED", "REQUEST_CHANGES"];
 
 const REQUIRED = [
   { type: "NID_FRONT", label: "NID Front", hint: "Front side of NID (clear & readable)" },
@@ -288,7 +293,14 @@ export default function OwnerKycPage() {
     nationality: "Bangladeshi",
     nidNumber: "",
     presentAddressShort: "",
+    country: "",
+    division: "",
+    city: "",
+    latitude: "",
+    longitude: "",
   });
+  const hasRedirectedApproved = useRef(false);
+  const router = useRouter();
   const [declarations, setDeclarations] = useState({
     termsAccepted: false,
     dataProcessingConsent: false,
@@ -314,6 +326,11 @@ export default function OwnerKycPage() {
           nationality: data.nationality || "Bangladeshi",
           nidNumber: data.nidNumber || "",
           presentAddressShort: addr.text || addr.presentAddressShort || "",
+          country: addr.country || "",
+          division: addr.division || addr.state || "",
+          city: addr.city || "",
+          latitude: addr.latitude != null ? String(addr.latitude) : "",
+          longitude: addr.longitude != null ? String(addr.longitude) : "",
         });
         const decl = data.declarationsJson && typeof data.declarationsJson === "object" ? data.declarationsJson : {};
         setDeclarations({
@@ -333,6 +350,22 @@ export default function OwnerKycPage() {
   }, []);
 
   const status = normStatus(kyc?.verificationStatus);
+  const normalizedStatus = normalizeKycStatus(kyc?.verificationStatus);
+  useEffect(() => {
+    if (!kyc || !isApproved(normalizedStatus) || hasRedirectedApproved.current) return;
+    hasRedirectedApproved.current = true;
+    // Only redirect when user has owner access; else layout redirects back → loop
+    (async () => {
+      try {
+        const res = await fetch("/api/v1/auth/me", { credentials: "include" });
+        if (!res.ok) return;
+        const j = await res.json().catch(() => null);
+        if (j?.panels?.owner === true) router.replace("/owner/dashboard");
+      } catch {
+        // On error, stay on kyc
+      }
+    })();
+  }, [kyc, normalizedStatus, router]);
   const locked = isLockedStatus(status);
   const editable = canEdit(status) && !locked;
   const hasDraft = !!kyc?.id;
@@ -358,6 +391,14 @@ export default function OwnerKycPage() {
     try {
       if (!draft.fullName?.trim()) throw new Error("Full name is required.");
 
+      const presentAddressJson = {
+        ...(draft.presentAddressShort ? { text: draft.presentAddressShort } : {}),
+        ...(draft.country ? { country: draft.country } : {}),
+        ...(draft.division ? { division: draft.division } : {}),
+        ...(draft.city ? { city: draft.city } : {}),
+        ...(draft.latitude !== "" && draft.latitude != null ? { latitude: parseFloat(draft.latitude) } : {}),
+        ...(draft.longitude !== "" && draft.longitude != null ? { longitude: parseFloat(draft.longitude) } : {}),
+      };
       const res = await apiPut("/api/v1/owner/kyc", {
         fullName: draft.fullName,
         mobile: draft.mobile,
@@ -365,7 +406,7 @@ export default function OwnerKycPage() {
         dateOfBirth: draft.dateOfBirth || undefined,
         nationality: draft.nationality || undefined,
         nidNumber: draft.nidNumber,
-        presentAddressJson: draft.presentAddressShort ? { text: draft.presentAddressShort } : undefined,
+        presentAddressJson: Object.keys(presentAddressJson).length ? presentAddressJson : undefined,
       });
 
       const data = res?.data || null;
@@ -475,6 +516,8 @@ export default function OwnerKycPage() {
 
   const docsDisabled = isLockedStatus(status) || loading || !hasDraft;
 
+  const canNavigateAway = ALLOWED_NAV_STATUSES.includes(status);
+
   return (
     <div className="container-fluid">
       <div className="d-flex align-items-start justify-content-between flex-wrap gap-12 mb-16">
@@ -483,6 +526,13 @@ export default function OwnerKycPage() {
           <div className="text-secondary-light text-sm">
             Step 1: Save information. Step 2: Upload documents (crop/edit). After approval, everything becomes read-only.
           </div>
+          {canNavigateAway && (
+            <div className="mt-10">
+              <Link href="/owner/dashboard" className="btn btn-primary btn-sm radius-12">
+                Go to Dashboard
+              </Link>
+            </div>
+          )}
         </div>
 
         <div className="d-flex align-items-center gap-10">
@@ -616,10 +666,65 @@ export default function OwnerKycPage() {
                     <label className="form-label">Present address (short)</label>
                     <input
                       className="form-control"
-                      placeholder="Area, city, district"
+                      placeholder="House/Road, Area, City"
                       value={draft.presentAddressShort}
                       disabled={isLockedStatus(status) || loading}
                       onChange={(e) => setDraft((s) => ({ ...s, presentAddressShort: e.target.value }))}
+                    />
+                  </div>
+
+                  <div className="col-12 col-lg-6">
+                    <label className="form-label">Country</label>
+                    <input
+                      className="form-control"
+                      placeholder="e.g. Bangladesh"
+                      value={draft.country}
+                      disabled={isLockedStatus(status) || loading}
+                      onChange={(e) => setDraft((s) => ({ ...s, country: e.target.value }))}
+                    />
+                  </div>
+                  <div className="col-12 col-lg-6">
+                    <label className="form-label">Division / State</label>
+                    <input
+                      className="form-control"
+                      placeholder="e.g. Dhaka"
+                      value={draft.division}
+                      disabled={isLockedStatus(status) || loading}
+                      onChange={(e) => setDraft((s) => ({ ...s, division: e.target.value }))}
+                    />
+                  </div>
+                  <div className="col-12 col-lg-6">
+                    <label className="form-label">City</label>
+                    <input
+                      className="form-control"
+                      placeholder="City or district"
+                      value={draft.city}
+                      disabled={isLockedStatus(status) || loading}
+                      onChange={(e) => setDraft((s) => ({ ...s, city: e.target.value }))}
+                    />
+                  </div>
+                  <div className="col-12 col-lg-3">
+                    <label className="form-label">Latitude (optional)</label>
+                    <input
+                      className="form-control"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="e.g. 23.8103"
+                      value={draft.latitude}
+                      disabled={isLockedStatus(status) || loading}
+                      onChange={(e) => setDraft((s) => ({ ...s, latitude: e.target.value }))}
+                    />
+                  </div>
+                  <div className="col-12 col-lg-3">
+                    <label className="form-label">Longitude (optional)</label>
+                    <input
+                      className="form-control"
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="e.g. 90.4125"
+                      value={draft.longitude}
+                      disabled={isLockedStatus(status) || loading}
+                      onChange={(e) => setDraft((s) => ({ ...s, longitude: e.target.value }))}
                     />
                   </div>
                 </div>
@@ -902,9 +1007,9 @@ export default function OwnerKycPage() {
                 <div className="text-sm text-secondary-light">
                   After submit you can: create first branch, add location, add products (drafts), invite staff. Go live, payouts, and ads unlock after approval.
                 </div>
-                <a href="/owner/dashboard" className="btn btn-light radius-12 mt-12 w-100">
+                <Link href="/owner/dashboard" className="btn btn-light radius-12 mt-12 w-100">
                   Open Dashboard
-                </a>
+                </Link>
               </div>
             </div>
           </div>

@@ -32,8 +32,8 @@ export default function ShopOrdersPage() {
       const url = filterStatus
         ? `/api/v1/orders?status=${filterStatus}`
         : "/api/v1/orders";
-      const data = await apiFetch(url);
-      setOrders(Array.isArray(data) ? data : data?.items || data?.data || []);
+      const data = (await apiFetch(url)) as unknown[] | { items?: unknown[]; data?: unknown[] };
+      setOrders((Array.isArray(data) ? data : (data && typeof data === "object" ? ((data as { items?: unknown[] }).items ?? (data as { data?: unknown[] }).data) ?? [] : [])) as Order[]);
       setError(null);
     } catch (e: any) {
       setError(e?.message || "Failed to load orders");

@@ -3,19 +3,28 @@
 import { useEffect, useState, useCallback } from "react";
 import { ownerGet, ownerPost } from "@/app/owner/_lib/ownerApi";
 
+const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+
+/** Fetch notifications; returns [] on 403 (no owner access) without throwing */
+async function fetchNotifications() {
+  const res = await fetch(
+    `${API_BASE}/api/v1/owner/notifications?type=STAFF_BRANCH_ACCESS_REQUEST&unread=1&limit=5`,
+    { method: "GET", credentials: "include" }
+  );
+  if (res.status === 403) return []; // Expected during KYC onboarding
+  if (!res.ok) return [];
+  const j = await res.json().catch(() => null);
+  const list = j?.data ?? j;
+  return Array.isArray(list) ? list : [];
+}
+
 export default function NotificationBadge() {
   const [items, setItems] = useState([]);
   const [open, setOpen] = useState(false);
 
   const load = useCallback(async () => {
-    try {
-      const res = await ownerGet("/api/v1/owner/notifications?type=STAFF_BRANCH_ACCESS_REQUEST&unread=1&limit=5");
-      const list = res?.data ?? res;
-      setItems(Array.isArray(list) ? list : []);
-    } catch (err) {
-      console.error("Failed to load owner notifications:", err);
-      setItems([]);
-    }
+    const list = await fetchNotifications();
+    setItems(list);
   }, []);
 
   useEffect(() => {

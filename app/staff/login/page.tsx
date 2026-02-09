@@ -19,7 +19,7 @@ export default function StaffLoginPage() {
     <AuthRedirectPage
       panelName="staff"
       action="login"
-      defaultLandingPath="/staff/branches"
+      defaultLandingPath="/staff"
     />
   );
 }

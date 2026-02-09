@@ -17,9 +17,20 @@ type ProductFormData = {
   status: string;
 };
 
+type SubmitPayload = Omit<ProductFormData, "categoryId" | "brandId"> & {
+  categoryId: number | null;
+  brandId: number | null;
+};
+
+/** initialData: form strings + optional numeric categoryId/brandId for pre-selection */
+type InitialData = Omit<Partial<ProductFormData>, "categoryId" | "brandId"> & {
+  categoryId?: number;
+  brandId?: number;
+};
+
 type Props = {
-  initialData?: Partial<ProductFormData> & { categoryId?: number; brandId?: number };
-  onSubmit: (data: ProductFormData & { categoryId: number | null; brandId: number | null }) => Promise<void>;
+  initialData?: InitialData;
+  onSubmit: (data: SubmitPayload) => Promise<void>;
   submitLabel?: string;
   cancelHref?: string;
 };
@@ -33,9 +44,9 @@ export default function ProductForm({
   const [formData, setFormData] = useState<ProductFormData>({
     name: initialData?.name ?? "",
     slug: initialData?.slug ?? "",
-    categoryId: initialData?.categoryId ?? "",
+    categoryId: initialData?.categoryId != null ? String(initialData.categoryId) : "",
     subCategoryId: initialData?.subCategoryId ?? "",
-    brandId: initialData?.brandId ?? "",
+    brandId: initialData?.brandId != null ? String(initialData.brandId) : "",
     description: initialData?.description ?? "",
     status: initialData?.status ?? "ACTIVE",
   });

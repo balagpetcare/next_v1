@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { ownerPost } from "@/app/owner/_lib/ownerApi";
 import Link from "next/link";
@@ -19,7 +19,7 @@ function Card({ title, subtitle, children }) {
   );
 }
 
-export default function InviteAcceptPage() {
+function InviteAcceptContent() {
   const sp = useSearchParams();
   const router = useRouter();
   const token = useMemo(() => sp.get("token") || "", [sp]);
@@ -42,15 +42,19 @@ export default function InviteAcceptPage() {
       if (password !== confirm) throw new Error("Passwords do not match. Please re-type.");
 
       setLoading(true);
-      await ownerPost("/api/v1/auth/invites/accept", {
+      const res = await ownerPost("/api/v1/auth/invites/accept", {
         token,
         password,
         displayName: displayName?.trim() || undefined,
       });
       setOk(true);
 
+      const targetPath =
+        res?.default_redirect ||
+        res?.defaultContext?.recommendedPath ||
+        (res?.data?.inviteType === "TEAM" ? "/owner/workspace" : "/owner/dashboard");
       setTimeout(() => {
-        router.replace("/owner/login");
+        router.replace(targetPath || "/owner/dashboard");
       }, 1500);
     } catch (e2) {
       setError(e2?.message || "Accept failed. Please try again or contact support.");
@@ -160,5 +164,13 @@ export default function InviteAcceptPage() {
         }
       `}</style>
     </div>
+  );
+}
+
+export default function InviteAcceptPage() {
+  return (
+    <Suspense fallback={<div className="min-vh-100 d-flex align-items-center justify-content-center text-secondary">Loading…</div>}>
+      <InviteAcceptContent />
+    </Suspense>
   );
 }

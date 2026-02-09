@@ -313,6 +313,9 @@ export default function OwnerOrganizationViewPage() {
           <Link className="btn btn-outline-secondary" href={`/owner/organizations/${id}/registration`}>
             Registration (KYC)
           </Link>
+          <Link className="btn btn-outline-secondary" href={`/owner/organizations/${id}/payouts`}>
+            Payouts
+          </Link>
           <button className="btn btn-outline-secondary" disabled={busy} onClick={refresh}>
             Refresh
           </button>

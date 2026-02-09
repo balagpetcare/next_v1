@@ -1,8 +1,48 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import LocationField from "@/src/components/location/LocationField";
+import LocationPicker from "@/components/location/LocationPicker";
 import { normalizeLocation, withLegacyLocationFields } from "@/src/lib/location/normalizeLocation";
+
+// Reusable LocationPicker is SSR-safe (exported with ssr: false). Use it directly.
+function legacyLocationToPickerValue(loc) {
+  if (!loc) return { lat: null, lng: null, address: "", city: "", state: "", country: "Bangladesh", postalCode: "" };
+  const lat = loc.lat ?? loc.latitude ?? null;
+  const lng = loc.lng ?? loc.longitude ?? null;
+  return {
+    lat: lat != null && Number.isFinite(lat) ? lat : null,
+    lng: lng != null && Number.isFinite(lng) ? lng : null,
+    address: loc.addressLine || loc.formattedAddress || loc.fullPathText || loc.text || "",
+    city: loc.city || loc.cityName || "",
+    state: loc.state || loc.stateName || "",
+    country: loc.countryName || (loc.countryCode === "BD" ? "Bangladesh" : loc.countryCode || "Bangladesh"),
+    postalCode: loc.postalCode || "",
+  };
+}
+
+function pickerValueToLegacyLocation(pickerVal, previousLocation) {
+  const prev = previousLocation || {};
+  const parts = [pickerVal.address, pickerVal.city, pickerVal.state, pickerVal.country].filter(Boolean);
+  const fullPathText = parts.join(", ");
+  return {
+    ...prev,
+    countryCode: prev.countryCode || "BD",
+    lat: pickerVal.lat ?? undefined,
+    lng: pickerVal.lng ?? undefined,
+    latitude: pickerVal.lat ?? null,
+    longitude: pickerVal.lng ?? null,
+    addressLine: pickerVal.address || undefined,
+    city: pickerVal.city || undefined,
+    cityName: pickerVal.city || undefined,
+    state: pickerVal.state || undefined,
+    stateName: pickerVal.state || undefined,
+    countryName: pickerVal.country || undefined,
+    postalCode: pickerVal.postalCode || undefined,
+    formattedAddress: fullPathText || undefined,
+    fullPathText: fullPathText || undefined,
+    text: fullPathText || undefined,
+  };
+}
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
 
@@ -130,14 +170,6 @@ const DEFAULT_STATE = {
     officialPhone: "",
     website: "",
     facebookPage: "",
-    bankAccountName: "",
-    bankAccountNumber: "",
-    bankName: "",
-    bankBranchName: "",
-    routingNumber: "",
-    payoutBkash: "",
-    payoutNagad: "",
-    payoutRocket: "",
   },
   directors: [{ name: "", role: "Owner", mobile: "", email: "" }],
   typeSpecific: {},
@@ -278,14 +310,10 @@ export default function OrganizationWizardForm({
         });
       }
     }
-    if ((k === "payoutBkash" || k === "payoutNagad" || k === "payoutRocket") && v) {
-      const err = validatePhone(v);
-      if (err) setFieldErrors((prev) => ({ ...prev, [k]: err }));
-    }
   }
 
   const canNext = useMemo(() => {
-    if (step === 1) return !!basic.name && !!basic.supportPhone && !!basic.orgTypeCode && !!(location?.fullPathText || location?.text);
+    if (step === 1) return !!basic.name && !!basic.supportPhone && !!basic.orgTypeCode && !!(location?.fullPathText || location?.text || location?.formattedAddress || (location?.countryCode && (location?.state || location?.city || location?.addressLine)));
     if (step === 2) return !!legal.tradeLicenseNumber;
     if (step === 3) return !!docs.TRADE_LICENSE;
     return true;
@@ -475,15 +503,11 @@ export default function OrganizationWizardForm({
             </div>
 
             <div className="col-12 mt-3">
-              <LocationField
-                value={location}
-                onChange={(next) => setLocation(normalizeLoc(next))}
+              <LocationPicker
+                value={legacyLocationToPickerValue(location)}
+                onChange={(pickerVal) => setLocation(normalizeLoc(pickerValueToLegacyLocation(pickerVal, location)))}
                 label="Business Location"
-                defaultCountryCode="BD"
-                enableRecent
-                enableGPS
-                enableMap
-                enableBdHierarchy
+                required
               />
               {locationHelperText ? (
                 <div className="text-muted mt-1" style={{ fontSize: 12 }}>
@@ -499,7 +523,7 @@ export default function OrganizationWizardForm({
                 rows={3}
                 value={basic.addressText}
                 onChange={(e) => setBasicField("addressText", e.target.value)}
-                placeholder="House/Road, Area, District, Division"
+                placeholder="House/Road, Area"
                 disabled={busy || readOnly}
               />
             </div>
@@ -789,104 +813,7 @@ export default function OrganizationWizardForm({
               />
             </div>
 
-            <div className="col-12 mt-4">
-              <div className="border-top pt-3">
-                <h6 className="fw-semibold mb-3">Bank Account Information</h6>
-                <div className="row g-3">
-                  <div className="col-md-6">
-                    <label className="form-label">Account Name</label>
-                    <input
-                      className="form-control"
-                      value={legal.bankAccountName}
-                      onChange={(e) => setLegalField("bankAccountName", e.target.value)}
-                      placeholder="Account holder name"
-                      disabled={busy || readOnly}
-                    />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">Account Number</label>
-                    <input
-                      className="form-control"
-                      value={legal.bankAccountNumber}
-                      onChange={(e) => setLegalField("bankAccountNumber", e.target.value)}
-                      placeholder="Bank account number"
-                      disabled={busy || readOnly}
-                    />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">Bank Name</label>
-                    <input
-                      className="form-control"
-                      value={legal.bankName}
-                      onChange={(e) => setLegalField("bankName", e.target.value)}
-                      placeholder="e.g., Sonali Bank"
-                      disabled={busy || readOnly}
-                    />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">Branch Name</label>
-                    <input
-                      className="form-control"
-                      value={legal.bankBranchName}
-                      onChange={(e) => setLegalField("bankBranchName", e.target.value)}
-                      placeholder="Branch name"
-                      disabled={busy || readOnly}
-                    />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">Routing Number</label>
-                    <input
-                      className="form-control"
-                      value={legal.routingNumber}
-                      onChange={(e) => setLegalField("routingNumber", e.target.value)}
-                      placeholder="Bank routing number"
-                      disabled={busy || readOnly}
-                    />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="col-12 mt-4">
-              <div className="border-top pt-3">
-                <h6 className="fw-semibold mb-3">Payment/Payout Methods</h6>
-                <div className="row g-3">
-                  <div className="col-md-4">
-                    <label className="form-label">bKash Number</label>
-                    <input
-                      className={`form-control ${fieldErrors.payoutBkash ? "is-invalid" : ""}`}
-                      value={legal.payoutBkash}
-                      onChange={(e) => setLegalField("payoutBkash", e.target.value)}
-                      placeholder="e.g., 017XXXXXXXX"
-                      disabled={busy || readOnly}
-                    />
-                    {fieldErrors.payoutBkash && <div className="invalid-feedback">{fieldErrors.payoutBkash}</div>}
-                  </div>
-                  <div className="col-md-4">
-                    <label className="form-label">Nagad Number</label>
-                    <input
-                      className={`form-control ${fieldErrors.payoutNagad ? "is-invalid" : ""}`}
-                      value={legal.payoutNagad}
-                      onChange={(e) => setLegalField("payoutNagad", e.target.value)}
-                      placeholder="e.g., 017XXXXXXXX"
-                      disabled={busy || readOnly}
-                    />
-                    {fieldErrors.payoutNagad && <div className="invalid-feedback">{fieldErrors.payoutNagad}</div>}
-                  </div>
-                  <div className="col-md-4">
-                    <label className="form-label">Rocket Number</label>
-                    <input
-                      className={`form-control ${fieldErrors.payoutRocket ? "is-invalid" : ""}`}
-                      value={legal.payoutRocket}
-                      onChange={(e) => setLegalField("payoutRocket", e.target.value)}
-                      placeholder="e.g., 017XXXXXXXX"
-                      disabled={busy || readOnly}
-                    />
-                    {fieldErrors.payoutRocket && <div className="invalid-feedback">{fieldErrors.payoutRocket}</div>}
-                  </div>
-                </div>
-              </div>
-            </div>
+            {/* Banking and payout are collected only on /owner/organizations/[id]/payouts */}
           </div>
         </Card>
       ) : null}
@@ -1048,32 +975,12 @@ export default function OrganizationWizardForm({
               </div>
               <div className="fw-semibold">{legal.tradeLicenseNumber || "-"}</div>
             </div>
-            {legal.bankAccountName ? (
-              <div className="col-12 mt-3">
-                <div className="text-muted" style={{ fontSize: 12 }}>
-                  Bank Account
-                </div>
-                <div className="fw-semibold">
-                  {legal.bankAccountName} - {legal.bankName}
-                </div>
+            <div className="col-12 mt-3">
+              <div className="text-muted" style={{ fontSize: 12 }}>
+                Payout / banking
               </div>
-            ) : null}
-            {legal.payoutBkash || legal.payoutNagad || legal.payoutRocket ? (
-              <div className="col-12 mt-3">
-                <div className="text-muted" style={{ fontSize: 12 }}>
-                  Payout Methods
-                </div>
-                <div className="fw-semibold">
-                  {[
-                    legal.payoutBkash && `bKash: ${legal.payoutBkash}`,
-                    legal.payoutNagad && `Nagad: ${legal.payoutNagad}`,
-                    legal.payoutRocket && `Rocket: ${legal.payoutRocket}`,
-                  ]
-                    .filter(Boolean)
-                    .join(", ") || "-"}
-                </div>
-              </div>
-            ) : null}
+              <div className="fw-semibold">Configure later in Organization → Payouts</div>
+            </div>
 
             <div className="col-12 mt-4">
               <div className="text-muted" style={{ fontSize: 12 }}>

@@ -312,9 +312,9 @@ export default function BranchForm({
     if (step === 2) {
       const loc = formData.location || {};
       const hasLocation =
-        (loc.bdAreaId && loc.kind === "BD_AREA") ||
-        (loc.dhakaAreaId && loc.kind === "DHAKA_AREA") ||
-        (loc.latitude && loc.longitude && loc.kind === "COORDINATES");
+        !!(loc?.fullPathText || loc?.text || loc?.formattedAddress) ||
+        (loc?.countryCode && (loc?.state || loc?.city || loc?.addressLine)) ||
+        (loc?.latitude && loc?.longitude);
       return !!formData.addressText && hasLocation;
     }
     if (step === 3) {

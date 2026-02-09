@@ -226,7 +226,7 @@ const COMMON_PORT = 3100;
 const FALLBACK_ORDER: Array<{ key: keyof PanelsFromMe; port: number; path: string }> = [
   { key: 'owner', port: 3104, path: '/owner' },
   { key: 'admin', port: 3103, path: '/admin' },
-  { key: 'staff', port: 3100, path: '/staff/branches' },
+  { key: 'staff', port: 3100, path: '/staff' },
   { key: 'country', port: 3106, path: '/country/dashboard' },
   { key: 'partner', port: 3100, path: '/' },
 ];

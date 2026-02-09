@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
-import { ownerGet } from "@/app/owner/_lib/ownerApi";
+import { ownerGetSafe } from "@/app/owner/_lib/ownerApi";
 
 /**
  * Hook to fetch entity counts for menu badges
@@ -37,11 +37,11 @@ export function useEntityCounts() {
 
     (async () => {
       try {
-        const [orgsRes, branchesRes, staffsRes, requestsRes] = await Promise.allSettled([
-          ownerGet("/api/v1/owner/organizations"),
-          ownerGet("/api/v1/owner/branches"),
-          ownerGet("/api/v1/owner/staffs"),
-          ownerGet("/api/v1/owner/requests?summary=1"),
+        const [orgsRes, branchesRes, staffsRes, requestsRes] = await Promise.all([
+          ownerGetSafe("/api/v1/owner/organizations"),
+          ownerGetSafe("/api/v1/owner/branches"),
+          ownerGetSafe("/api/v1/owner/staffs"),
+          ownerGetSafe("/api/v1/owner/requests?summary=1"),
         ]);
 
         if (cancelled) return;
@@ -55,26 +55,15 @@ export function useEntityCounts() {
         };
 
         const pendingCounts =
-          requestsRes.status === "fulfilled"
-            ? requestsRes.value?.meta?.pendingCounts ||
-              requestsRes.value?.pendingCounts ||
-              requestsRes.value?.data?.pendingCounts ||
-              {}
-            : {};
+          requestsRes?.meta?.pendingCounts ||
+          requestsRes?.pendingCounts ||
+          requestsRes?.data?.pendingCounts ||
+          {};
 
         const newCounts = {
-          organizations:
-            orgsRes.status === "fulfilled"
-              ? pickArray(orgsRes.value).length
-              : 0,
-          branches:
-            branchesRes.status === "fulfilled"
-              ? pickArray(branchesRes.value).length
-              : 0,
-          staffs:
-            staffsRes.status === "fulfilled"
-              ? pickArray(staffsRes.value).length
-              : 0,
+          organizations: pickArray(orgsRes).length,
+          branches: pickArray(branchesRes).length,
+          staffs: pickArray(staffsRes).length,
           requests: pendingCounts.inbox || 0,
           productRequests: pendingCounts.productRequests || 0,
           transfers: pendingCounts.transfers || 0,

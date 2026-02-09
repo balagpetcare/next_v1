@@ -4,17 +4,18 @@ import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import MasterLayout from "@/src/masterLayout/MasterLayout";
 import NotificationContainer from "./_components/Notification";
-import { getFallbackUrlForPanels } from "@/lib/authRedirect";
+import {
+  normalizeKycStatus,
+  shouldForceKycPage,
+  isApproved,
+} from "./_lib/ownerKycGuard";
 
-// Base API host (no trailing slash). Example: http://localhost:3000
-const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+const API_BASE = "";
 
 export default function OwnerLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  // IMPORTANT: Don't return early before hooks run; otherwise hook order can change
-  // between renders and React will throw (Rules of Hooks).
   const isAuthRoute =
     pathname?.startsWith("/owner/login") ||
     pathname?.startsWith("/owner/logout") ||
@@ -22,10 +23,13 @@ export default function OwnerLayout({ children }) {
     pathname?.startsWith("/owner/regester");
 
   const isKycRoute = pathname?.startsWith("/owner/kyc");
-  const isBranchTeamRoute = /^\/owner\/branches\/[^\/]+\/team(\/|$)/.test(String(pathname || ""));
-  const isBranchDashboardRoute = /^\/owner\/branches\/\d+(\/|$)/.test(String(pathname || ""));
+  const isOnboardingRoute = pathname?.startsWith("/owner/onboarding");
+  const isTeamDashboardRoute = pathname === "/owner/team";
+  const isWorkspaceRoute = pathname === "/owner/workspace";
 
-  // Auth + owner access: redirect to login if not authenticated, or to fallback if not owner
+  // 1) Auth: redirect to login if not authenticated; if no owner access, send to KYC (never to mother)
+  // Team members (defaultContext.type === 'TEAM'): skip onboarding redirect; KYC applies ONLY to OWNER.
+  // Skip redirect to kyc when already on kyc (prevents loop with KYC page’s approved→dashboard redirect)
   useEffect(() => {
     let cancelled = false;
     async function checkAuth() {
@@ -39,40 +43,53 @@ export default function OwnerLayout({ children }) {
         });
 
         if (!res.ok) {
-          if (!cancelled) router.replace("/owner/login");
+          if (!cancelled) {
+            const next = pathname ? `/owner/login?next=${encodeURIComponent(pathname)}` : "/owner/login";
+            router.replace(next);
+          }
           return;
         }
 
         const j = await res.json().catch(() => null);
         const hasOwnerAccess = j?.panels?.owner === true;
+        const needsOnboarding = j?.onboarding?.needsOnboarding === true;
+        const defaultContextType = j?.defaultContext?.type;
 
-        if (!cancelled && !hasOwnerAccess) {
-          const fallback = getFallbackUrlForPanels(j?.panels);
-          if (fallback && fallback !== window.location.origin + pathname) {
-            window.location.href = fallback;
-          } else {
-            router.replace("/owner/login");
-          }
+        if (!cancelled && !hasOwnerAccess && !isKycRoute) {
+          router.replace("/owner/kyc");
+          return;
+        }
+        if (defaultContextType === "TEAM") return;
+        if (!cancelled && hasOwnerAccess && needsOnboarding && !isOnboardingRoute && !isTeamDashboardRoute && !isWorkspaceRoute) {
+          router.replace("/owner/onboarding");
         }
       } catch {
-        if (!cancelled) router.replace("/owner/login");
+        if (!cancelled) {
+          const next = pathname ? `/owner/login?next=${encodeURIComponent(pathname)}` : "/owner/login";
+          router.replace(next);
+        }
       }
     }
     checkAuth();
-    return () => {
-      cancelled = true;
-    };
-  }, [pathname, router, isAuthRoute]);
+    return () => { cancelled = true; };
+  }, [pathname, router, isAuthRoute, isKycRoute, isOnboardingRoute, isTeamDashboardRoute, isWorkspaceRoute]);
 
-  // Mandatory KYC gate:
-  // - allow the KYC page itself
-  // - for all other owner pages, redirect to /owner/kyc until status is SUBMITTED/VERIFIED
+  // 2) KYC guard: force /owner/kyc ONLY when defaultContext.type === 'OWNER' AND (NOT_SUBMITTED or REJECTED).
+  // Team members (type === 'TEAM'): skip KYC entirely – never redirect to /owner/kyc.
   useEffect(() => {
     let cancelled = false;
     async function checkKyc() {
       try {
-        // Skip gate checks on auth routes and on the KYC page itself.
-        if (!pathname || isAuthRoute || pathname.startsWith("/owner/kyc")) return;
+        if (!pathname || isAuthRoute || isKycRoute || isOnboardingRoute || isTeamDashboardRoute || isWorkspaceRoute) return;
+
+        const meRes = await fetch(`${API_BASE}/api/v1/auth/me`, {
+          method: "GET",
+          credentials: "include",
+          headers: { Accept: "application/json" },
+        });
+        if (!meRes.ok) return;
+        const meJ = await meRes.json().catch(() => null);
+        if (meJ?.defaultContext?.type !== "OWNER") return;
 
         const res = await fetch(`${API_BASE}/api/v1/owner/kyc`, {
           method: "GET",
@@ -80,23 +97,30 @@ export default function OwnerLayout({ children }) {
           headers: { Accept: "application/json" },
         });
 
+        if (!res.ok) {
+          if (!cancelled && res.status === 401) {
+            router.replace(pathname ? `/owner/login?next=${encodeURIComponent(pathname)}` : "/owner/login");
+          }
+          return;
+        }
+
         const j = await res.json().catch(() => null);
         const kyc = j?.success ? j.data : j;
-        const status = String(kyc?.verificationStatus || "UNSUBMITTED").toUpperCase();
-        const ok = status === "SUBMITTED" || status === "VERIFIED";
+        const apiStatus = String(kyc?.verificationStatus || "UNSUBMITTED").toUpperCase();
+        const normalized = normalizeKycStatus(apiStatus);
 
-        if (!cancelled && !ok && !isAuthRoute && !isKycRoute && !isBranchTeamRoute && !isBranchDashboardRoute) {
+        if (cancelled) return;
+        if (isApproved(normalized)) return;
+        if (shouldForceKycPage(normalized)) {
           router.replace("/owner/kyc");
         }
       } catch {
-        if (!cancelled) router.replace("/owner/kyc");
+        // do not redirect on network error
       }
     }
     checkKyc();
-    return () => {
-      cancelled = true;
-    };
-  }, [pathname, router, isAuthRoute, isKycRoute, isBranchTeamRoute, isBranchDashboardRoute]);
+    return () => { cancelled = true; };
+  }, [pathname, router, isAuthRoute, isKycRoute, isOnboardingRoute, isTeamDashboardRoute, isWorkspaceRoute]);
 
   if (isAuthRoute) return <>{children}</>;
 

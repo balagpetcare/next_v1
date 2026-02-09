@@ -40,8 +40,8 @@ export default function OwnerOrdersPage() {
       const url = filterStatus
         ? `/api/v1/orders?status=${filterStatus}`
         : "/api/v1/orders";
-      const data = await apiFetch(url);
-      setOrders(Array.isArray(data) ? data : data?.items || []);
+      const data = (await apiFetch(url)) as unknown[] | { items?: unknown[] };
+      setOrders((Array.isArray(data) ? data : (data && typeof data === "object" && "items" in data ? (data as { items: unknown[] }).items ?? [] : [])) as Order[]);
       setError(null);
     } catch (e: any) {
       setError(e?.message || "Failed to load orders");

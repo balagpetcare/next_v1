@@ -45,8 +45,9 @@ export default function OrderDetailsPage() {
   const loadOrder = async () => {
     try {
       setLoading(true);
-      const data = await apiFetch(`/api/v1/orders/${orderId}`);
-      setOrder(data?.data || data);
+      const data = (await apiFetch(`/api/v1/orders/${orderId}`)) as { data?: unknown } | unknown;
+      const payload = data && typeof data === "object" && "data" in data ? (data as { data: unknown }).data : data;
+      setOrder((payload ?? null) as Order | null);
       setError(null);
     } catch (e: any) {
       setError(e?.message || "Failed to load order");

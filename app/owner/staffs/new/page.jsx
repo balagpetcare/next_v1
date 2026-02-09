@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { ownerGet, ownerPost } from "@/app/owner/_lib/ownerApi";
 import { getEntityConfig } from "@/app/owner/_lib/entityConfig";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 
-export default function OwnerStaffNewPage() {
+function OwnerStaffNewContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const config = getEntityConfig("staff");
@@ -507,5 +507,13 @@ export default function OwnerStaffNewPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function OwnerStaffNewPage() {
+  return (
+    <Suspense fallback={<div className="container py-4 text-secondary">Loading…</div>}>
+      <OwnerStaffNewContent />
+    </Suspense>
   );
 }

@@ -3,18 +3,17 @@
 import React, { useEffect, useMemo, useState, useRef } from "react";
 import { Icon } from "@iconify/react";
 import { usePathname } from "next/navigation";
-import ThemeToggleButton from "../helper/ThemeToggleButton";
 import Link from "next/link";
 import { buildMenu, appKeyFromPath } from "../lib/permissionMenu";
 import { isBranchRoute, getBranchIdFromPath, isStaffBranchRoute, getStaffBranchIdFromPath } from "../lib/branchMenu";
 import StaffBranchSidebar from "../components/branch/StaffBranchSidebar";
-import { useMe, useBranchSelection } from "../lib/useMe";
+import { useMe } from "../lib/useMe";
 import { usePolicyFeatures } from "@/lib/usePolicyFeatures";
 import { useEntityCounts } from "../../app/owner/_hooks/useEntityCounts";
 import BranchSidebar from "../../app/owner/_components/branch/BranchSidebar";
 import NotificationBadge from "../../app/owner/_components/NotificationBadge";
 import NotificationBell from "../components/NotificationBell";
-import CountrySwitcher from "../components/CountrySwitcher";
+import ContextSelector from "../../app/owner/_components/ContextSelector";
 
 function isActive(pathname, href) {
   if (!href) return false;
@@ -81,7 +80,6 @@ export default function MasterLayout({ children }) {
 
   // Permission-driven menu (Phase-4)
   const { me } = useMe(pathname);
-  const { branchId, select: selectBranch } = useBranchSelection(me);
   // Phase 5: policy-based UI – hide Donation/Ads nav when feature disabled for country
   const { donationEnabled, adsEnabled } = usePolicyFeatures();
 
@@ -106,6 +104,12 @@ export default function MasterLayout({ children }) {
   }, [appKey, me]);
 
   const homeItem = useMemo(() => {
+    const defaultContextType = me?.defaultContext?.type;
+    const isTeamContext = defaultContextType === "TEAM" && isOwner;
+    if (isTeamContext) {
+      const workspaceItem = menuItems.find((x) => x.href === "/owner/workspace");
+      if (workspaceItem) return workspaceItem;
+    }
     const first = menuItems.find((x) => !!x.href) || null;
     if (first) return first;
     if (isAdmin) return { id: "admin.home", label: "Dashboard", href: "/admin/dashboard", icon: "solar:home-smile-angle-outline" };
@@ -113,7 +117,7 @@ export default function MasterLayout({ children }) {
     if (pathname?.startsWith("/shop")) return { id: "shop.home", label: "Dashboard", href: "/shop", icon: "solar:home-smile-angle-outline" };
     if (pathname?.startsWith("/clinic")) return { id: "clinic.home", label: "Dashboard", href: "/clinic", icon: "solar:home-smile-angle-outline" };
     return { id: "home", label: "Home", href: "/", icon: "solar:home-smile-angle-outline" };
-  }, [menuItems, isAdmin, isOwner, pathname]);
+  }, [menuItems, isAdmin, isOwner, pathname, me?.defaultContext?.type]);
 
   const menuRest = useMemo(() => menuItems.filter((x) => x.id !== homeItem.id), [menuItems, homeItem.id]);
 
@@ -413,34 +417,15 @@ export default function MasterLayout({ children }) {
 
             <div className="col-auto">
               <div className="d-flex flex-wrap align-items-center gap-3">
-                <div className="d-flex align-items-center gap-2">
-                  <span className="badge bg-primary-focus text-primary-600 radius-12">
-                    {String(me?.roles?.[0] || panelTitle)}
-                  </span>
-                  {!isBranchView && (
-                    <select
-                      className="form-select form-select-sm radius-12"
-                      value={branchId ?? ""}
-                      onChange={(e) => selectBranch(e.target.value ? Number(e.target.value) : null)}
-                      style={{ width: 180 }}
-                      title="Select Branch"
-                    >
-                      <option value="">All Branches</option>
-                      {(me?.branches || []).map((b) => (
-                        <option key={b.id} value={b.id}>
-                          {b.name || `Branch #${b.id}`}
-                        </option>
-                      ))}
-                      {!Array.isArray(me?.branches) || me.branches.length === 0 ? (
-                        branchId ? <option value={branchId}>{`Branch #${branchId}`}</option> : null
-                      ) : null}
-                    </select>
-                  )}
-                </div>
+                {isOwner && (me?.contexts?.length > 1) && (
+                  <ContextSelector
+                    contexts={me.contexts}
+                    defaultContext={me.defaultContext}
+                    onSwitch={() => window.location.reload()}
+                  />
+                )}
                 {isOwner && <NotificationBadge />}
-                {(isOwner || isAdmin) && <NotificationBell enabled={!!me} />}
-                <CountrySwitcher />
-                <ThemeToggleButton />
+                {(isOwner || isAdmin || pathname?.startsWith?.("/staff")) && <NotificationBell enabled={!!me} />}
 
                 {/* Profile dropdown */}
                 <div className="dropdown" ref={profileDropdownRef} style={{ position: "relative" }}>
@@ -554,6 +539,16 @@ export default function MasterLayout({ children }) {
                           >
                             <Icon icon="icon-park-outline:setting-two" className="icon text-xl" />
                             Account Settings
+                          </Link>
+                        </li>
+                        <li>
+                          <Link
+                            className="dropdown-item text-black px-0 py-8 hover-bg-transparent hover-text-primary d-flex align-items-center gap-3"
+                            href={pathname?.startsWith?.("/staff") ? "/staff/notifications" : "/owner/notifications"}
+                            onClick={() => setProfileDropdownOpen(false)}
+                          >
+                            <Icon icon="solar:letter-linear" className="icon text-xl" />
+                            Messages
                           </Link>
                         </li>
                         <li>

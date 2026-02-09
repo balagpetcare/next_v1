@@ -36,8 +36,8 @@ export default function OwnerSalesReportPage() {
       if (groupBy) params.append("groupBy", groupBy);
       url += params.toString();
 
-      const data = await apiFetch(url);
-      setReport(data?.data || data);
+      const data = (await apiFetch(url)) as { data?: unknown } | unknown;
+      setReport(((data && typeof data === "object" && "data" in data ? (data as { data: unknown }).data : data) ?? null) as SalesReport | null);
       setError(null);
     } catch (e: any) {
       setError(e?.message || "Failed to load sales report");

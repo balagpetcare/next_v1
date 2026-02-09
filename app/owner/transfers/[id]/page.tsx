@@ -20,7 +20,7 @@ export default function TransferDetailPage() {
   const loadTransfer = async () => {
     try {
       setLoading(true);
-      const res = await ownerGet(`/api/v1/transfers/${id}`);
+      const res = (await ownerGet(`/api/v1/transfers/${id}`)) as { data?: unknown };
       setTransfer(res?.data ?? res);
     } catch (e) {
       setError((e as Error).message);

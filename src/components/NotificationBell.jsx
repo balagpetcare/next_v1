@@ -3,9 +3,12 @@
 import { useState, useRef, useEffect } from "react";
 import { Icon } from "@iconify/react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useNotifications } from "@/lib/useNotifications";
 
 export default function NotificationBell({ enabled = true }) {
+  const pathname = usePathname();
+  const viewAllHref = pathname?.startsWith?.("/staff") ? "/staff" : "/owner/notifications";
   const { count, items, loading, wsConnected, fetchList, markRead, readAll } = useNotifications({ enabled });
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
@@ -127,7 +130,7 @@ export default function NotificationBell({ enabled = true }) {
             </div>
             <div className="border-top px-16 py-12">
               <Link
-                href="/owner/notifications"
+                href={viewAllHref}
                 className="btn btn-sm btn-primary w-100"
                 onClick={() => setOpen(false)}
               >

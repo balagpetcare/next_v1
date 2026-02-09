@@ -14,8 +14,8 @@ export default function ProductApprovalsPage() {
   const loadPendingApprovals = async () => {
     try {
       setLoading(true);
-      const data = await apiFetch("/api/v1/products?approvalStatus=PENDING_APPROVAL");
-      setProducts(Array.isArray(data) ? data : data?.items || []);
+      const data = (await apiFetch("/api/v1/products?approvalStatus=PENDING_APPROVAL")) as unknown[] | { items?: unknown[] };
+      setProducts(Array.isArray(data) ? data : (data && typeof data === "object" && "items" in data ? data.items ?? [] : []));
     } catch (error: any) {
       console.error("Load approvals error:", error);
     } finally {

@@ -25,9 +25,9 @@ export default function ShopInventoryPage() {
   const loadInventory = async () => {
     try {
       setLoading(true);
-      const res = await apiFetch("/api/v1/inventory");
-      const items = res?.data ?? res?.items ?? res?.data?.items ?? (Array.isArray(res) ? res : []);
-      setInventory(Array.isArray(items) ? items : []);
+      const res = (await apiFetch("/api/v1/inventory")) as { data?: unknown[]; items?: unknown[] } | unknown[];
+      const items = Array.isArray(res) ? res : (res && typeof res === "object" ? ((res as { data?: unknown[] }).data ?? (res as { items?: unknown[] }).items) ?? [] : []);
+      setInventory((Array.isArray(items) ? items : []) as InventoryItem[]);
       setError(null);
     } catch (e: any) {
       setError(e?.message || "Failed to load inventory");
@@ -58,9 +58,9 @@ export default function ShopInventoryPage() {
                   className="btn btn-outline-warning radius-12"
                   onClick={async () => {
                     try {
-                      const res = await apiFetch("/api/v1/inventory/alerts");
-                      const items = res?.data ?? (Array.isArray(res) ? res : []);
-                      setInventory(Array.isArray(items) ? items : []);
+                      const res = (await apiFetch("/api/v1/inventory/alerts")) as { data?: unknown[] } | unknown[];
+                      const items = Array.isArray(res) ? res : (res && typeof res === "object" && "data" in res ? (res as { data?: unknown[] }).data ?? [] : []);
+                      setInventory((Array.isArray(items) ? items : []) as InventoryItem[]);
                     } catch (e: any) {
                       console.error("Load alerts error:", e);
                     }

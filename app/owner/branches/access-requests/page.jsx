@@ -2,8 +2,24 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
+import { format, formatDistanceToNow } from "date-fns";
+import { enUS } from "date-fns/locale";
 import { ownerGet, ownerPost } from "@/app/owner/_lib/ownerApi";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
+
+/** Format timestamp in English with relative time. Locale forced to en. */
+function formatTimestampEn(isoOrEpoch) {
+  if (!isoOrEpoch) return "—";
+  try {
+    const d = typeof isoOrEpoch === "number" ? new Date(isoOrEpoch) : new Date(String(isoOrEpoch));
+    if (isNaN(d.getTime())) return "—";
+    const abs = format(d, "MMM d, yyyy, h:mm a", { locale: enUS });
+    const rel = formatDistanceToNow(d, { addSuffix: true, locale: enUS });
+    return `${abs} • ${rel}`;
+  } catch {
+    return "—";
+  }
+}
 
 function pickArray(resp) {
   if (!resp) return [];
@@ -79,7 +95,7 @@ export default function OwnerBranchAccessRequestsPage() {
   }
 
   async function handleReject(id) {
-    if (!confirm("আপনি কি নিশ্চিত যে আপনি এই access request reject করতে চান?")) return;
+    if (!confirm("Are you sure you want to reject this access request?")) return;
     setError("");
     setProcessing((p) => ({ ...p, [id]: "reject" }));
     try {
@@ -196,9 +212,7 @@ export default function OwnerBranchAccessRequestsPage() {
                         </span>
                       </td>
                       <td>
-                        {row.requestedAt
-                          ? new Date(row.requestedAt).toLocaleString("bn-BD")
-                          : "—"}
+                        {formatTimestampEn(row.requestedAt)}
                       </td>
                       {statusFilter === "PENDING" ? (
                         <td className="text-end">

@@ -322,7 +322,7 @@ export default function OrganizationRegistrationEditPage() {
   }, [org]);
 
   const stepDone = useMemo(() => {
-    const businessDone = !!basic.name && !!basic.supportPhone && (!!location?.bdAreaId || !!location?.dhakaAreaId) && !!(location?.fullPathText || location?.text);
+    const businessDone = !!basic.name && !!basic.supportPhone && !!(location?.fullPathText || location?.text || location?.formattedAddress || (location?.countryCode && (location?.state || location?.city || location?.addressLine)));
     const legalDone = !!legal.tradeLicenseNumber;
     const hasTrade = documents.some((d) => norm(d?.type || d?.docType) === "TRADE_LICENSE");
     const docsDone = hasTrade;

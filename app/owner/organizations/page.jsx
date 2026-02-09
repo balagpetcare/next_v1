@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
 import { ownerDelete, ownerGet } from "@/app/owner/_lib/ownerApi";
 import EntityListPage from "@/app/owner/_components/shared/EntityListPage";
 import { useEntityList } from "@/app/owner/_hooks/useEntityList";
@@ -8,7 +8,7 @@ import { useEntityFilters } from "@/app/owner/_hooks/useEntityFilters";
 import { getEntityConfig } from "@/app/owner/_lib/entityConfig";
 import StatusBadge from "@/app/owner/_components/StatusBadge";
 
-export default function OwnerOrganizationsPage() {
+function OwnerOrganizationsContent() {
   const config = getEntityConfig("organization");
   const { filters, updateFilter } = useEntityFilters(config);
   const { data, loading, error, stats, refresh } = useEntityList(config, filters);
@@ -137,5 +137,13 @@ export default function OwnerOrganizationsPage() {
         },
       }}
     />
+  );
+}
+
+export default function OwnerOrganizationsPage() {
+  return (
+    <Suspense fallback={<div className="container py-4 text-secondary">Loading…</div>}>
+      <OwnerOrganizationsContent />
+    </Suspense>
   );
 }

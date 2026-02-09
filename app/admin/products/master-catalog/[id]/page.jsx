@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { Suspense, useEffect, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import { Icon } from "@iconify/react";
 import PageHeader from "@/src/bpa/components/PageHeader";
@@ -8,7 +8,7 @@ import { apiGet, apiPatch } from "@/lib/api";
 import SectionCard from "@/src/bpa/admin/components/SectionCard";
 import StatusChip from "@/src/bpa/admin/components/StatusChip";
 
-export default function MasterCatalogDetailPage() {
+function MasterCatalogDetailContent() {
   const params = useParams();
   const searchParams = useSearchParams();
   const id = params?.id;
@@ -517,4 +517,10 @@ function EditableField({ label, value, onChange, textarea = false, required = fa
   );
 }
 
-
+export default function MasterCatalogDetailPage() {
+  return (
+    <Suspense fallback={<div className="container py-4 text-secondary">Loading…</div>}>
+      <MasterCatalogDetailContent />
+    </Suspense>
+  );
+}

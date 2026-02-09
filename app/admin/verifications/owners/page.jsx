@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { Icon } from '@iconify/react';
 import { useSearchParams } from 'next/navigation';
 import { apiGet } from "../../../../lib/api";
@@ -10,7 +10,7 @@ import StatusChip from '@/src/bpa/admin/components/StatusChip';
 
 const STATUS = ["", "SUBMITTED", "REQUEST_CHANGES", "VERIFIED", "REJECTED", "SUSPENDED", "UNSUBMITTED"];
 
-export default function Page() {
+function OwnersVerificationsContent() {
   const sp = useSearchParams();
   const [rows, setRows] = useState([]);
   const [status, setStatus] = useState(sp.get('status') || "");
@@ -124,5 +124,13 @@ export default function Page() {
         </div>
       </SectionCard>
     </div>
+  );
+}
+
+export default function Page() {
+  return (
+    <Suspense fallback={<div className="container-fluid p-4 text-secondary">Loading…</div>}>
+      <OwnersVerificationsContent />
+    </Suspense>
   );
 }

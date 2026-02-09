@@ -45,4 +45,4 @@ const place = locationValueToPlaceInput(location);
 - WowDash UI ready (`radius-12`, cards).
 - Map uses Leaflet with proper cleanup to avoid “Map container is already initialized”.
 - Bangladesh hierarchy: Division → District → Upazila → Area/Ward via `BdHierarchyPicker`.
-- Recent locations stored in localStorage; disable with `enableRecent={false}` if not needed.
+- Recent data stored in localStorage: `loc_recent_countries` (country codes, max 8, deduped) and `loc_last_address_preview` (last full address as single pill). Disable with `enableRecent={false}`.

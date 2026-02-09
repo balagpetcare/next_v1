@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import { ownerGet, ownerPatch } from "@/app/owner/_lib/ownerApi";
 
 export default function OwnerOnlineStorePage() {

@@ -37,9 +37,9 @@ export default function OwnerProductsPage() {
   const loadProducts = async () => {
     try {
       setLoading(true);
-      const res = (await apiFetch("/api/v1/products")) as { items?: unknown[]; data?: unknown[] };
+      const res = (await apiFetch("/api/v1/products")) as { items?: Product[]; data?: Product[] };
       const list = Array.isArray(res?.data) ? res.data : Array.isArray(res?.items) ? res.items : [];
-      setProducts(list);
+      setProducts(list as Product[]);
       setError(null);
     } catch (e: any) {
       setError(e?.message || "Failed to load products");

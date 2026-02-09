@@ -34,8 +34,8 @@ export default function OwnerRevenueReportPage() {
       if (endDate) params.append("endDate", endDate);
       url += params.toString();
 
-      const data = await apiFetch(url);
-      setAnalytics(data?.data || data);
+      const data = (await apiFetch(url)) as { data?: unknown } | unknown;
+      setAnalytics(((data && typeof data === "object" && "data" in data ? (data as { data: unknown }).data : data) ?? null) as RevenueAnalytics | null);
       setError(null);
     } catch (e: any) {
       setError(e?.message || "Failed to load revenue analytics");

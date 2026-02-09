@@ -6,6 +6,15 @@ const nextConfig = {
   distDir: process.env.SITE_MODE ? `.next/${process.env.SITE_MODE}` : '.next',
   
   reactStrictMode: true,
+
+  // Proxy /api/* to backend (port 3000) so same-origin requests avoid CORS and cookies work
+  async rewrites() {
+    const apiTarget = process.env.API_BASE_URL || "http://localhost:3000";
+    return [
+      { source: "/api/:path*", destination: `${apiTarget}/api/:path*` },
+    ];
+  },
+
   images: {
     remotePatterns: [
       {

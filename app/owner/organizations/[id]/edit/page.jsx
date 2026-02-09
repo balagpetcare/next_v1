@@ -211,14 +211,6 @@ function EditOrganizationPageOld() {
     officialPhone: "",
     website: "",
     facebookPage: "",
-    bankAccountName: "",
-    bankAccountNumber: "",
-    bankName: "",
-    bankBranchName: "",
-    routingNumber: "",
-    payoutBkash: "",
-    payoutNagad: "",
-    payoutRocket: "",
   });
 
   const [directors, setDirectors] = useState([{ name: "", role: "Owner", mobile: "", email: "" }]);
@@ -324,10 +316,6 @@ function EditOrganizationPageOld() {
         });
       }
     }
-    if ((k === "payoutBkash" || k === "payoutNagad" || k === "payoutRocket") && v) {
-      const err = validatePhone(v);
-      if (err) setFieldErrors((prev) => ({ ...prev, [k]: err }));
-    }
   }
 
   // Load org types
@@ -406,14 +394,6 @@ function EditOrganizationPageOld() {
         officialPhone: lp?.officialPhone || "",
         website: lp?.website || "",
         facebookPage: lp?.facebookPage || "",
-        bankAccountName: lp?.bankAccountName || "",
-        bankAccountNumber: lp?.bankAccountNumber || "",
-        bankName: lp?.bankName || "",
-        bankBranchName: lp?.bankBranchName || "",
-        routingNumber: lp?.routingNumber || "",
-        payoutBkash: lp?.payoutBkash || "",
-        payoutNagad: lp?.payoutNagad || "",
-        payoutRocket: lp?.payoutRocket || "",
       }));
 
       // directors (try multiple possible shapes)
@@ -468,8 +448,7 @@ function EditOrganizationPageOld() {
         !!basic.name &&
         !!basic.supportPhone &&
         !!basic.orgTypeCode &&
-        (!!location?.bdAreaId || !!location?.dhakaAreaId) &&
-        !!(location?.fullPathText || location?.text)
+        !!(location?.fullPathText || location?.text || location?.formattedAddress || (location?.countryCode && (location?.state || location?.city || location?.addressLine)))
       );
     if (step === 2) return !!legal.tradeLicenseNumber;
     if (step === 3) return !!docs.TRADE_LICENSE;
@@ -534,14 +513,6 @@ function EditOrganizationPageOld() {
         officialPhone: legal.officialPhone || basic.supportPhone,
         website: legal.website,
         facebookPage: legal.facebookPage,
-        bankAccountName: legal.bankAccountName || null,
-        bankAccountNumber: legal.bankAccountNumber || null,
-        bankName: legal.bankName || null,
-        bankBranchName: legal.bankBranchName || null,
-        routingNumber: legal.routingNumber || null,
-        payoutBkash: legal.payoutBkash || null,
-        payoutNagad: legal.payoutNagad || null,
-        payoutRocket: legal.payoutRocket || null,
       });
 
       await apiPost(`/api/v1/owner/organizations/${id}/legal-profile/save-directors`, { directors });
@@ -797,7 +768,7 @@ function EditOrganizationPageOld() {
                 rows={3}
                 value={basic.addressText}
                 onChange={(e) => setBasicField("addressText", e.target.value)}
-                placeholder="House/Road, Area, District, Division"
+                placeholder="House/Road, Area"
               />
             </div>
 
@@ -1011,54 +982,8 @@ function EditOrganizationPageOld() {
             </div>
 
             <div className="col-12 mt-4">
-              <div className="border-top pt-3">
-                <h6 className="fw-semibold mb-3">Bank Account Information</h6>
-                <div className="row g-3">
-                  <div className="col-md-6">
-                    <label className="form-label">Account Name</label>
-                    <input className="form-control" value={legal.bankAccountName} onChange={(e) => setLegalField("bankAccountName", e.target.value)} placeholder="Account holder name" />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">Account Number</label>
-                    <input className="form-control" value={legal.bankAccountNumber} onChange={(e) => setLegalField("bankAccountNumber", e.target.value)} placeholder="Bank account number" />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">Bank Name</label>
-                    <input className="form-control" value={legal.bankName} onChange={(e) => setLegalField("bankName", e.target.value)} placeholder="e.g., Sonali Bank" />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">Branch Name</label>
-                    <input className="form-control" value={legal.bankBranchName} onChange={(e) => setLegalField("bankBranchName", e.target.value)} placeholder="Branch name" />
-                  </div>
-                  <div className="col-md-6">
-                    <label className="form-label">Routing Number</label>
-                    <input className="form-control" value={legal.routingNumber} onChange={(e) => setLegalField("routingNumber", e.target.value)} placeholder="Bank routing number" />
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <div className="col-12 mt-4">
-              <div className="border-top pt-3">
-                <h6 className="fw-semibold mb-3">Payment/Payout Methods</h6>
-                <div className="row g-3">
-                  <div className="col-md-4">
-                    <label className="form-label">bKash Number</label>
-                    <input className={`form-control ${fieldErrors.payoutBkash ? "is-invalid" : ""}`} value={legal.payoutBkash} onChange={(e) => setLegalField("payoutBkash", e.target.value)} placeholder="e.g., 017XXXXXXXX" />
-                    {fieldErrors.payoutBkash && <div className="invalid-feedback">{fieldErrors.payoutBkash}</div>}
-                  </div>
-                  <div className="col-md-4">
-                    <label className="form-label">Nagad Number</label>
-                    <input className={`form-control ${fieldErrors.payoutNagad ? "is-invalid" : ""}`} value={legal.payoutNagad} onChange={(e) => setLegalField("payoutNagad", e.target.value)} placeholder="e.g., 017XXXXXXXX" />
-                    {fieldErrors.payoutNagad && <div className="invalid-feedback">{fieldErrors.payoutNagad}</div>}
-                  </div>
-                  <div className="col-md-4">
-                    <label className="form-label">Rocket Number</label>
-                    <input className={`form-control ${fieldErrors.payoutRocket ? "is-invalid" : ""}`} value={legal.payoutRocket} onChange={(e) => setLegalField("payoutRocket", e.target.value)} placeholder="e.g., 017XXXXXXXX" />
-                    {fieldErrors.payoutRocket && <div className="invalid-feedback">{fieldErrors.payoutRocket}</div>}
-                  </div>
-                </div>
-              </div>
+              <div className="text-muted" style={{ fontSize: 12 }}>Payout / banking</div>
+              <div className="fw-semibold">Configure in Organization → Payouts</div>
             </div>
           </div>
         </Card>
@@ -1327,24 +1252,10 @@ function EditOrganizationPageOld() {
               </div>
               <div className="fw-semibold">{legal.tradeLicenseNumber || "-"}</div>
             </div>
-            {legal.bankAccountName && (
-              <div className="col-12 mt-3">
-                <div className="text-muted" style={{ fontSize: 12 }}>
-                  Bank Account
-                </div>
-                <div className="fw-semibold">{legal.bankAccountName} - {legal.bankName}</div>
-              </div>
-            )}
-            {(legal.payoutBkash || legal.payoutNagad || legal.payoutRocket) && (
-              <div className="col-12 mt-3">
-                <div className="text-muted" style={{ fontSize: 12 }}>
-                  Payout Methods
-                </div>
-                <div className="fw-semibold">
-                  {[legal.payoutBkash && `bKash: ${legal.payoutBkash}`, legal.payoutNagad && `Nagad: ${legal.payoutNagad}`, legal.payoutRocket && `Rocket: ${legal.payoutRocket}`].filter(Boolean).join(", ") || "-"}
-                </div>
-              </div>
-            )}
+            <div className="col-12 mt-3">
+              <div className="text-muted" style={{ fontSize: 12 }}>Payout / banking</div>
+              <div className="fw-semibold">Configure in Organization → Payouts</div>
+            </div>
 
             <div className="col-12 mt-4">
               <div className="text-muted" style={{ fontSize: 12 }}>
@@ -1456,8 +1367,17 @@ export default function EditOrganizationPage() {
             cityCorporationId: addr?.cityCorporationId || data?.cityCorporationId || null,
             cityCorporationCode: addr?.cityCorporationCode || data?.cityCorporationCode || null,
             dhakaAreaId: addr?.dhakaAreaId || data?.dhakaAreaId || null,
-            latitude: addr?.latitude || data?.latitude || null,
-            longitude: addr?.longitude || data?.longitude || null,
+            latitude: data?.location?.lat ?? addr?.latitude ?? data?.latitude ?? null,
+            longitude: data?.location?.lng ?? addr?.longitude ?? data?.longitude ?? null,
+            lat: data?.location?.lat ?? addr?.lat ?? null,
+            lng: data?.location?.lng ?? addr?.lng ?? null,
+            addressLine: data?.location?.address ?? addr?.addressLine ?? null,
+            city: data?.location?.city ?? addr?.cityName ?? null,
+            cityName: data?.location?.city ?? addr?.cityName ?? null,
+            state: data?.location?.state ?? addr?.stateName ?? null,
+            stateName: data?.location?.state ?? addr?.stateName ?? null,
+            countryName: data?.location?.country ?? addr?.countryName ?? null,
+            postalCode: data?.location?.postalCode ?? addr?.postalCode ?? null,
             fullPathText: addr?.fullPathText || data?.fullPathText || null,
             text: addr?.fullPathText || data?.fullPathText || null,
           },
@@ -1477,14 +1397,6 @@ export default function EditOrganizationPage() {
             officialPhone: lp?.officialPhone || "",
             website: lp?.website || "",
             facebookPage: lp?.facebookPage || "",
-            bankAccountName: lp?.bankAccountName || "",
-            bankAccountNumber: lp?.bankAccountNumber || "",
-            bankName: lp?.bankName || "",
-            bankBranchName: lp?.bankBranchName || "",
-            routingNumber: lp?.routingNumber || "",
-            payoutBkash: lp?.payoutBkash || "",
-            payoutNagad: lp?.payoutNagad || "",
-            payoutRocket: lp?.payoutRocket || "",
           },
           directors,
           typeSpecific: addr?.typeSpecific || {},
@@ -1505,34 +1417,44 @@ export default function EditOrganizationPage() {
   }, [id]);
 
   async function saveBusiness(state) {
+    const loc = state?.location || {};
     await apiPut(`/api/v1/owner/organizations/${id}`, {
       name: state?.basic?.name,
       supportPhone: state?.basic?.supportPhone,
       supportEmail: state?.basic?.supportEmail || null,
 
-      cityCorporationId: state?.location?.cityCorporationId || null,
-      dhakaAreaId: state?.location?.dhakaAreaId || null,
-      bdAreaId: state?.location?.bdAreaId || null,
-      fullPathText: state?.location?.fullPathText || state?.location?.text || null,
+      cityCorporationId: loc.cityCorporationId || null,
+      dhakaAreaId: loc.dhakaAreaId || null,
+      bdAreaId: loc.bdAreaId || null,
+      fullPathText: loc.fullPathText || loc.text || null,
 
       addressJson: {
         text: state?.basic?.addressText || "",
         orgTypeCode: state?.basic?.orgTypeCode,
-        locationKind: state?.location?.kind || null,
-        countryCode: state?.location?.countryCode || null,
-        divisionId: state?.location?.divisionId || null,
-        districtId: state?.location?.districtId || null,
-        upazilaId: state?.location?.upazilaId || null,
-        cityCorporationId: state?.location?.cityCorporationId || null,
-        cityCorporationCode: state?.location?.cityCorporationCode || null,
-        dhakaAreaId: state?.location?.dhakaAreaId || null,
-        bdAreaId: state?.location?.bdAreaId || null,
-        fullPathText: state?.location?.fullPathText || state?.location?.text || null,
-        latitude: state?.location?.latitude || null,
-        longitude: state?.location?.longitude || null,
+        locationKind: loc.kind || null,
+        countryCode: loc.countryCode || null,
+        divisionId: loc.divisionId || null,
+        districtId: loc.districtId || null,
+        upazilaId: loc.upazilaId || null,
+        cityCorporationId: loc.cityCorporationId || null,
+        cityCorporationCode: loc.cityCorporationCode || null,
+        dhakaAreaId: loc.dhakaAreaId || null,
+        bdAreaId: loc.bdAreaId || null,
+        fullPathText: loc.fullPathText || loc.text || null,
+        latitude: loc.latitude ?? loc.lat ?? null,
+        longitude: loc.longitude ?? loc.lng ?? null,
         whatsappNumber: state?.basic?.whatsappNumber || null,
         alternatePhone: state?.basic?.alternatePhone || null,
         typeSpecific: state?.typeSpecific || {},
+      },
+      location: {
+        lat: loc.lat ?? loc.latitude ?? null,
+        lng: loc.lng ?? loc.longitude ?? null,
+        address: loc.addressLine || loc.formattedAddress || "",
+        city: loc.city || loc.cityName || "",
+        state: loc.state || loc.stateName || "",
+        country: loc.countryName || "Bangladesh",
+        postalCode: loc.postalCode || "",
       },
     });
   }
@@ -1551,14 +1473,6 @@ export default function EditOrganizationPage() {
       officialPhone: state?.legal?.officialPhone || state?.basic?.supportPhone,
       website: state?.legal?.website,
       facebookPage: state?.legal?.facebookPage,
-      bankAccountName: state?.legal?.bankAccountName || null,
-      bankAccountNumber: state?.legal?.bankAccountNumber || null,
-      bankName: state?.legal?.bankName || null,
-      bankBranchName: state?.legal?.bankBranchName || null,
-      routingNumber: state?.legal?.routingNumber || null,
-      payoutBkash: state?.legal?.payoutBkash || null,
-      payoutNagad: state?.legal?.payoutNagad || null,
-      payoutRocket: state?.legal?.payoutRocket || null,
     });
     await apiPost(`/api/v1/owner/organizations/${id}/legal-profile/save-directors`, {
       directors: state?.directors || [],

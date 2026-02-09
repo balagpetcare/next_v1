@@ -41,6 +41,8 @@ export type LocationValue = {
   provider?: string | null;
   providerPlaceId?: string | null;
   addressLine?: string | null;
+  /** Organization type code when present (e.g. from org context) */
+  orgTypeCode?: string | null;
 };
 
 type MaybeNumber = string | number | null | undefined;
@@ -190,6 +192,7 @@ export function withLegacyLocationFields(
   return {
     ...prev,
     ...base,
+    orgTypeCode: (prev as { orgTypeCode?: string | null } | undefined)?.orgTypeCode ?? undefined,
     admin1: base.state ?? prev?.admin1 ?? null,
     stateName: base.state ?? prev?.stateName ?? null,
     cityName: base.city ?? prev?.cityName ?? null,
@@ -276,18 +279,15 @@ export function locationValueToPlaceInput(
   const enriched = withLegacyLocationFields(normalized, value);
   const place: any = { countryCode: normalized.countryCode };
 
-  if (normalized.countryCode === "BD") {
-    if (enriched.divisionId) place.bdDivision = String(enriched.divisionId);
-    if (enriched.districtId) place.bdDistrict = String(enriched.districtId);
-    if (enriched.upazilaId) place.bdUpazila = String(enriched.upazilaId);
-    if (enriched.bdAreaId) place.bdWard = String(enriched.bdAreaId);
-    place.admin1 = place.bdDivision;
-    place.city = place.bdDistrict || place.bdUpazila;
-  } else {
-    if (normalized.state) place.admin1 = normalized.state;
-    if (normalized.city) place.city = normalized.city;
-    if (normalized.postalCode) place.postalCode = normalized.postalCode;
-  }
+  // Unified: prefer state/city for all countries (no DB hierarchy)
+  if (normalized.state) place.admin1 = normalized.state;
+  if (normalized.city) place.city = normalized.city;
+  if (normalized.postalCode) place.postalCode = normalized.postalCode;
+  // Legacy BD mapping (when divisionId etc provided)
+  if (normalized.countryCode === "BD" && enriched.divisionId) place.bdDivision = String(enriched.divisionId);
+  if (normalized.countryCode === "BD" && enriched.districtId) place.bdDistrict = String(enriched.districtId);
+  if (normalized.countryCode === "BD" && enriched.upazilaId) place.bdUpazila = String(enriched.upazilaId);
+  if (normalized.countryCode === "BD" && enriched.bdAreaId) place.bdWard = String(enriched.bdAreaId);
 
   const formatted = enriched.formattedAddress ?? enriched.fullPathText ?? enriched.text;
   if (formatted) place.formattedAddress = formatted;

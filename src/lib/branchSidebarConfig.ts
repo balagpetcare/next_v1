@@ -26,6 +26,7 @@ export const BRANCH_SIDEBAR: BranchSidebarGroup[] = [
     group: "Overview",
     items: [
       { key: "overview", label: "Overview", icon: "ri:dashboard-line", href: (id) => `/staff/branch/${id}`, requiredPerm: "dashboard.view" },
+      { key: "workspace", label: "My Workspace", icon: "solar:widget-5-outline", href: () => "/staff/workspace", requiredPerm: "tasks.view" },
       { key: "tasks", label: "Tasks", icon: "ri:task-line", href: (id) => `/staff/branch/${id}/tasks`, requiredPerm: "tasks.view" },
       { key: "approvals", label: "Approvals", icon: "ri:checkbox-multiple-line", href: (id) => `/staff/branch/${id}/approvals`, requiredPerm: "approvals.view", badgeKey: "approvals" },
     ],

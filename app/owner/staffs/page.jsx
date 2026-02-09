@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo } from "react";
+import { Suspense, useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import { useEntityList } from "@/app/owner/_hooks/useEntityList";
 import { useEntityFilters } from "@/app/owner/_hooks/useEntityFilters";
@@ -46,7 +46,7 @@ function getRoleBadgeColor(role) {
   return "secondary";
 }
 
-export default function OwnerStaffsPage() {
+function OwnerStaffsContent() {
   const config = getEntityConfig("staff");
   const { filters, updateFilter } = useEntityFilters(config);
   const { data, loading, error, stats, refresh } = useEntityList(config, filters);
@@ -117,13 +117,14 @@ export default function OwnerStaffsPage() {
     return result;
   }, [data, filters, q]);
 
-  const handleDisable = async (id) => {
-    if (!confirm("Disable this staff?")) return;
+  const handleToggleStaffStatus = async (id, currentStatus) => {
+    const isEnabling = currentStatus === "DISABLED";
+    if (!confirm(isEnabling ? "Enable this staff?" : "Disable this staff?")) return;
     try {
-      await ownerPatch(`/api/v1/owner/staffs/${id}/disable`, {});
+      await ownerPatch(`/api/v1/owner/staffs/${id}/${isEnabling ? "enable" : "disable"}`, {});
       await refresh();
     } catch (e) {
-      alert(e?.message || "Disable failed");
+      alert(e?.response?.error || e?.message || (isEnabling ? "Enable failed" : "Disable failed"));
     }
   };
 
@@ -460,7 +461,7 @@ export default function OwnerStaffsPage() {
                                 label: item?.status === "ACTIVE" ? "Suspend" : "Activate",
                                 onClick: (e) => {
                                   e.stopPropagation();
-                                  handleDisable(item.id);
+                                  handleToggleStaffStatus(item.id, item?.status);
                                 },
                                 icon: item?.status === "ACTIVE" ? "solar:pause-circle-outline" : "solar:play-circle-outline",
                                 variant: item?.status === "ACTIVE" ? "warning" : "success",
@@ -498,5 +499,13 @@ export default function OwnerStaffsPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function OwnerStaffsPage() {
+  return (
+    <Suspense fallback={<div className="container py-4 text-secondary">Loading…</div>}>
+      <OwnerStaffsContent />
+    </Suspense>
   );
 }

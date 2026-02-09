@@ -1,12 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { detectAuthType } from "@/src/utils/authHelpers";
 import AuthFooter from "@/src/bpa/components/AuthFooter";
+import { isAllowedReturnTo } from "@/lib/authRedirect";
 
+// Use relative /api so request goes to same origin (e.g. 3104); Next.js rewrites to API and cookies work
 function apiBase() {
+  if (typeof window !== "undefined") return "";
   return process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
 }
 
@@ -22,7 +25,7 @@ async function apiPost(path, body) {
   return json;
 }
 
-export default function LoginPage() {
+function LoginPageContent() {
   const sp = useSearchParams();
   const router = useRouter();
   const invited = sp.get("invited") === "1";
@@ -61,11 +64,34 @@ export default function LoginPage() {
 
       const response = await apiPost("/api/v1/auth/login", payload);
 
-      // Handle redirect based on user role if provided
-      if (response?.user?.redirectPath) {
-        router.push(response.user.redirectPath);
+      const origin = typeof window !== "undefined" ? window.location.origin : "";
+
+      // Backend-driven redirect: use default_redirect or redirectPath (legacy). Only honor returnTo/next when explicitly allowed.
+      let targetPath = null;
+      const returnTo = sp.get("returnTo");
+      const nextPath = sp.get("next");
+      const targetUrl = returnTo
+        ? returnTo
+        : nextPath
+        ? (nextPath.startsWith("/") ? origin + nextPath : origin + "/" + nextPath)
+        : null;
+      const allowedTarget = targetUrl && isAllowedReturnTo(targetUrl, origin) ? targetUrl : null;
+
+      if (allowedTarget) {
+        targetPath = allowedTarget.startsWith("/") ? allowedTarget : new URL(allowedTarget).pathname;
       } else {
-        router.push("/");
+        // Backend is source of truth – use default_redirect or legacy redirectPath
+        const backendRedirect = response?.default_redirect ?? response?.user?.redirectPath;
+        if (backendRedirect && (backendRedirect.startsWith("/") || isAllowedReturnTo(backendRedirect, origin))) {
+          targetPath = backendRedirect.startsWith("/") ? backendRedirect : new URL(backendRedirect).pathname;
+        }
+      }
+      if (!targetPath) targetPath = "/";
+
+      if (targetPath.startsWith("http")) {
+        window.location.href = targetPath;
+      } else {
+        router.push(targetPath);
       }
     } catch (e2) {
       setErr(e2?.message || "Login failed");
@@ -188,5 +214,13 @@ export default function LoginPage() {
         </div>
       </div>
     </section>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="min-vh-100 d-flex align-items-center justify-content-center text-secondary">Loading…</div>}>
+      <LoginPageContent />
+    </Suspense>
   );
 }

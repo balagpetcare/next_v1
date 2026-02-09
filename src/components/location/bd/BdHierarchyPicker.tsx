@@ -34,6 +34,7 @@ export type BdHierarchyPickerProps = {
 };
 
 /**
+ * @deprecated Use LocationField -> LocationPickerUnified. No longer loads from DB.
  * Bangladesh hierarchy picker: Division → District → Upazila → Area/Ward
  * SOURCE: org location flow from components/LocationPicker.jsx
  */

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { detectAuthType, validateRegistration } from "@/src/utils/authHelpers";
@@ -522,7 +522,7 @@ function UserRegistration({ onSuccess }) {
 }
 
 // Main Registration Page with Authentication Check
-export default function RegisterPage() {
+function RegisterPageContent() {
   const router = useRouter();
   const sp = useSearchParams();
   const token = sp.get("invite") || sp.get("token") || "";
@@ -669,4 +669,12 @@ export default function RegisterPage() {
 
   // Otherwise, show direct user registration
   return <UserRegistration onSuccess={handleSuccess} />;
+}
+
+export default function RegisterPage() {
+  return (
+    <Suspense fallback={<div className="min-vh-100 d-flex align-items-center justify-content-center text-secondary">Loading…</div>}>
+      <RegisterPageContent />
+    </Suspense>
+  );
 }

@@ -7,8 +7,18 @@ export const ADMIN1_COUNTRY_CODES = ["BD", "IN", "US", "CA", "GB", "AU", "DE", "
 
 export type Admin1CountryCode = (typeof ADMIN1_COUNTRY_CODES)[number];
 
-/** States/provinces/divisions by country code. BD uses API divisions; this is fallback / non-BD. */
+/** States/provinces/divisions by country code. All countries use static data; no DB dependency. */
 export const ADMIN1_BY_COUNTRY: Record<string, { code: string; name: string }[]> = {
+  BD: [
+    { code: "BAR", name: "Barishal" },
+    { code: "CHI", name: "Chattogram" },
+    { code: "DHA", name: "Dhaka" },
+    { code: "KHU", name: "Khulna" },
+    { code: "MYM", name: "Mymensingh" },
+    { code: "RAJ", name: "Rajshahi" },
+    { code: "RAN", name: "Rangpur" },
+    { code: "SYL", name: "Sylhet" },
+  ],
   IN: [
     { code: "AN", name: "Andaman and Nicobar Islands" },
     { code: "AP", name: "Andhra Pradesh" },

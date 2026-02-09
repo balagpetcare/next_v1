@@ -23,11 +23,13 @@ export default function NewTransferPage() {
     try {
       setLoading(true);
       const [locRes, prodRes] = await Promise.all([
-        ownerGet("/api/v1/inventory/locations").catch(() => ({ data: [] })),
-        ownerGet("/api/v1/products?limit=200").catch(() => ({ data: { items: [] } })),
+        ownerGet("/api/v1/inventory/locations").catch(() => ({ data: [] as unknown[] })),
+        ownerGet("/api/v1/products?limit=200").catch(() => ({ data: { items: [] as unknown[] } })),
       ]);
-      setLocations(Array.isArray(locRes?.data) ? locRes.data : locRes?.data?.items ?? []);
-      const prods = prodRes?.data?.items ?? prodRes?.data ?? [];
+      const locData = (locRes as { data?: unknown[] | { items?: unknown[] } })?.data;
+      const prodData = (prodRes as { data?: { items?: unknown[] } | unknown[] })?.data;
+      setLocations(Array.isArray(locData) ? locData : (locData && typeof locData === "object" && "items" in locData ? (locData as { items: unknown[] }).items : []));
+      const prods = prodData && typeof prodData === "object" && "items" in prodData ? (prodData as { items: unknown[] }).items : Array.isArray(prodData) ? prodData : [];
       setProducts(Array.isArray(prods) ? prods : []);
     } catch (e) {
       setError((e as Error).message);
