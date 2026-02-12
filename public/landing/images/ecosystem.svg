@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="340" viewBox="0 0 560 340" fill="none">
+  <rect width="560" height="340" rx="16" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+  <circle cx="280" cy="170" r="60" fill="#0ea5a4" fill-opacity="0.2" stroke="#0ea5a4" stroke-width="2"/>
+  <text x="280" y="175" text-anchor="middle" fill="#0e1b1f" font-family="system-ui,sans-serif" font-size="12" font-weight="600">Ecosystem</text>
+  <circle cx="140" cy="90" r="36" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+  <circle cx="420" cy="90" r="36" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+  <circle cx="120" cy="250" r="36" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+  <circle cx="440" cy="250" r="36" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+  <circle cx="280" cy="280" r="36" fill="#fff" stroke="#e2e8f0" stroke-width="1"/>
+</svg>

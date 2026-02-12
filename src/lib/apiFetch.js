@@ -7,14 +7,26 @@ import { getCountryCode } from "@/lib/countryContext";
 
 const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
 
+function getWorkspaceHeaders() {
+  if (typeof window === "undefined") return {};
+  const headers = {};
+  const orgId = window.localStorage?.getItem("bpa_org_id");
+  const branchId = window.localStorage?.getItem("bpa_branch_id");
+  if (orgId != null && orgId !== "") headers["X-Org-Id"] = orgId;
+  if (branchId != null && branchId !== "") headers["X-Branch-Id"] = branchId;
+  return headers;
+}
+
 export async function apiFetch(path, init = {}) {
   const url = path.startsWith("http") ? path : `${API_BASE}${path}`;
+  const workspaceHeaders = getWorkspaceHeaders();
   const res = await fetch(url, {
     ...init,
     credentials: "include",
     headers: {
       Accept: "application/json",
       "X-Country-Code": getCountryCode(),
+      ...workspaceHeaders,
       ...(init.headers || {}),
     },
     // Prevent Next.js from caching auth-sensitive calls by default

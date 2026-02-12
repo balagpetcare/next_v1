@@ -22,7 +22,8 @@ export default function ProductEditPage() {
         const res = (await apiFetch(`/api/v1/products/${productId}`)) as { success?: boolean; data?: any };
         setProduct(res?.data ?? res);
       } catch (e: any) {
-        setError(e?.message || "Failed to load product");
+        const is403 = e?.status === 403 || e?.data?.code === "ACCESS_DENIED";
+        setError(is403 ? "You don’t have permission to view or edit this product." : (e?.message || "Failed to load product"));
       } finally {
         setLoading(false);
       }
@@ -54,7 +55,9 @@ export default function ProductEditPage() {
       });
       router.push(`/owner/products/${productId}`);
     } catch (e: any) {
-      setError(e?.message || "Failed to update product");
+      const msg = e?.message || "Failed to update product";
+      const is403 = e?.status === 403 || e?.data?.code === "ACCESS_DENIED";
+      setError(is403 ? "You don’t have permission to edit this product. Ask your organization owner for product edit access." : msg);
       throw e;
     }
   };
@@ -84,8 +87,9 @@ export default function ProductEditPage() {
 
   const catId = product.categoryId ?? product.category?.id;
   const cat = product.category;
-  const categoryId = cat?.parentId != null ? String(cat.parentId) : (catId != null ? String(catId) : "");
-  const subCategoryId = cat?.parentId != null && catId != null ? String(catId) : "";
+  // Resolved for Category (parent) and Sub-category dropdowns: if category has parent, show parent in first dropdown and self in second
+  const categoryIdStr = cat?.parentId != null ? String(cat.parentId) : (catId != null ? String(catId) : "");
+  const subCategoryIdStr = cat?.parentId != null && catId != null ? String(catId) : "";
   const brandId = product.brandId ?? product.brand?.id;
 
   return (
@@ -107,8 +111,8 @@ export default function ProductEditPage() {
             initialData={{
               name: product.name,
               slug: product.slug,
-              categoryId: catId != null && !Number.isNaN(Number(catId)) ? Number(catId) : undefined,
-              subCategoryId,
+              categoryId: categoryIdStr !== "" && !Number.isNaN(Number(categoryIdStr)) ? Number(categoryIdStr) : undefined,
+              subCategoryId: subCategoryIdStr,
               brandId: brandId != null && !Number.isNaN(Number(brandId)) ? Number(brandId) : undefined,
               description: product.description ?? "",
               status: product.status ?? "ACTIVE",

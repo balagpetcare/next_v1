@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Icon } from "@iconify/react";
+import { useLanguage } from "@/app/(public)/_lib/LanguageContext";
 import PageHeader from "@/src/bpa/components/PageHeader";
 import { apiGet } from "@/lib/api";
 import StatCard from "@/src/bpa/admin/components/StatCard";
@@ -11,6 +12,7 @@ import TrendChart from "@/src/bpa/admin/components/charts/TrendChart";
 import UsersOwnersBarChart from "@/src/bpa/admin/components/charts/UsersOwnersBarChart";
 
 export default function Page() {
+  const { t } = useLanguage();
   const [summary, setSummary] = useState(null);
   const [queues, setQueues] = useState(null);
   const [analytics, setAnalytics] = useState(null);
@@ -49,11 +51,11 @@ export default function Page() {
       setSla(sl?.data ?? null);
       setTrends(tr?.data ?? null);
     } catch (e) {
-      setError(e?.message ?? "Failed to load dashboard");
+      setError(e?.message ?? t("admin.failedToLoadDashboard"));
     } finally {
       setLoading(false);
     }
-  }, [trendPeriod]);
+  }, [trendPeriod, t]);
 
   useEffect(() => {
     load();
@@ -92,7 +94,7 @@ export default function Page() {
   return (
     <div className="container-fluid">
       <PageHeader
-        title="Admin Dashboard"
+        title={t("admin.dashboardTitle")}
         subtitle="System overview, analytics, and review queues"
         right={
           <div className="d-flex align-items-center gap-2 flex-wrap">
@@ -123,7 +125,7 @@ export default function Page() {
               disabled={loading}
             >
               <Icon icon="solar:refresh-outline" />
-              {loading ? "Refreshing..." : "Refresh"}
+              {loading ? t("common.refreshing") : t("common.refresh")}
             </button>
           </div>
         }

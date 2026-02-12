@@ -14,6 +14,9 @@ interface Order {
   totalAmount: number;
   paymentMethod: string | null;
   paymentStatus: string;
+  orderSource?: string | null;
+  fulfilmentInventoryLocationId?: number | null;
+  fulfilmentInventoryLocation?: { id: number; name: string; code: string | null; type: string; branch: { id: number; name: string } } | null;
   notes: string | null;
   items: Array<{
     id: number;
@@ -246,6 +249,22 @@ export default function OrderDetailsPage() {
               <div className="mb-3">
                 <label className="form-label text-muted small">Branch</label>
                 <div>{order.branch.name}</div>
+              </div>
+
+              <div className="mb-3">
+                <label className="form-label text-muted small">Fulfilment Hub</label>
+                <div>
+                  {order.fulfilmentInventoryLocation ? (
+                    <>
+                      {order.fulfilmentInventoryLocation.name}
+                      {order.fulfilmentInventoryLocation.branch?.name && (
+                        <span className="text-muted small ms-1">({order.fulfilmentInventoryLocation.branch.name})</span>
+                      )}
+                    </>
+                  ) : (
+                    <span className="text-muted">পুরনো অর্ডার — হাব সেট করা নেই</span>
+                  )}
+                </div>
               </div>
 
               <div className="mb-3">

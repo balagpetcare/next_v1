@@ -4,6 +4,7 @@ import React, { useEffect, useMemo, useState, useRef } from "react";
 import { Icon } from "@iconify/react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
+import { useLanguage } from "@/app/(public)/_lib/LanguageContext";
 import { buildMenu, appKeyFromPath } from "../lib/permissionMenu";
 import { isBranchRoute, getBranchIdFromPath, isStaffBranchRoute, getStaffBranchIdFromPath } from "../lib/branchMenu";
 import StaffBranchSidebar from "../components/branch/StaffBranchSidebar";
@@ -23,6 +24,7 @@ function isActive(pathname, href) {
 
 export default function MasterLayout({ children }) {
   const pathname = usePathname();
+  const { t } = useLanguage();
   const [sidebarActive, setSidebarActive] = useState(false);
   const [mobileMenu, setMobileMenu] = useState(false);
 
@@ -32,7 +34,10 @@ export default function MasterLayout({ children }) {
     if (pathname.startsWith("/admin")) return "/admin/logout";
     if (pathname.startsWith("/partner")) return "/partner/logout";
     if (pathname.startsWith("/country")) return "/api/logout";
-    if (pathname.startsWith("/staff")) return "/staff/login";
+    if (pathname.startsWith("/staff")) return "/api/logout";
+    if (pathname.startsWith("/shop")) return "/api/logout";
+    if (pathname.startsWith("/clinic")) return "/api/logout";
+    if (pathname.startsWith("/producer")) return "/api/logout";
     return "/api/logout";
   }, [pathname]);
 
@@ -112,12 +117,12 @@ export default function MasterLayout({ children }) {
     }
     const first = menuItems.find((x) => !!x.href) || null;
     if (first) return first;
-    if (isAdmin) return { id: "admin.home", label: "Dashboard", href: "/admin/dashboard", icon: "solar:home-smile-angle-outline" };
-    if (isOwner) return { id: "owner.home", label: "Dashboard", href: "/owner/dashboard", icon: "solar:home-smile-angle-outline" };
-    if (pathname?.startsWith("/shop")) return { id: "shop.home", label: "Dashboard", href: "/shop", icon: "solar:home-smile-angle-outline" };
-    if (pathname?.startsWith("/clinic")) return { id: "clinic.home", label: "Dashboard", href: "/clinic", icon: "solar:home-smile-angle-outline" };
-    return { id: "home", label: "Home", href: "/", icon: "solar:home-smile-angle-outline" };
-  }, [menuItems, isAdmin, isOwner, pathname, me?.defaultContext?.type]);
+    if (isAdmin) return { id: "admin.home", label: t("common.dashboard"), href: "/admin/dashboard", icon: "solar:home-smile-angle-outline" };
+    if (isOwner) return { id: "owner.home", label: t("common.dashboard"), href: "/owner/dashboard", icon: "solar:home-smile-angle-outline" };
+    if (pathname?.startsWith("/shop")) return { id: "shop.home", label: t("common.dashboard"), href: "/shop", icon: "solar:home-smile-angle-outline" };
+    if (pathname?.startsWith("/clinic")) return { id: "clinic.home", label: t("common.dashboard"), href: "/clinic", icon: "solar:home-smile-angle-outline" };
+    return { id: "home", label: t("common.home"), href: "/", icon: "solar:home-smile-angle-outline" };
+  }, [menuItems, isAdmin, isOwner, pathname, me?.defaultContext?.type, t]);
 
   const menuRest = useMemo(() => menuItems.filter((x) => x.id !== homeItem.id), [menuItems, homeItem.id]);
 
@@ -351,12 +356,17 @@ export default function MasterLayout({ children }) {
 
               {menuRestWithBranchLinks.map((g) => {
                 const hasChildren = Array.isArray(g.children) && g.children.length > 0;
+                const menuLabel = (item) => {
+                  const key = item.labelKey || `menu.${item.id}`;
+                  const out = t(key);
+                  return out !== key ? out : item.label;
+                };
                 if (!hasChildren) {
                   return (
                     <li key={g.id}>
                       <Link href={g.href || "#"} className={isActive(pathname, g.href) ? "active-page" : ""}>
                         <Icon icon={g.icon || "solar:menu-dots-outline"} className="menu-icon" />
-                        <span>{g.label}</span>
+                        <span>{menuLabel(g)}</span>
                       </Link>
                     </li>
                   );
@@ -365,14 +375,14 @@ export default function MasterLayout({ children }) {
                   <li key={g.id} className={isAdmin ? "dropdown sidebar-section" : "dropdown"}>
                     <Link href="#">
                       <Icon icon={g.icon || "solar:menu-dots-outline"} className="menu-icon" />
-                      <span>{g.label}</span>
+                      <span>{menuLabel(g)}</span>
                     </Link>
                     <ul className="sidebar-submenu">
                       {g.children.map((it) => (
                         <li key={it.id}>
                           <Link href={it.href || "#"} className={isActive(pathname, it.href) ? "active-page" : ""}>
                             <Icon icon="radix-icons:dot-filled" className="icon circle-icon w-auto" />
-                            {it.label}
+                            {menuLabel(it)}
                             {it.badge !== undefined && it.badge !== null && it.badge !== "" && (
                               <span className="badge bg-primary-focus text-primary-600 radius-12 ms-2" style={{ fontSize: 10 }}>
                                 {it.badge}
@@ -570,7 +580,7 @@ export default function MasterLayout({ children }) {
           </div>
         </div>
 
-        <div className="dashboard-main-body">{children}</div>
+        <div className={`dashboard-main-body${isOwner ? " owner-panel-ui" : ""}`}>{children}</div>
 
         <footer className="d-footer">
           <div className="row align-items-center justify-content-between">

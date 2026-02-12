@@ -2,7 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useLanguage } from "@/app/(public)/_lib/LanguageContext";
 import { apiFetch } from "@/src/lib/apiFetch";
+import { getOwnerHubs } from "@/app/owner/_lib/ownerApi";
 
 interface Order {
   id: number;
@@ -13,6 +15,9 @@ interface Order {
   totalAmount: number;
   paymentMethod: string | null;
   paymentStatus: string;
+  orderSource?: string | null;
+  fulfilmentInventoryLocationId?: number | null;
+  fulfilmentInventoryLocation?: { id: number; name: string; code: string | null; type: string; branch: { id: number; name: string } } | null;
   items: Array<{
     id: number;
     product: { name: string };
@@ -25,26 +30,35 @@ interface Order {
 }
 
 export default function OwnerOrdersPage() {
+  const { t } = useLanguage();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filterStatus, setFilterStatus] = useState<string>("");
+  const [filterHub, setFilterHub] = useState<string>("");
+  const [hubs, setHubs] = useState<{ id: number; name: string; code: string | null; type: string; branch: { id: number; name: string } }[]>([]);
+
+  useEffect(() => {
+    getOwnerHubs().then(setHubs).catch(() => setHubs([]));
+  }, []);
 
   useEffect(() => {
     loadOrders();
-  }, [filterStatus]);
+  }, [filterStatus, filterHub]);
 
   const loadOrders = async () => {
     try {
       setLoading(true);
-      const url = filterStatus
-        ? `/api/v1/orders?status=${filterStatus}`
-        : "/api/v1/orders";
-      const data = (await apiFetch(url)) as unknown[] | { items?: unknown[] };
-      setOrders((Array.isArray(data) ? data : (data && typeof data === "object" && "items" in data ? (data as { items: unknown[] }).items ?? [] : [])) as Order[]);
+      const params = new URLSearchParams();
+      if (filterStatus) params.set("status", filterStatus);
+      if (filterHub) params.set("fulfilmentInventoryLocationId", filterHub);
+      const url = params.toString() ? `/api/v1/orders?${params.toString()}` : "/api/v1/orders";
+      const res = (await apiFetch(url)) as { data?: Order[]; items?: Order[] } | Order[];
+      const list = Array.isArray(res) ? res : (res?.data ?? (res as { items?: Order[] })?.items ?? []);
+      setOrders((list || []) as Order[]);
       setError(null);
     } catch (e: any) {
-      setError(e?.message || "Failed to load orders");
+      setError(e?.message || t("owner.failedToLoadOrders"));
       console.error("Load orders error:", e);
     } finally {
       setLoading(false);
@@ -62,7 +76,7 @@ export default function OwnerOrdersPage() {
       });
       loadOrders();
     } catch (e: any) {
-      alert(e?.message || "Failed to update order status");
+      alert(e?.message || t("owner.failedToUpdateOrder"));
     }
   };
 
@@ -102,10 +116,23 @@ export default function OwnerOrdersPage() {
             <div className="card-body">
               <div className="d-flex align-items-center justify-content-between mb-3">
                 <div>
-                  <h5 className="mb-1">Orders</h5>
+                  <h5 className="mb-1">{t("owner.orders")}</h5>
                   <small className="text-muted">Manage all orders (online and offline)</small>
                 </div>
-                <div className="d-flex gap-2">
+                <div className="d-flex gap-2 flex-wrap">
+                  <select
+                    className="form-select form-select-sm radius-12"
+                    style={{ width: "200px" }}
+                    value={filterHub}
+                    onChange={(e) => setFilterHub(e.target.value)}
+                  >
+                    <option value="">সব হাব</option>
+                    {hubs.map((h) => (
+                      <option key={h.id} value={String(h.id)}>
+                        {h.name} ({h.branch?.name})
+                      </option>
+                    ))}
+                  </select>
                   <select
                     className="form-select form-select-sm radius-12"
                     style={{ width: "200px" }}
@@ -146,6 +173,7 @@ export default function OwnerOrdersPage() {
                       <tr>
                         <th>Order #</th>
                         <th>Branch</th>
+                        <th>Fulfilment Hub</th>
                         <th>Customer</th>
                         <th>Items</th>
                         <th>Total</th>
@@ -162,6 +190,15 @@ export default function OwnerOrdersPage() {
                             <strong>{order.orderNumber}</strong>
                           </td>
                           <td>{order.branch.name}</td>
+                          <td>
+                            {order.fulfilmentInventoryLocation ? (
+                              <span title={order.fulfilmentInventoryLocation.branch?.name}>
+                                {order.fulfilmentInventoryLocation.name}
+                              </span>
+                            ) : (
+                              <span className="text-muted small">পুরনো অর্ডার</span>
+                            )}
+                          </td>
                           <td>
                             {order.customer ? (
                               order.customer.profile?.displayName || "Customer"

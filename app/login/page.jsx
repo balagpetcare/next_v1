@@ -66,7 +66,8 @@ function LoginPageContent() {
 
       const origin = typeof window !== "undefined" ? window.location.origin : "";
 
-      // Backend-driven redirect: use default_redirect or redirectPath (legacy). Only honor returnTo/next when explicitly allowed.
+      // Post-auth-landing is the ONLY post-login landing for ALL users.
+      // Honor returnTo/next only when explicitly provided and allowed; otherwise always use post-auth-landing.
       let targetPath = null;
       const returnTo = sp.get("returnTo");
       const nextPath = sp.get("next");
@@ -78,15 +79,11 @@ function LoginPageContent() {
       const allowedTarget = targetUrl && isAllowedReturnTo(targetUrl, origin) ? targetUrl : null;
 
       if (allowedTarget) {
-        targetPath = allowedTarget.startsWith("/") ? allowedTarget : new URL(allowedTarget).pathname;
-      } else {
-        // Backend is source of truth – use default_redirect or legacy redirectPath
-        const backendRedirect = response?.default_redirect ?? response?.user?.redirectPath;
-        if (backendRedirect && (backendRedirect.startsWith("/") || isAllowedReturnTo(backendRedirect, origin))) {
-          targetPath = backendRedirect.startsWith("/") ? backendRedirect : new URL(backendRedirect).pathname;
-        }
+        const path = allowedTarget.startsWith("/") ? allowedTarget : new URL(allowedTarget).pathname;
+        // Never land on /mother; route through post-auth-landing
+        targetPath = path === "/mother" || path === "/mother/" ? "/post-auth-landing" : path;
       }
-      if (!targetPath) targetPath = "/";
+      if (!targetPath) targetPath = "/post-auth-landing";
 
       if (targetPath.startsWith("http")) {
         window.location.href = targetPath;

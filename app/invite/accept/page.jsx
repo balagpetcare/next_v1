@@ -49,12 +49,14 @@ function InviteAcceptContent() {
       });
       setOk(true);
 
-      const targetPath =
+      let targetPath =
         res?.default_redirect ||
         res?.defaultContext?.recommendedPath ||
         (res?.data?.inviteType === "TEAM" ? "/owner/workspace" : "/owner/dashboard");
+      targetPath = targetPath || "/post-auth-landing";
+      if (targetPath === "/mother" || targetPath === "/mother/") targetPath = "/post-auth-landing";
       setTimeout(() => {
-        router.replace(targetPath || "/owner/dashboard");
+        router.replace(targetPath);
       }, 1500);
     } catch (e2) {
       setError(e2?.message || "Accept failed. Please try again or contact support.");

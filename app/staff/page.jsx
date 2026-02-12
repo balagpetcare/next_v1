@@ -1,24 +1,25 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { useLanguage } from "@/app/(public)/_lib/LanguageContext";
 import { apiGet } from "@/lib/api";
 import Card from "@/src/bpa/components/ui/Card";
 import PageHeader from "@/src/bpa/components/ui/PageHeader";
 
-const STATUS_CHIPS = [
-  { value: "all", label: "All" },
-  { value: "APPROVED", label: "Approved" },
-  { value: "PENDING", label: "Pending" },
-  { value: "REJECTED", label: "Rejected" },
-  { value: "SUSPENDED", label: "Suspended" },
-];
-
 const POLL_INTERVAL_MS = 10000;
 
 export default function StaffHomePage() {
+  const { t } = useLanguage();
   const router = useRouter();
+  const statusChips = useMemo(() => [
+    { value: "all", label: t("common.all") },
+    { value: "APPROVED", label: t("common.approved") },
+    { value: "PENDING", label: t("common.pending") },
+    { value: "REJECTED", label: t("common.rejected") },
+    { value: "SUSPENDED", label: t("common.suspended") },
+  ], [t]);
   const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -36,14 +37,14 @@ export default function StaffHomePage() {
           return;
         }
       } else {
-        setError("No branches found. Please contact your administrator.");
+        setError(t("common.noBranchesAssigned") + " " + t("common.contactAdmin"));
       }
     } catch (err) {
-      setError(err?.message || "Failed to load branches");
+      setError(err?.message || t("owner.failedToLoadBranches"));
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, t]);
 
   useEffect(() => {
     fetchBranches();
@@ -98,9 +99,9 @@ export default function StaffHomePage() {
       <div className="container py-40">
         <div className="text-center">
           <div className="spinner-border text-primary" role="status">
-            <span className="visually-hidden">Loading...</span>
+            <span className="visually-hidden">{t("common.loading")}</span>
           </div>
-          <p className="mt-16 text-secondary-light">Loading your branches...</p>
+          <p className="mt-16 text-secondary-light">{t("common.loadingBranches")}</p>
         </div>
       </div>
     );
@@ -115,7 +116,7 @@ export default function StaffHomePage() {
           </div>
           <div className="mt-20">
             <button className="btn btn-primary" onClick={() => router.push("/staff/login")}>
-              Back to Login
+              {t("common.backToLogin")}
             </button>
           </div>
         </Card>
@@ -128,12 +129,12 @@ export default function StaffHomePage() {
       <div className="container py-40">
         <Card>
           <div className="text-center">
-            <h5>No Branches Assigned</h5>
+            <h5>{t("common.noBranchesAssigned")}</h5>
             <p className="text-secondary-light">
-              You don&apos;t have access to any branches yet. Please contact your administrator.
+              {t("common.contactAdmin")}
             </p>
             <button className="btn btn-primary mt-20" onClick={() => router.push("/staff/login")}>
-              Back to Login
+              {t("common.backToLogin")}
             </button>
           </div>
         </Card>
@@ -144,13 +145,13 @@ export default function StaffHomePage() {
   return (
     <div className="container py-40">
       <PageHeader
-        title="Select Branch"
-        subtitle="Choose which branch you want to work on"
+        title={t("staff.selectBranch")}
+        subtitle={t("staff.chooseBranch")}
       />
 
       {/* Status filter chips */}
       <div className="d-flex flex-wrap gap-2 mb-24">
-        {STATUS_CHIPS.map((chip) => (
+        {statusChips.map((chip) => (
           <button
             key={chip.value}
             type="button"
@@ -169,7 +170,7 @@ export default function StaffHomePage() {
         <Card className="mb-24 bg-primary-50 border-primary">
           <div className="d-flex align-items-center justify-content-between">
             <div>
-              <h6 className="mb-0">Continue where you left off</h6>
+              <h6 className="mb-0">{t("staff.continueWhereLeftOff")}</h6>
               <p className="mb-0 small text-secondary-light">{approvedBranch.name}</p>
             </div>
             <button
@@ -177,7 +178,7 @@ export default function StaffHomePage() {
               className="btn btn-primary radius-12"
               onClick={() => handleSelectBranch(approvedBranch.id)}
             >
-              Continue
+              {t("common.continue")}
             </button>
           </div>
         </Card>
@@ -206,26 +207,26 @@ export default function StaffHomePage() {
               {branch.accessStatus && (
                 <div className="mb-12">
                   {branch.accessStatus === "APPROVED" && (
-                    <span className="badge bg-success-100 text-success-600 text-xs">Approved</span>
+                    <span className="badge bg-success-100 text-success-600 text-xs">{t("common.approved")}</span>
                   )}
                   {branch.accessStatus === "PENDING" && (
-                    <span className="badge bg-warning-100 text-warning-600 text-xs">Pending</span>
+                    <span className="badge bg-warning-100 text-warning-600 text-xs">{t("common.pending")}</span>
                   )}
                   {branch.accessStatus === "REVOKED" && (
-                    <span className="badge bg-danger-100 text-danger-600 text-xs">Rejected</span>
+                    <span className="badge bg-danger-100 text-danger-600 text-xs">{t("common.rejected")}</span>
                   )}
                   {branch.accessStatus === "EXPIRED" && (
-                    <span className="badge bg-danger-100 text-danger-600 text-xs">Expired</span>
+                    <span className="badge bg-danger-100 text-danger-600 text-xs">{t("common.expired")}</span>
                   )}
                   {branch.accessStatus === "SUSPENDED" && (
-                    <span className="badge bg-secondary text-xs">Suspended</span>
+                    <span className="badge bg-secondary text-xs">{t("common.suspended")}</span>
                   )}
                 </div>
               )}
 
               {branch.membershipType === "IMPLICIT" && (
                 <div className="mb-12">
-                  <span className="badge bg-success-100 text-success-600 text-xs">Owner Access</span>
+                  <span className="badge bg-success-100 text-success-600 text-xs">{t("common.ownerAccess")}</span>
                 </div>
               )}
 
@@ -243,12 +244,12 @@ export default function StaffHomePage() {
                 disabled={branch.accessStatus === "REVOKED"}
               >
                 {branch.accessStatus === "APPROVED" || !branch.accessStatus
-                  ? "Enter branch"
+                  ? t("staff.enterBranch")
                   : branch.accessStatus === "PENDING"
-                  ? "View request"
+                  ? t("staff.viewRequest")
                   : branch.accessStatus === "EXPIRED"
-                  ? "Access expired"
-                  : "Access revoked"}
+                  ? t("staff.accessExpired")
+                  : t("staff.accessRevoked")}
               </button>
             </Card>
           </div>
@@ -259,10 +260,10 @@ export default function StaffHomePage() {
       <div className="mt-32 pt-24 border-top">
         <div className="d-flex flex-wrap gap-3">
           <Link href="/staff" className="btn btn-link btn-sm p-0">
-            My profile
+            {t("common.myProfile")}
           </Link>
           <Link href="/staff" className="btn btn-link btn-sm p-0">
-            Staff Home
+            {t("staff.staffHome")}
           </Link>
         </div>
       </div>

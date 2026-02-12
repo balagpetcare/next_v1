@@ -2,9 +2,11 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useLanguage } from "@/app/(public)/_lib/LanguageContext";
 import { apiGet } from "@/lib/api";
 
 export default function ProducerDashboardPage() {
+  const { t } = useLanguage();
   const [stats, setStats] = useState({ products: 0, batches: 0, codes: 0 });
   const [loading, setLoading] = useState(true);
   const [kyc, setKyc] = useState(null);
@@ -17,28 +19,16 @@ export default function ProducerDashboardPage() {
 
   const getGateMeta = (status) => {
     if (!status) {
-      return {
-        tone: "warning",
-        message: "আপনার Producer KYC এখনো সাবমিট করা হয়নি। KYC সাবমিট না করলে প্রোডাক্ট/ব্যাচ ম্যানেজ করতে পারবেন না।",
-      };
+      return { tone: "warning", message: t("producer.kycNotSubmitted") };
     }
     if (status === "PENDING") {
-      return {
-        tone: "warning",
-        message: "আপনার KYC রিভিউ চলছে। যাচাই শেষ না হওয়া পর্যন্ত প্রোডাক্ট/ব্যাচ ফিচার বন্ধ থাকবে।",
-      };
+      return { tone: "warning", message: t("producer.kycPending") };
     }
     if (status === "REJECTED") {
-      return {
-        tone: "danger",
-        message: "আপনার KYC রিজেক্ট হয়েছে। প্রয়োজনীয় সংশোধন দিয়ে আবার সাবমিট করুন।",
-      };
+      return { tone: "danger", message: t("producer.kycRejected") };
     }
     if (status === "SUSPENDED") {
-      return {
-        tone: "danger",
-        message: "আপনার Producer Org সাসপেন্ড করা হয়েছে। সাপোর্ট টিমের সাথে যোগাযোগ করুন।",
-      };
+      return { tone: "danger", message: t("producer.kycSuspended") };
     }
     return null;
   };
@@ -73,7 +63,7 @@ export default function ProducerDashboardPage() {
       } catch (_) {
         if (!cancelled) {
           setStats({ products: 0, batches: 0, codes: 0 });
-          setError("ড্যাশবোর্ড ডেটা লোড করা যাচ্ছে না।");
+          setError(t("common.failedToLoad"));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -87,7 +77,7 @@ export default function ProducerDashboardPage() {
 
   return (
     <div className="p-4">
-      <h2 className="h4 mb-3">Producer Dashboard</h2>
+      <h2 className="h4 mb-3">{t("producer.dashboardTitle")}</h2>
       {error ? <div className="alert alert-danger">{error}</div> : null}
       {gateMessage ? (
         <div className={`alert alert-${getGateMeta(kyc?.status)?.tone || "warning"} d-flex flex-wrap gap-3 align-items-center justify-content-between`}>

@@ -1,15 +1,22 @@
+import { cookies } from "next/headers";
 import "./globals.css";
 import "./font.css";
 import PluginInit from "@/src/helper/PluginInit";
+import { I18nWrapper } from "@/app/(public)/_lib/I18nWrapper";
 
 export const metadata = {
   title: "BPA Web Panels (Wowdash)",
   description: "BPA multi-panel web using Wowdash Tailwind admin template",
 };
 
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  const cookieStore = await cookies();
+  const localeValue =
+    cookieStore.get("app_locale")?.value || cookieStore.get("landing_locale")?.value || "en";
+  const lang = localeValue === "bn" ? "bn" : "en";
+
   return (
-    <html lang="en">
+    <html lang={lang}>
       <head>
         {/* Vendor / template styles served from /public/assets */}
         <link rel="stylesheet" href="/assets/css/remixicon.css" />
@@ -30,9 +37,12 @@ export default function RootLayout({ children }) {
         <link rel="stylesheet" href="/assets/css/lib/animate.min.css" />
         <link rel="stylesheet" href="/assets/css/style.css" />
         <link rel="stylesheet" href="/assets/css/extra.css" />
+        <link rel="stylesheet" href="/assets/css/owner-panel.css" />
       </head>
       <body>
-        {children}
+        <I18nWrapper initialLocale={lang}>
+          {children}
+        </I18nWrapper>
         <PluginInit />
       </body>
     </html>

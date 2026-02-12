@@ -19,7 +19,7 @@ export default function MotherLoginPage() {
     <AuthRedirectPage
       panelName="mother"
       action="login"
-      defaultLandingPath="/mother"
+      defaultLandingPath="/post-auth-landing"
     />
   );
 }

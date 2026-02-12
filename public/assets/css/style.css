@@ -6660,32 +6660,32 @@ h6 {
 
 h1,
 .h1 {
-  font-size: var(--h1) !important;
+  font-size: var(--h1) ;
 }
 
 h2,
 .h2 {
-  font-size: var(--h2) !important;
+  font-size: var(--h2) ;
 }
 
 h3,
 .h3 {
-  font-size: var(--h3) !important;
+  font-size: var(--h3) ;
 }
 
 h4,
 .h4 {
-  font-size: var(--h4) !important;
+  font-size: var(--h4) ;
 }
 
 h5,
 .h5 {
-  font-size: var(--h5) !important;
+  font-size: var(--h5) ;
 }
 
 h6,
 .h6 {
-  font-size: var(--h6) !important;
+  font-size: var(--h6) ;
 }
 
 .text-2xxl {

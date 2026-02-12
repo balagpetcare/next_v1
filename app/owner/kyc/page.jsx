@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { Suspense, useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { apiGet, apiPut, apiPost } from "../../../lib/api";
 
 import ImageUploadWithCrop from "@/src/components/common/ImageUploadWithCrop";
@@ -277,7 +277,11 @@ function Steps({ step, setStep, step2Enabled, step3Enabled }) {
   );
 }
 
-export default function OwnerKycPage() {
+function OwnerKycContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const redirectReason = searchParams?.get("reason") ?? "";
+
   const [loading, setLoading] = useState(false);
   const [kyc, setKyc] = useState(null);
   const [msg, setMsg] = useState("");
@@ -300,7 +304,6 @@ export default function OwnerKycPage() {
     longitude: "",
   });
   const hasRedirectedApproved = useRef(false);
-  const router = useRouter();
   const [declarations, setDeclarations] = useState({
     termsAccepted: false,
     dataProcessingConsent: false,
@@ -520,6 +523,11 @@ export default function OwnerKycPage() {
 
   return (
     <div className="container-fluid">
+      {redirectReason === "kyc_required" && (
+        <div className="alert alert-info border-0 radius-12 mb-16" role="status">
+          Complete KYC to continue setting up your organization and first branch.
+        </div>
+      )}
       <div className="d-flex align-items-start justify-content-between flex-wrap gap-12 mb-16">
         <div>
           <h4 className="mb-6">Owner KYC</h4>
@@ -1016,5 +1024,19 @@ export default function OwnerKycPage() {
         </div>
       ) : null}
     </div>
+  );
+}
+
+export default function OwnerKycPage() {
+  return (
+    <Suspense fallback={
+      <div className="container-fluid">
+        <div className="d-flex align-items-center justify-content-center py-5">
+          <span className="spinner-border text-primary" role="status" />
+        </div>
+      </div>
+    }>
+      <OwnerKycContent />
+    </Suspense>
   );
 }

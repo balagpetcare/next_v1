@@ -3,7 +3,19 @@
   NOTE: This project previously used `@import url("/assets/...css")` inside CSS.
   Next.js (App Router) treats CSS `@import` as a build-time module import, not a runtime URL.
   So we load vendor styles via <link> tags in app/layout.jsx and keep this file minimal.
+  Tailwind: base/components/utilities injected below; preflight disabled in tailwind.config.js
+  so existing Bootstrap and custom styles are not overridden.
 */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Tailwind confirmation: use .text-primary for #0EA5A4 (e.g. <span className="text-primary">) */
+@layer components {
+  .tw-primary-text {
+    @apply text-primary;
+  }
+}
 
 :root {
   color-scheme: light;
@@ -58,6 +70,26 @@ a {
   }
   to {
     transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes gettingStartedFadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 0.9;
+  }
+}
+
+@keyframes gettingStartedSlideUp {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
     opacity: 1;
   }
 }

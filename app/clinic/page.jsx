@@ -1,8 +1,13 @@
+"use client";
+
+import { useLanguage } from "@/app/(public)/_lib/LanguageContext";
+
 export default function Page() {
+  const { t } = useLanguage();
   return (
     <div>
-      <h2>communitypetclinic.com — Home</h2>
-      <p>Clinic skeleton: clinics, services, bookings (later).</p>
+      <h2>{t("clinic.homeTitle")}</h2>
+      <p>{t("clinic.homeSubtitle")}</p>
 
       <ul>
         <li><a href="/health">Health check page</a></li>

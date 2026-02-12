@@ -112,6 +112,9 @@ export default function OwnerLayout({ children }) {
         if (cancelled) return;
         if (isApproved(normalized)) return;
         if (shouldForceKycPage(normalized)) {
+          if (typeof process !== "undefined" && process.env?.NODE_ENV === "development" && typeof sessionStorage !== "undefined") {
+            sessionStorage.setItem("owner_redirect_reason", "kyc_required");
+          }
           router.replace("/owner/kyc");
         }
       } catch {

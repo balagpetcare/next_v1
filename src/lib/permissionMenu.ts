@@ -5,6 +5,8 @@ export type AppKey = "owner" | "admin" | "shop" | "clinic" | "mother" | "produce
 export type MenuItem = {
   id: string;
   label: string;
+  /** Optional i18n key (e.g. "menu.owner.dashboard"). If missing, layout falls back to label. */
+  labelKey?: string;
   href?: string;
   icon?: string; // Iconify icon name (used by MasterLayout)
   required?: string[]; // permission keys

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="560" height="340" viewBox="0 0 560 340" fill="none">
+  <rect width="560" height="340" rx="16" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1"/>
+  <rect x="24" y="24" width="512" height="80" rx="8" fill="#0ea5a4" fill-opacity="0.15"/>
+  <text x="280" y="72" text-anchor="middle" fill="#0e1b1f" font-family="system-ui,sans-serif" font-size="14" font-weight="600">Dashboard</text>
+  <rect x="24" y="120" width="240" height="120" rx="8" fill="#e2e8f0" fill-opacity="0.5"/>
+  <rect x="280" y="120" width="256" height="120" rx="8" fill="#e2e8f0" fill-opacity="0.5"/>
+  <text x="152" y="180" text-anchor="middle" fill="#94a3b8" font-family="system-ui,sans-serif" font-size="12">Chart</text>
+  <text x="408" y="180" text-anchor="middle" fill="#94a3b8" font-family="system-ui,sans-serif" font-size="12">Chart</text>
+</svg>

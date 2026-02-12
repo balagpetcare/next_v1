@@ -213,6 +213,33 @@ export function getAuthRedirectUrl(
   return buildAuthUrl(action, panelName, returnTo);
 }
 
+/**
+ * Get panel login path for redirect after logout.
+ * Use when you need to redirect to the correct login page for a panel.
+ */
+export function getLoginPathForPanel(panelName: string): string {
+  const config = PANEL_CONFIG[panelName];
+  if (config) return `${config.basePath}/login`;
+  return "/login";
+}
+
+/**
+ * Get panel logout path. Panels with dedicated logout use /{panel}/logout.
+ */
+export function getLogoutPathForPanel(panelName: string): string {
+  const panelsWithLogout = ["owner", "admin", "partner"];
+  if (panelsWithLogout.includes(panelName)) {
+    return `/${panelName}/logout`;
+  }
+  return "/api/logout";
+}
+
+/** Post-auth landing route: centralized routing after login (replaces hardcoded /mother) */
+export const POST_AUTH_LANDING_PATH = "/post-auth-landing";
+
+/** Choose-activity route: shown when user has not selected a panel (e.g. new customer) */
+export const CHOOSE_ACTIVITY_PATH = "/choose-activity";
+
 /** Panels object from GET /api/v1/auth/me (panels: { admin?, owner?, staff?, country?, partner? }) */
 export type PanelsFromMe = {
   admin?: boolean;

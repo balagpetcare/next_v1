@@ -3,6 +3,7 @@
 import Link from "next/link";
 import StatusBadge from "@/app/owner/_components/StatusBadge";
 import ActionDropdown from "./ActionDropdown";
+import { useLanguage } from "@/app/(public)/_lib/LanguageContext";
 
 /**
  * Reusable table component for entity lists
@@ -18,11 +19,13 @@ export default function EntityTable({
   renderCustomActions,
   actionItems, // Array of action items for dropdown
 }) {
+  const { t } = useLanguage();
+
   if (!config?.columns || config.columns.length === 0) {
     return (
       <div className="card radius-12">
         <div className="card-body">
-          <div className="text-muted">No columns configured</div>
+          <div className="text-muted">{t("common.noColumnsConfigured")}</div>
         </div>
       </div>
     );
@@ -94,7 +97,7 @@ export default function EntityTable({
 
     const defaultActions = [
       {
-        label: "View",
+        label: t("common.view"),
         href: getDetailHref(item),
         icon: "solar:eye-outline",
       },
@@ -102,7 +105,7 @@ export default function EntityTable({
 
     if (config.editPath) {
       defaultActions.push({
-        label: "Edit",
+        label: t("common.edit"),
         href:
           typeof config.editPath === "function"
             ? config.editPath(item.id)

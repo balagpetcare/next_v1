@@ -3,6 +3,9 @@ import { NextRequest, NextResponse } from "next/server";
 // Next.js 16+: `middleware.(ts|js)` is deprecated and renamed to `proxy.(ts|js)`.
 // This proxy enforces "no dashboard access while logged out" without changing any ports/routes.
 //
+// Public allowlist: "/", "/getting-started", and auth entry points (e.g. /owner/login, /owner/register)
+// must never require session — they are checked first so guests can access landing and getting-started.
+//
 // Auth signal:
 // - We treat these cookies as auth tokens (matches BPA API middleware expectations): access_token | token | jwt
 // - We also allow an Authorization: Bearer header (useful for some dev tools)
@@ -39,9 +42,10 @@ export function proxy(req: NextRequest) {
     return NextResponse.next();
   }
 
-  // Public routes (must stay accessible)
+  // Public routes (must stay accessible — no auth/KYC). "/" and "/getting-started" are guest landing pages.
   const PUBLIC_PATHS = new Set([
     "/",
+    "/getting-started",
     "/login",
     "/register",
     "/invite/accept",
@@ -50,6 +54,8 @@ export function proxy(req: NextRequest) {
 
     "/owner/login",
     "/owner/logout",
+    "/owner/register",
+    "/owner/regester",
 
     "/admin/login",
     "/admin/logout",
@@ -58,6 +64,8 @@ export function proxy(req: NextRequest) {
   ]);
 
   if (PUBLIC_PATHS.has(pathname)) return NextResponse.next();
+  // Owner auth entry points with any subpath (e.g. /owner/login?next=...)
+  if (pathname.startsWith("/owner/login") || pathname.startsWith("/owner/register") || pathname.startsWith("/owner/logout") || pathname.startsWith("/owner/regester")) return NextResponse.next();
 
   // Guard app areas
   const isOwner = pathname.startsWith("/owner");

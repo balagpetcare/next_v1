@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
+import { useLanguage } from "@/app/(public)/_lib/LanguageContext";
 import { ownerGet } from "@/app/owner/_lib/ownerApi";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 import StatusBadge from "@/app/owner/_components/StatusBadge";
@@ -16,6 +17,7 @@ function pickArray(resp) {
 }
 
 export default function BranchesPage() {
+  const { t } = useLanguage();
   const [branches, setBranches] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -31,7 +33,7 @@ export default function BranchesPage() {
         const items = pickArray(data);
         setBranches(items);
       } catch (e) {
-        setError(e?.message || "Failed to load branches");
+        setError(e?.message || t("owner.failedToLoadBranches"));
       } finally {
         setLoading(false);
       }
@@ -75,8 +77,8 @@ export default function BranchesPage() {
   return (
     <div className="dashboard-main-body">
       <PageHeader
-        title="Branches"
-        subtitle="Manage all your branches"
+        title={t("owner.branches")}
+        subtitle={t("owner.manageBranchesSubtitle")}
         breadcrumbs={[
           { label: "Home", href: "/owner" },
           { label: "Branches", href: "/owner/branches" },

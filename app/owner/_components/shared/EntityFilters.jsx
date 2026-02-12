@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import { useLanguage } from "@/app/(public)/_lib/LanguageContext";
 
 /**
  * Reusable filter component for entity lists
@@ -16,6 +17,7 @@ export default function EntityFilters({
   onSearchChange,
   className = "",
 }) {
+  const { t } = useLanguage();
   const searchParams = useSearchParams();
   const [showAdvanced, setShowAdvanced] = useState(false);
 
@@ -56,12 +58,12 @@ export default function EntityFilters({
         <div className="row g-2 align-items-end">
           {/* Search */}
           <div className="col-12 col-md-5">
-            <label className="form-label mb-1">Search</label>
+            <label className="form-label mb-1">{t("common.search")}</label>
             <div className="input-group">
               <input
                 type="text"
                 className="form-control radius-12"
-                placeholder="Search by name, email, phone, ID..."
+                placeholder={t("common.searchPlaceholder")}
                 value={searchQuery}
                 onChange={(e) => onSearchChange && onSearchChange(e.target.value)}
               />
@@ -74,7 +76,7 @@ export default function EntityFilters({
           {/* Status Filter */}
           {config?.filters?.includes("status") && (
             <div className="col-12 col-md-3">
-              <label className="form-label mb-1">Status</label>
+              <label className="form-label mb-1">{t("common.status")}</label>
               <select
                 className="form-select radius-12"
                 value={filters.status || "ALL"}
@@ -92,7 +94,7 @@ export default function EntityFilters({
           {/* Verification Status Filter */}
           {config?.filters?.includes("verificationStatus") && (
             <div className="col-12 col-md-3">
-              <label className="form-label mb-1">Verification</label>
+              <label className="form-label mb-1">{t("common.verification")}</label>
               <select
                 className="form-select radius-12"
                 value={filters.verificationStatus || "ALL"}
@@ -138,7 +140,7 @@ export default function EntityFilters({
                         handleFilterChange(filter.key, e.target.value)
                       }
                     >
-                      <option value="">All</option>
+                      <option value="">{t("common.all")}</option>
                       {filter.options?.map((opt) => (
                         <option key={opt.value} value={opt.value}>
                           {opt.label}

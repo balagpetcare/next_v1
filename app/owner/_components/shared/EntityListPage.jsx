@@ -6,6 +6,7 @@ import PageHeader from "@/src/bpa/components/ui/PageHeader";
 import EntityFilters from "./EntityFilters";
 import EntityTable from "./EntityTable";
 import EntityStats from "./EntityStats";
+import { useLanguage } from "@/app/(public)/_lib/LanguageContext";
 
 /**
  * Base list page component for entities
@@ -21,7 +22,7 @@ export default function EntityListPage({
   error = null,
   stats = null,
   onCreateHref,
-  onCreateLabel = "Create New",
+  onCreateLabel,
   onRefresh,
   filters = {},
   onFilterChange,
@@ -32,7 +33,9 @@ export default function EntityListPage({
   tableProps = {},
   children, // Custom content before table
 }) {
+  const { t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
+  const createLabel = onCreateLabel ?? t("common.createNew");
 
   const filteredData = useMemo(() => {
     let result = data;
@@ -95,7 +98,7 @@ export default function EntityListPage({
             {renderCustomActions && renderCustomActions()}
             {onCreateHref && (
               <Link href={onCreateHref} className="btn btn-primary radius-12">
-                + {onCreateLabel}
+                + {createLabel}
               </Link>
             )}
             {onRefresh && (
@@ -105,7 +108,7 @@ export default function EntityListPage({
                 disabled={loading}
               >
                 <i className="ri-refresh-line me-1" />
-                Refresh
+                {t("common.refresh")}
               </button>
             )}
           </div>
@@ -142,9 +145,9 @@ export default function EntityListPage({
         <div className="card radius-12">
           <div className="card-body text-center py-5">
             <div className="spinner-border text-primary" role="status">
-              <span className="visually-hidden">Loading...</span>
+              <span className="visually-hidden">{t("common.loading")}</span>
             </div>
-            <div className="mt-2 text-muted">Loading...</div>
+            <div className="mt-2 text-muted">{t("common.loading")}</div>
           </div>
         </div>
       ) : filteredData.length === 0 ? (
@@ -152,8 +155,8 @@ export default function EntityListPage({
           <div className="card-body text-center py-5">
             <div className="text-muted">
               {searchQuery
-                ? "No results found for your search."
-                : `No ${config?.plural || entityType} found.`}
+                ? t("common.noResultsForQuery", { query: searchQuery })
+                : t("common.noItemsFoundWithEntity", { entity: config?.plural || entityType })}
             </div>
             {onCreateHref && !searchQuery && (
               <Link

@@ -33,7 +33,7 @@ NEXT_PUBLIC_AUTH_BASE_URL=http://localhost:3000
 
 | Panel    | Port | Login URL                          | Register URL                          | Default Return Path |
 |----------|------|-------------------------------------|---------------------------------------|---------------------|
-| Mother   | 3100 | http://localhost:3100/mother/login  | http://localhost:3100/mother/register | /mother             |
+| Mother   | 3100 | http://localhost:3100/mother/login  | http://localhost:3100/mother/register | /post-auth-landing  |
 | Shop     | 3101 | http://localhost:3101/shop/login    | http://localhost:3101/shop/register   | /shop               |
 | Clinic   | 3102 | http://localhost:3102/clinic/login  | http://localhost:3102/clinic/register | /clinic             |
 | Admin    | 3103 | http://localhost:3103/admin/login   | http://localhost:3103/admin/register  | /admin              |
@@ -41,6 +41,10 @@ NEXT_PUBLIC_AUTH_BASE_URL=http://localhost:3000
 | Producer | 3105 | http://localhost:3105/producer/login| http://localhost:3105/producer/register| /producer          |
 | Country  | 3106 | http://localhost:3106/country/login | http://localhost:3106/country/register | /country           |
 | Staff    | 3100 | http://localhost:3100/staff/login   | http://localhost:3100/staff/register  | /staff/branches     |
+
+## /auth/login Fallback
+
+The route `/auth/login` exists to avoid 404s when legacy links or `api/logout` redirect to it. It redirects to the appropriate panel login based on `?app=` query param, or to `/login` when no app is specified.
 
 ## Generated Files
 

@@ -647,7 +647,7 @@ function RegisterPageContent() {
 
             <div className="d-flex flex-column gap-12">
               <Link
-                href="/"
+                href="/post-auth-landing"
                 className="btn btn-primary-600 text-sm btn-sm px-12 py-16 w-100 radius-12"
               >
                 Go to Dashboard

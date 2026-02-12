@@ -30,9 +30,32 @@ export async function POST() {
   return res;
 }
 
+/**
+ * Derive panel login path from Referer (e.g. /owner/dashboard -> /owner/login).
+ * Falls back to /login when Referer is missing or unrecognized.
+ */
+function getLoginPathFromReferer(referer) {
+  if (!referer || typeof referer !== "string") return "/login";
+  try {
+    const path = new URL(referer).pathname || "";
+    if (path.startsWith("/owner")) return "/owner/login";
+    if (path.startsWith("/admin")) return "/admin/login";
+    if (path.startsWith("/partner")) return "/partner/login";
+    if (path.startsWith("/country")) return "/country/login";
+    if (path.startsWith("/staff")) return "/staff/login";
+    if (path.startsWith("/shop")) return "/shop/login";
+    if (path.startsWith("/clinic")) return "/clinic/login";
+    if (path.startsWith("/producer")) return "/producer/login";
+  } catch {
+    /* ignore */
+  }
+  return "/login";
+}
+
 export async function GET(request) {
-  // Allow logout via browser navigation (redirects to login)
-  const loginUrl = new URL("/auth/login", request.url);
+  const referer = request.headers.get("referer") || request.headers.get("Referer");
+  const loginPath = getLoginPathFromReferer(referer);
+  const loginUrl = new URL(loginPath, request.url);
   const res = NextResponse.redirect(loginUrl);
 
   clearCookie(res, "access_token");

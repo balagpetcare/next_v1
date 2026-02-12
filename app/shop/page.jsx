@@ -1,8 +1,13 @@
+"use client";
+
+import { useLanguage } from "@/app/(public)/_lib/LanguageContext";
+
 export default function Page() {
+  const { t } = useLanguage();
   return (
     <div>
-      <h2>communitypetshop.com — Home</h2>
-      <p>E-commerce skeleton: products, cart, checkout (later).</p>
+      <h2>{t("shop.homeTitle")}</h2>
+      <p>{t("shop.homeSubtitle")}</p>
 
       <ul>
         <li><a href="/health">Health check page</a></li>

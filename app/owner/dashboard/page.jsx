@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useLanguage } from "@/app/(public)/_lib/LanguageContext";
 import { ownerGet } from "@/app/owner/_lib/ownerApi";
 import MetricCard from "@/app/owner/_components/dashboard/MetricCard";
 import RevenueChart from "@/app/owner/_components/dashboard/RevenueChart";
@@ -18,6 +19,7 @@ function formatCurrency(amount) {
 }
 
 export default function OwnerDashboard() {
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [metrics, setMetrics] = useState(null);
@@ -76,7 +78,7 @@ export default function OwnerDashboard() {
       const pendingList = Array.isArray(raw) ? raw : [];
       setPendingRequestsCount(pendingList.length);
     } catch (e) {
-      setError(e?.message || "Failed to load dashboard");
+      setError(e?.message || t("owner.failedToLoadDashboard"));
       console.error("Dashboard load error:", e);
     } finally {
       setLoading(false);
@@ -92,35 +94,35 @@ export default function OwnerDashboard() {
   }
 
   return (
-    <div className="container py-3">
+    <div className="container py-3 owner-dashboard">
       {/* Header */}
-      <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
+      <header className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
         <div>
-          <h2 className="mb-1">Dashboard</h2>
-          <div className="text-secondary">Complete overview of your business performance</div>
+          <h2 className="mb-1">{t("owner.dashboardTitle")}</h2>
+          <div className="text-secondary">{t("owner.dashboardSubtitle")}</div>
         </div>
         <div className="d-flex gap-2">
           <button className="btn btn-outline-secondary" onClick={handleRefresh} disabled={loading}>
             <i className="solar:refresh-outline me-1" />
-            {loading ? "Refreshing…" : "Refresh"}
+            {loading ? t("common.refreshing") : t("common.refresh")}
           </button>
           <Link className="btn btn-primary" href="/owner/organizations/new">
             <i className="solar:add-circle-outline me-1" />
-            New Organization
+            {t("owner.newOrganization")}
           </Link>
         </div>
-      </div>
+      </header>
 
-      {error && <div className="alert alert-danger">{error}</div>}
+      {error && <div className="alert alert-danger" role="alert">{error}</div>}
 
       {/* Staff Invitation Notifications */}
       <StaffInviteNotifications />
 
-      {/* Key Metrics Cards — IA 8: Today Sales, Month Sales, Orders Pending, Low Stock, Returns, Active Branches, Pending Requests, Wallet Balance */}
-      <div className="row g-3 mb-4">
+      {/* Key Metrics Cards */}
+      <section className="row g-3 mb-4" aria-label="Key metrics">
         <div className="col-6 col-md-4 col-lg-2">
           <MetricCard
-            label="Today Sales"
+            label={t("owner.todaySales")}
             value={metrics ? formatCurrency(metrics.revenue?.today || 0) : "—"}
             sub={metrics ? `Week: ${formatCurrency(metrics.revenue?.week || 0)}` : null}
             variant="primary"
@@ -130,7 +132,7 @@ export default function OwnerDashboard() {
         </div>
         <div className="col-6 col-md-4 col-lg-2">
           <MetricCard
-            label="Month Sales"
+            label={t("owner.monthSales")}
             value={metrics ? formatCurrency(metrics.revenue?.month || 0) : "—"}
             sub={metrics ? `Orders: ${metrics.orders?.total || 0}` : null}
             variant="primary"
@@ -140,7 +142,7 @@ export default function OwnerDashboard() {
         </div>
         <div className="col-6 col-md-4 col-lg-2">
           <MetricCard
-            label="Orders Pending"
+            label={t("owner.ordersPending")}
             value={metrics ? String(metrics.orders?.pending || 0) : "—"}
             sub={metrics ? `Total: ${metrics.orders?.total || 0}` : null}
             variant="info"
@@ -151,7 +153,7 @@ export default function OwnerDashboard() {
         </div>
         <div className="col-6 col-md-4 col-lg-2">
           <MetricCard
-            label="Low Stock"
+            label={t("owner.lowStock")}
             value={metrics ? String(metrics.products?.lowStock ?? 0) : "—"}
             sub={metrics ? `Out: ${metrics.products?.outOfStock ?? 0}` : null}
             variant="warning"
@@ -162,9 +164,9 @@ export default function OwnerDashboard() {
         </div>
         <div className="col-6 col-md-4 col-lg-2">
           <MetricCard
-            label="Returns"
+            label={t("owner.returns")}
             value={metrics?.returns != null ? String(metrics.returns) : "—"}
-            sub="To review"
+            sub={t("common.toReview")}
             variant="secondary"
             icon={<i className="solar:refresh-outline fs-4" />}
             loading={loading}
@@ -173,7 +175,7 @@ export default function OwnerDashboard() {
         </div>
         <div className="col-6 col-md-4 col-lg-2">
           <MetricCard
-            label="Active Branches"
+            label={t("owner.activeBranches")}
             value={metrics ? String(metrics.branches?.active ?? 0) : "—"}
             sub={metrics ? `Total: ${metrics.branches?.total || 0}` : null}
             variant="secondary"
@@ -184,9 +186,9 @@ export default function OwnerDashboard() {
         </div>
         <div className="col-6 col-md-4 col-lg-2">
           <MetricCard
-            label="Pending Requests"
+            label={t("owner.pendingRequests")}
             value={loading ? "—" : String(pendingRequestsCount)}
-            sub="Branch access"
+            sub={t("common.branchAccess")}
             variant="warning"
             icon={<i className="solar:user-check-outline fs-4" />}
             loading={loading}
@@ -195,7 +197,7 @@ export default function OwnerDashboard() {
         </div>
         <div className="col-6 col-md-4 col-lg-2">
           <MetricCard
-            label="Wallet Balance"
+            label={t("owner.walletBalance")}
             value={metrics ? formatCurrency(metrics.wallet?.available || 0) : "—"}
             sub={metrics ? `Pending: ${formatCurrency(metrics.wallet?.pending || 0)}` : null}
             variant="success"
@@ -204,43 +206,43 @@ export default function OwnerDashboard() {
             onClick={() => (window.location.href = "/owner/wallet")}
           />
         </div>
-      </div>
+      </section>
 
-      {/* Charts Row */}
-      <div className="row g-3 mb-4">
+      {/* Charts */}
+      <section className="row g-3 mb-4" aria-label="Charts">
         <div className="col-12 col-lg-8">
           <div className="card radius-12">
             <div className="card-body p-24">
               <div className="d-flex align-items-center justify-content-between mb-3">
-                <h6 className="mb-0 fw-semibold">Sales Trend</h6>
+                <h6 className="mb-0 fw-semibold">{t("owner.salesTrend")}</h6>
                 <div className="btn-group btn-group-sm" role="group">
                   <button
                     type="button"
                     className={`btn ${revenuePeriod === "7d" ? "btn-primary" : "btn-outline-primary"}`}
                     onClick={() => setRevenuePeriod("7d")}
                   >
-                    7 Days
+                    {t("owner.period7d")}
                   </button>
                   <button
                     type="button"
                     className={`btn ${revenuePeriod === "30d" ? "btn-primary" : "btn-outline-primary"}`}
                     onClick={() => setRevenuePeriod("30d")}
                   >
-                    30 Days
+                    {t("owner.period30d")}
                   </button>
                   <button
                     type="button"
                     className={`btn ${revenuePeriod === "6m" ? "btn-primary" : "btn-outline-primary"}`}
                     onClick={() => setRevenuePeriod("6m")}
                   >
-                    6 Months
+                    {t("owner.period6m")}
                   </button>
                   <button
                     type="button"
                     className={`btn ${revenuePeriod === "1y" ? "btn-primary" : "btn-outline-primary"}`}
                     onClick={() => setRevenuePeriod("1y")}
                   >
-                    1 Year
+                    {t("owner.period1y")}
                   </button>
                 </div>
               </div>
@@ -251,27 +253,27 @@ export default function OwnerDashboard() {
         <div className="col-12 col-lg-4">
           <SalesByBranchChart data={salesByBranch} loading={loading} />
         </div>
-      </div>
+      </section>
 
       {/* Quick Actions */}
-      <div className="row g-3 mb-4">
+      <section className="row g-3 mb-4" aria-label="Quick actions">
         <div className="col-12">
           <QuickActionsPanel />
         </div>
-      </div>
+      </section>
 
       {/* Product Summary and Recent Activity */}
-      <div className="row g-3 mb-4">
+      <section className="row g-3 mb-4" aria-label="Products and activity">
         <div className="col-12 col-lg-4">
           <ProductSummaryCard loading={loading} />
         </div>
         <div className="col-12 col-lg-8">
           <TopProductsTable products={topProducts} loading={loading} />
         </div>
-      </div>
+      </section>
 
       {/* Recent Activity and Alerts */}
-      <div className="row g-3">
+      <section className="row g-3" aria-label="Activity and alerts">
         <div className="col-12 col-lg-6">
           <RecentActivityFeed activities={recentActivity} loading={loading} />
         </div>
@@ -282,7 +284,7 @@ export default function OwnerDashboard() {
             loading={loading}
           />
         </div>
-      </div>
+      </section>
     </div>
   );
 }

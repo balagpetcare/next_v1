@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useLanguage } from "@/app/(public)/_lib/LanguageContext";
 
 /**
  * Base detail page wrapper for entities
@@ -22,14 +23,15 @@ export default function EntityDetailPage({
   children,
 }) {
   const router = useRouter();
+  const { t } = useLanguage();
 
   const breadcrumbs = config?.breadcrumbs || [
-    { label: "Owner", href: "/owner" },
+    { label: t("common.owner"), href: "/owner" },
     {
-      label: config?.plural || "Items",
+      label: config?.plural || t("common.items"),
       href: config?.listPath || "/owner",
     },
-    { label: "Details" },
+    { label: t("common.details") },
   ];
 
   return (
@@ -77,7 +79,7 @@ export default function EntityDetailPage({
                 disabled={loading}
               >
                 <i className="ri-refresh-line me-1" />
-                Refresh
+                {t("common.refresh")}
               </button>
             )}
             {onEdit && (
@@ -87,7 +89,7 @@ export default function EntityDetailPage({
                 disabled={loading}
               >
                 <i className="ri-edit-line me-1" />
-                Edit
+                {t("common.edit")}
               </button>
             )}
             {onDelete && (
@@ -97,7 +99,7 @@ export default function EntityDetailPage({
                 disabled={loading}
               >
                 <i className="ri-delete-bin-line me-1" />
-                Delete
+                {t("common.delete")}
               </button>
             )}
             <button
@@ -105,7 +107,7 @@ export default function EntityDetailPage({
               onClick={() => router.back()}
             >
               <i className="ri-arrow-left-line me-1" />
-              Back
+              {t("common.back")}
             </button>
           </div>
         </div>
@@ -121,9 +123,9 @@ export default function EntityDetailPage({
         <div className="card radius-12">
           <div className="card-body text-center py-5">
             <div className="spinner-border text-primary" role="status">
-              <span className="visually-hidden">Loading...</span>
+              <span className="visually-hidden">{t("common.loading")}</span>
             </div>
-            <div className="mt-2 text-muted">Loading...</div>
+            <div className="mt-2 text-muted">{t("common.loading")}</div>
           </div>
         </div>
       ) : (

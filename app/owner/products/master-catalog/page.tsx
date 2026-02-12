@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/src/lib/apiFetch";
+import { useMe } from "@/src/lib/useMe";
 
 interface MasterProduct {
   id: number;
@@ -40,8 +41,25 @@ interface Category {
   slug: string;
 }
 
+function getOrgIdFromMe(me: any): number | null {
+  if (!me) return null;
+  const first = Array.isArray(me?.orgMembers)
+    ? me.orgMembers.find((x: any) => x?.org?.id)?.org?.id
+    : null;
+  if (first != null) return Number(first);
+  if (typeof window !== "undefined") {
+    const saved = window.localStorage.getItem("bpa_org_id");
+    if (saved) {
+      const n = Number(saved);
+      if (Number.isFinite(n)) return n;
+    }
+  }
+  return null;
+}
+
 export default function MasterCatalogPage() {
   const router = useRouter();
+  const { me } = useMe("owner-products-master-catalog");
   const [products, setProducts] = useState<MasterProduct[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -120,10 +138,11 @@ export default function MasterCatalogPage() {
 
     try {
       setCloningId(productId);
+      const orgId = getOrgIdFromMe(me);
       const res = (await apiFetch(`/api/v1/products/master-catalog/${productId}/clone`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({}),
+        body: JSON.stringify(orgId != null ? { orgId } : {}),
       })) as { success?: boolean; data?: { id: number }; message?: string };
 
       if (res?.success && res?.data?.id) {
