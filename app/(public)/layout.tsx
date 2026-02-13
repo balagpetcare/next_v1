@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import "@/src/styles/landing.css";
 import { LanguageProvider } from "./_lib/LanguageContext";
 import PublicHeader from "./_components/PublicHeader";
+import GoToTopButton from "./_components/GoToTopButton";
 
 const siteMode = process.env.SITE_MODE || "owner";
 const LOCALE_COOKIE_NAMES = ["app_locale", "landing_locale"] as const;
@@ -36,7 +37,7 @@ export default async function PublicLayout({
 }: {
   children: React.ReactNode;
 }) {
-  if (siteMode !== "owner") {
+  if (siteMode !== "owner" && siteMode !== "producer") {
     const path = defaultPaths[siteMode] ?? "/owner";
     redirect(path);
   }
@@ -73,6 +74,17 @@ export default async function PublicLayout({
     },
   };
 
+  if (siteMode === "producer") {
+    return (
+      <div className="landing producer-landing">
+        <main id="main-content" role="main">
+          {children}
+        </main>
+        <GoToTopButton />
+      </div>
+    );
+  }
+
   return (
     <div className="landing">
       <script
@@ -84,6 +96,7 @@ export default async function PublicLayout({
         <main id="main-content" role="main">
           {children}
         </main>
+        <GoToTopButton />
       </LanguageProvider>
     </div>
   );

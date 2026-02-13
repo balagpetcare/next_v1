@@ -14,7 +14,7 @@ export default function TrustSection() {
   const { t } = useLanguage();
 
   return (
-    <section id="trust" className="jamina-trust-section px-4 sm:px-6 lg:px-8 py-100 sm:py-100 lg:py-20" aria-labelledby="trust-title">
+    <section id="trust" className=" lp-section-soft px-4 sm:px-6 lg:px-8 py-100 sm:py-100 lg:py-20" aria-labelledby="trust-title">
       <div className="max-w-6xl mx-auto">
         <h2 id="trust-title" className="pb-50 section-title jamina-trust-heading mb-6 sm:mb-8">
           {t("trust.title")}

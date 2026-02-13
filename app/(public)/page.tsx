@@ -11,8 +11,14 @@ import GlobalImpactSection from "./_components/GlobalImpactSection";
 import TestimonialsSection from "./_components/TestimonialsSection";
 import FaqSection from "./_components/FaqSection";
 import CtaSection from "./_components/CtaSection";
+import ProducerLandingPage from "@/app/producer/_components/ProducerLandingPage";
+
+const isProducerMode = process.env.SITE_MODE === "producer";
 
 export default function PublicLandingPage() {
+  if (isProducerMode) {
+    return <ProducerLandingPage />;
+  }
   return (
     <>
       <HeroSection />
@@ -21,9 +27,9 @@ export default function PublicLandingPage() {
       <BenefitsSection />
       <CustomerBenefitsSection />
       <ServiceSalesSection />
+      <TrustSection />
       <ReportsSection />
       <GlobalImpactSection />
-      <TrustSection />
       <TestimonialsSection />
       <HowToStartSection />
       <FaqSection />

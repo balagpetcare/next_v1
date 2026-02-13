@@ -11,9 +11,10 @@ export default function ProducerLayout({ children }) {
 
   const isAuthRoute =
     pathname?.startsWith("/producer/login") || pathname?.startsWith("/producer/register");
+  const isLandingRoute = pathname === "/producer";
 
   useEffect(() => {
-    if (!pathname || isAuthRoute) return;
+    if (!pathname || isAuthRoute || isLandingRoute) return;
     let cancelled = false;
     (async () => {
       try {
@@ -25,8 +26,8 @@ export default function ProducerLayout({ children }) {
     return () => {
       cancelled = true;
     };
-  }, [pathname, router, isAuthRoute]);
+  }, [pathname, router, isAuthRoute, isLandingRoute]);
 
-  if (isAuthRoute) return <>{children}</>;
+  if (isAuthRoute || isLandingRoute) return <>{children}</>;
   return <MasterLayout>{children}</MasterLayout>;
 }

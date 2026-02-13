@@ -1,14 +1,28 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@iconify/react";
 import { useLanguage } from "../_lib/LanguageContext";
 
+const SCROLL_THRESHOLD = 8;
+
 export default function PublicHeader() {
   const { locale, t, setLocale } = useLanguage();
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(typeof window !== "undefined" ? window.scrollY > SCROLL_THRESHOLD : false);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
 
   return (
-    <header className="jamina-header jamina-header-dark" role="banner">
+    <header
+      className={"jamina-header jamina-header-dark" + (scrolled ? " scrolled" : "")}
+      role="banner"
+    >
       <div className="jamina-header-inner">
         <a href="/#top" className="jamina-logo" aria-label={t("header.logo")}>
           <Icon icon="solar:leaf-bold" width={24} height={24} className="jamina-logo-icon" aria-hidden="true" />
