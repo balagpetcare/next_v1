@@ -62,7 +62,13 @@ function LoginPageContent() {
         ? { email: detected.normalized, password }
         : { phone: detected.normalized, password };
 
-      const response = await apiPost("/api/v1/auth/login", payload);
+      // Use admin login API when destination is admin panel (validates whitelist, avoids 403 loop)
+      const app = sp.get("app");
+      const returnTo = sp.get("returnTo");
+      const isAdminFlow = app === "admin" || (returnTo && returnTo.includes("/admin"));
+      const loginPath = isAdminFlow ? "/api/v1/admin/auth/login" : "/api/v1/auth/login";
+
+      const response = await apiPost(loginPath, payload);
 
       const origin = typeof window !== "undefined" ? window.location.origin : "";
 

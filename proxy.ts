@@ -1,27 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
+import { isPublicPath, getAuthFromCookies } from "@/lib/authHelpers";
 
 // Next.js 16+: `middleware.(ts|js)` is deprecated and renamed to `proxy.(ts|js)`.
 // This proxy enforces "no dashboard access while logged out" without changing any ports/routes.
 //
-// Public allowlist: "/", "/getting-started", and auth entry points (e.g. /owner/login, /owner/register)
-// must never require session — they are checked first so guests can access landing and getting-started.
-//
-// Auth signal:
-// - We treat these cookies as auth tokens (matches BPA API middleware expectations): access_token | token | jwt
-// - We also allow an Authorization: Bearer header (useful for some dev tools)
-
-function hasAuth(req: NextRequest): boolean {
-  const c = req.cookies;
-  return Boolean(
-    c.get("access_token")?.value ||
-      c.get("token")?.value ||
-      c.get("jwt")?.value ||
-      req.headers.get("authorization")?.toLowerCase().startsWith("bearer ")
-  );
-}
+// Public paths: /auth/*, /login, /register, /post-auth-landing, /getting-started, etc.
+// are never protected — checked first so guests can access landing and auth flows.
 
 function withNextParam(url: URL, req: NextRequest) {
-  // Preserve full path + query
   const next = req.nextUrl.pathname + req.nextUrl.search;
   url.searchParams.set("next", next);
   return url;
@@ -30,42 +16,8 @@ function withNextParam(url: URL, req: NextRequest) {
 export function proxy(req: NextRequest) {
   const { pathname } = req.nextUrl;
 
-  // Always allow Next internals + static assets
-  if (
-    pathname.startsWith("/_next") ||
-    pathname.startsWith("/assets") ||
-    pathname.startsWith("/favicon") ||
-    pathname.startsWith("/robots") ||
-    pathname.startsWith("/sitemap") ||
-    pathname.startsWith("/images")
-  ) {
-    return NextResponse.next();
-  }
-
-  // Public routes (must stay accessible — no auth/KYC). "/" and "/getting-started" are guest landing pages.
-  const PUBLIC_PATHS = new Set([
-    "/",
-    "/getting-started",
-    "/login",
-    "/register",
-    "/invite/accept",
-    "/health",
-    "/debug",
-
-    "/owner/login",
-    "/owner/logout",
-    "/owner/register",
-    "/owner/regester",
-
-    "/admin/login",
-    "/admin/logout",
-
-    "/country/login",
-  ]);
-
-  if (PUBLIC_PATHS.has(pathname)) return NextResponse.next();
-  // Owner auth entry points with any subpath (e.g. /owner/login?next=...)
-  if (pathname.startsWith("/owner/login") || pathname.startsWith("/owner/register") || pathname.startsWith("/owner/logout") || pathname.startsWith("/owner/regester")) return NextResponse.next();
+  // Public paths: auth, static, Next internals — never require session
+  if (isPublicPath(pathname)) return NextResponse.next();
 
   // Guard app areas
   const isOwner = pathname.startsWith("/owner");
@@ -79,7 +31,7 @@ export function proxy(req: NextRequest) {
 
   if (!needsAuth) return NextResponse.next();
 
-  if (hasAuth(req)) return NextResponse.next();
+  if (getAuthFromCookies(req.cookies, req.headers.get("authorization"))) return NextResponse.next();
 
   // Redirect to the correct login page
   if (isOwner) {

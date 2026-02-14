@@ -10,19 +10,34 @@ export default function AdminLayout({ children }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  // ✅ Client-side guard: if cookie/token is missing or not whitelisted, redirect to login.
-  // Note: All hooks must be called before any conditional returns
+  // Client-side guard: 401 → login, 403 → forbidden (breaks redirect loop)
   useEffect(() => {
-    // Skip auth check for login/logout routes
-    if (pathname?.startsWith("/admin/login") || pathname?.startsWith("/admin/logout")) {
+    if (pathname?.startsWith("/admin/login") || pathname?.startsWith("/admin/logout") || pathname === "/admin/forbidden") {
       return;
     }
 
     let cancelled = false;
     (async () => {
       try {
-        await apiGet("/api/v1/admin/auth/me");
-      } catch (e) {
+        const res = await fetch(
+          `${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000"}/api/v1/admin/auth/me`,
+          { method: "GET", credentials: "include", headers: { Accept: "application/json" } }
+        );
+        if (cancelled) return;
+        if (res.status === 401) {
+          const next = encodeURIComponent(pathname || "/admin");
+          router.replace(`/admin/login?next=${next}`);
+          return;
+        }
+        if (res.status === 403) {
+          router.replace("/admin/forbidden");
+          return;
+        }
+        if (!res.ok) {
+          const next = encodeURIComponent(pathname || "/admin");
+          router.replace(`/admin/login?next=${next}`);
+        }
+      } catch {
         if (cancelled) return;
         const next = encodeURIComponent(pathname || "/admin");
         router.replace(`/admin/login?next=${next}`);

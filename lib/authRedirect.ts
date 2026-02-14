@@ -138,14 +138,19 @@ export function getDefaultReturnTo(panelName: string, defaultPath?: string): str
 export function buildAuthUrl(
   action: 'login' | 'register',
   appName: string,
-  returnTo: string
+  returnTo: string,
+  useSameOriginForAdmin?: boolean
 ): string {
-  const authBase = getAuthBaseUrl();
   const params = new URLSearchParams();
-  
   params.set('app', appName);
   params.set('returnTo', returnTo);
-  
+
+  // Admin: use same-origin /login so we can call /api/v1/admin/auth/login (validates whitelist at login)
+  if (useSameOriginForAdmin && appName === 'admin' && typeof window !== 'undefined') {
+    return `${window.location.origin}/login?${params.toString()}`;
+  }
+
+  const authBase = getAuthBaseUrl();
   return `${authBase}/auth/${action}?${params.toString()}`;
 }
 
@@ -210,7 +215,8 @@ export function getAuthRedirectUrl(
   defaultLandingPath?: string
 ): string {
   const returnTo = parseReturnToFromQuery(searchParams ?? null, panelName, defaultLandingPath);
-  return buildAuthUrl(action, panelName, returnTo);
+  // Admin uses same-origin /login so admin login API validates whitelist (avoids 403 loop)
+  return buildAuthUrl(action, panelName, returnTo, panelName === 'admin');
 }
 
 /**
