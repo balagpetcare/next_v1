@@ -19,8 +19,10 @@ export default function AdminLayout({ children }) {
     let cancelled = false;
     (async () => {
       try {
+        // Use same-origin /api so cookie set by login is sent (Next.js rewrites to backend)
+        const apiBase = typeof window !== "undefined" ? "" : (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000");
         const res = await fetch(
-          `${process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000"}/api/v1/admin/auth/me`,
+          `${apiBase}/api/v1/admin/auth/me`,
           { method: "GET", credentials: "include", headers: { Accept: "application/json" } }
         );
         if (cancelled) return;
