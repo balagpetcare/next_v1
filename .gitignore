@@ -35,3 +35,20 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+# media (do not commit)
+public/**/*.mp4
+public/**/*.mov
+public/**/*.mkv
+public/**/*.avi
+public/**/*.webm
+
+public/**/*.png
+public/**/*.jpg
+public/**/*.jpeg
+public/**/*.gif
+public/**/*.webp
+public/**/*.svg
+
+# if you keep some images, comment the above image lines and use a narrower rule
