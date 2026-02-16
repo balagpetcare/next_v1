@@ -44,6 +44,9 @@ public/**/*.mkv
 public/**/*.avi
 public/**/*.webm
 
+# explicit large asset (kept local, never track)
+public/landing/videos/producer-hero.mp4
+
 public/**/*.png
 public/**/*.jpg
 public/**/*.jpeg
