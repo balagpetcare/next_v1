@@ -34,17 +34,17 @@ export default function ProducerHeader() {
           <span>Producer Portal</span>
         </Link>
         <nav className="producer-header-nav" aria-label="Producer landing navigation">
-          <a href="#features" className="producer-header-link">
+          <a href="#solution" className="producer-header-link">
             See Features
           </a>
           <a href="#how-it-works" className="producer-header-link">
             How It Works
           </a>
-          <a href="#solution" className="producer-header-link">
-            Solution
+          <a href="#the-problem" className="producer-header-link">
+            The Problem
           </a>
-          <a href="#console-preview" className="producer-header-link">
-            Console
+          <a href="#live-demo" className="producer-header-link">
+            Live Demo
           </a>
         </nav>
         <div className="producer-header-actions">

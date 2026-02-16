@@ -1,7 +1,11 @@
 import { getApiHeaders } from "./countryContext";
 
-// Base API host (no trailing slash). Example: http://localhost:3000
-const base = String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+// In browser: use same-origin so /api/* goes through Next.js rewrite and cookies are sent.
+// In Node (SSR): use explicit API URL.
+const base =
+  typeof window !== "undefined"
+    ? ""
+    : String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
 
 async function parseError(res: Response): Promise<never> {
   let msg = `Request failed (${res.status})`;

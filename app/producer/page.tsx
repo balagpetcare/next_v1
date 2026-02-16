@@ -1,4 +1,5 @@
 import "@/src/styles/landing.css";
+import "@/src/styles/producer-landing.css";
 import ProducerLandingPage from "./_components/ProducerLandingPage";
 
 export const metadata = {

@@ -22,6 +22,7 @@ import {
   Crosshair,
   Clock,
 } from "lucide-react";
+import { getFlagEmoji } from "@/src/shared/flags/getFlagEmoji";
 import {
   LocationValue,
   buildDisplayAddress,
@@ -99,7 +100,7 @@ function SearchableCountrySelect({
         onClick={() => !disabled && setOpen(!open)}
       >
         <span className="text-secondary">
-          {selected ? `${selected.name} (${selected.code})` : placeholder}
+          {selected ? `${getFlagEmoji(selected.code)} ${selected.name}` : placeholder}
         </span>
         <span className="text-muted">▼</span>
       </div>
@@ -131,14 +132,15 @@ function SearchableCountrySelect({
                 <button
                   key={c.code}
                   type="button"
-                  className={`list-group-item list-group-item-action border-0 w-100 text-start ${c.code === value ? "active" : ""}`}
+                  className={`list-group-item list-group-item-action border-0 w-100 text-start d-flex align-items-center gap-2 ${c.code === value ? "active" : ""}`}
                   onClick={() => {
                     onChange(c.code);
                     setOpen(false);
                     setSearch("");
                   }}
                 >
-                  {c.name} ({c.code})
+                  <span aria-hidden="true">{getFlagEmoji(c.code)}</span>
+                  <span>{c.name}</span>
                 </button>
               ))
             )}

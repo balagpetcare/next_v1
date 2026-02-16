@@ -19,7 +19,7 @@ export default function ProducerLoginPage() {
     <AuthRedirectPage
       panelName="producer"
       action="login"
-      defaultLandingPath="/producer"
+      defaultLandingPath="/producer/dashboard"
     />
   );
 }

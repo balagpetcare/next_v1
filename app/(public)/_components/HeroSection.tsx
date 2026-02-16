@@ -100,58 +100,13 @@ export default function HeroSection() {
               src="/landing/hero-video.mp4"
               autoPlay
               loop
+              controls
               muted
               playsInline
               preload="metadata"
             />
 
-            {/* Bottom Volume Controls */}
-            <div className="absolute bottom-3 right-3 z-10 flex items-center gap-2">
-              {/* Volume slider (shows when button clicked) */}
-              {showVolume && (
-                <div className="flex items-center gap-2 rounded-full bg-black/60 px-3 py-2">
-                  <input
-                    type="range"
-                    min={0}
-                    max={100}
-                    value={Math.round(volume * 100)}
-                    onChange={(e) => onVolumeChange(Number(e.target.value) / 100)}
-                    className="w-28"
-                    aria-label="Volume"
-                  />
-                  <span className="text-xs text-white/90 w-8 text-right">
-                    {Math.round(volume * 100)}
-                  </span>
-                </div>
-              )}
-
-              {/* Round button: click to show/hide slider; icon click can mute/unmute */}
-              <button
-                type="button"
-                onClick={toggleVolumePanel}
-                className="h-10 w-10 rounded-full  text-white flex items-center justify-center "
-                aria-label="Volume controls"
-              >
-                {/* Clicking icon toggles mute quickly */}
-                <span onClick={(e) => { e.stopPropagation(); toggleMute(); }} className="cursor-pointer">
-                  {muted || volume === 0 ? (
-                    // Muted icon
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5L6 9H2v6h4l5 4V5z" />
-                      <line x1="23" y1="1" x2="1" y2="23" stroke="white" strokeWidth="2" />
-                    </svg>
-                  ) : (
-                    // Volume icon
-                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5L6 9H2v6h4l5 4V5z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 9a3 3 0 010 6" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 5a7 7 0 010 14" />
-                    </svg>
-                  )}
-                </span>
-              </button>
-            </div>
-
+        
           </div>
         </div>
       </div>

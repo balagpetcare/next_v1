@@ -62,10 +62,12 @@ function LoginPageContent() {
         ? { email: detected.normalized, password }
         : { phone: detected.normalized, password };
 
-      // Use admin login API when destination is admin panel (validates whitelist, avoids 403 loop)
+      // Use admin login API when destination is admin panel (validates whitelist, avoids 403 loop).
+      // When on admin app port (3103), default to admin flow so /login alone works for super admin.
       const app = sp.get("app");
       const returnTo = sp.get("returnTo");
-      const isAdminFlow = app === "admin" || (returnTo && returnTo.includes("/admin"));
+      const onAdminPort = typeof window !== "undefined" && String(window.location.port) === "3103";
+      const isAdminFlow = app === "admin" || (returnTo && returnTo.includes("/admin")) || onAdminPort;
       const loginPath = isAdminFlow ? "/api/v1/admin/auth/login" : "/api/v1/auth/login";
 
       const response = await apiPost(loginPath, payload);
@@ -75,7 +77,6 @@ function LoginPageContent() {
       // Post-auth-landing is the ONLY post-login landing for ALL users.
       // Honor returnTo/next only when explicitly provided and allowed; otherwise always use post-auth-landing.
       let targetPath = null;
-      const returnTo = sp.get("returnTo");
       const nextPath = sp.get("next");
       const targetUrl = returnTo
         ? returnTo
@@ -89,7 +90,7 @@ function LoginPageContent() {
         // Never land on /mother; route through post-auth-landing
         targetPath = path === "/mother" || path === "/mother/" ? "/post-auth-landing" : path;
       }
-      if (!targetPath) targetPath = "/post-auth-landing";
+      if (!targetPath) targetPath = isAdminFlow && onAdminPort ? "/admin" : "/post-auth-landing";
 
       if (targetPath.startsWith("http")) {
         window.location.href = targetPath;

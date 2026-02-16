@@ -15724,3 +15724,9 @@ td.fc-header-center {
 }
 
 /* === footer css end === */
+
+
+.form-check .form-check-input {
+	margin-top: 3px !important;
+	margin-right: 10px !important ;
+}

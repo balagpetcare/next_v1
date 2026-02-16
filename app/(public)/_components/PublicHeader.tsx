@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@iconify/react";
 import { useLanguage } from "../_lib/LanguageContext";
+import LanguageSelect from "@/src/shared/selects/LanguageSelect";
 
 const SCROLL_THRESHOLD = 8;
 
@@ -41,26 +42,16 @@ export default function PublicHeader() {
           <a href="#faq" className="jamina-header-link">
             {t("header.navFaq")}
           </a>
-          <div className="jamina-lang-switcher">
-            <button
-              type="button"
-              className={"jamina-lang-btn" + (locale === "en" ? " is-active" : "")}
-              onClick={() => setLocale("en")}
-              aria-pressed={locale === "en"}
-              aria-label={t("header.ariaLangEn")}
-            >
-              {t("header.langEn")}
-            </button>
-            <span className="jamina-lang-sep" aria-hidden="true">|</span>
-            <button
-              type="button"
-              className={"jamina-lang-btn" + (locale === "bn" ? " is-active" : "")}
-              onClick={() => setLocale("bn")}
-              aria-pressed={locale === "bn"}
-              aria-label={t("header.ariaLangBn")}
-            >
-              {t("header.langBn")}
-            </button>
+          <div className="jamina-lang-switcher d-flex align-items-center">
+            <LanguageSelect
+              value={locale}
+              onChange={setLocale}
+              compact
+              options={[
+                { locale: "en", label: t("header.langEn"), countryCode: "US" },
+                { locale: "bn", label: t("header.langBn"), countryCode: "BD" },
+              ]}
+            />
           </div>
           <Link href="/owner/login" className="jamina-header-link">
             {t("header.login")}

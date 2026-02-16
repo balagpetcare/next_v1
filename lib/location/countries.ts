@@ -9,13 +9,8 @@ export interface CountryRecord {
   currencyCode: string;
 }
 
-/** ISO 3166-1 alpha-2 code to flag emoji */
-export function countryCodeToFlag(code: string): string {
-  if (!code || code.length !== 2) return "";
-  return [...code.toUpperCase()]
-    .map((c) => String.fromCodePoint(0x1f1e6 - 65 + c.charCodeAt(0)))
-    .join("");
-}
+/** ISO 3166-1 alpha-2 code to flag emoji. Re-exports from shared for backward compat. */
+export { getFlagEmoji as countryCodeToFlag } from "@/src/shared/flags/getFlagEmoji";
 
 /** Static countries: code, name, currency (ISO 4217). Aligned with backend geo.data. */
 export const COUNTRIES: CountryRecord[] = [

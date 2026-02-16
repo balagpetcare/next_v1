@@ -15,7 +15,8 @@
     "build": "next build",
     "start": "next start -p 3100",
     "lint": "cross-env ESLINT_USE_FLAT_CONFIG=true eslint . --max-warnings 0",
-    "check:landing": "node scripts/check-landing-isolation.mjs"
+    "check:landing": "node scripts/check-landing-isolation.mjs",
+    "check:ui-standards": "node scripts/check-ui-standards.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.9.1",
