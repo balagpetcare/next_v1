@@ -2,8 +2,6 @@
 
 import Link from "next/link";
 
-const VIDEO_SRC = "/landing/videos/producer-hero.mp4"; // <-- আপনার ভিডিও path দিন
-
 export default function HeroSection() {
   return (
     <section id="top" className="pl-hero" aria-labelledby="pl-hero-title">
@@ -30,23 +28,54 @@ export default function HeroSection() {
           </div>
         </div>
 
-        {/* RIGHT SIDE VISUAL */}
         <div className="pl-hero-visual" aria-hidden>
-          {/* Video Card */}
-          <div className="pl-hero-video">
-            <video
-              className="pl-hero-video-el"
-              src={VIDEO_SRC}
-              autoPlay
-              loop
-              muted
-              controls
-              playsInline
-              preload="metadata"
-            />
+          <div className="pl-hero-device">
+            <div className="pl-hero-device-screen">
+              <div className="pl-hero-device-header">
+                <div className="pl-hero-device-title">Product Verification</div>
+                <div className="pl-hero-device-chip">
+                  <span className="pl-hero-device-chip-dot" />
+                  Verified
+                </div>
+              </div>
+              <div className="pl-hero-qr" />
+              <div className="pl-hero-details">
+                <div>
+                  <span className="pl-hero-label">Product</span>
+                  <span className="pl-hero-value">Premium Watch Model X</span>
+                </div>
+                <div>
+                  <span className="pl-hero-label">Serial</span>
+                  <span className="pl-hero-value">DGT 5367</span>
+                </div>
+                <div>
+                  <span className="pl-hero-label">Status</span>
+                  <span className="pl-hero-value pl-hero-value--good">Authentic</span>
+                </div>
+              </div>
+              <div className="pl-hero-verified-btn">VERIFIED</div>
+            </div>
           </div>
 
-       
+          <div className="pl-hero-shield">
+            <svg viewBox="0 0 64 72" fill="none" className="pl-hero-shield-svg">
+              <path
+                d="M32 4L8 16v20c0 14 10 26 24 32 14-6 24-18 24-32V16L32 4z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path
+                d="M22 36l8 8 16-16"
+                stroke="currentColor"
+                strokeWidth="3"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+            <div className="pl-hero-shield-text">VERIFIED</div>
+          </div>
         </div>
       </div>
     </section>

@@ -6,23 +6,22 @@ import ItemDetails from './components/ItemDetails'
 import { Metadata } from 'next'
 import { Row } from 'react-bootstrap'
 import { getProductById } from '@larkon/helpers/data'
-import { title } from 'process'
 import { notFound } from 'next/navigation'
 import PageTItle from '@larkon/components/PageTItle'
 
-type ParamsProductId = {
+type ParamsId = {
   params: {
-    productId: string
+    id: string
   }
 }
 
-export const generateMetadata = async ({ params }: ParamsProductId): Promise<Metadata> => {
-  const product = await getProductById(params.productId)
+export const generateMetadata = async ({ params }: ParamsId): Promise<Metadata> => {
+  const product = await getProductById(params.id)
   return { title: product?.id ?? 'Product Details' }
 }
 
-const ProductDetailsPage = async ({ params }: ParamsProductId) => {
-  const product = await getProductById(params.productId)
+const ProductDetailsPage = async ({ params }: ParamsId) => {
+  const product = await getProductById(params.id)
   if (!product) notFound()
 
   return (

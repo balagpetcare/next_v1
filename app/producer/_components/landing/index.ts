@@ -4,5 +4,7 @@ export { default as ProblemSection } from "./ProblemSection";
 export { default as SolutionGrid } from "./SolutionGrid";
 export { default as HowItWorks } from "./HowItWorks";
 export { default as LiveDemo } from "./LiveDemo";
+export { default as SolutionRow } from "./SolutionRow";
+export { default as HowItWorksShowcase } from "./HowItWorksShowcase";
 export { default as SecurityApi } from "./SecurityApi";
 export { default as FinalCTA } from "./FinalCTA";

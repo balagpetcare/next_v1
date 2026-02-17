@@ -55,16 +55,18 @@ function StatsIcon({ name }: { name: string }) {
 
 export default function StatsRow() {
   return (
-    <section className="pl-section pl-stats" aria-label="Key stats">
+    <section className="pl-stats" aria-label="Key stats">
       <div className="pl-container pl-stats-inner">
         <div className="pl-stats-grid">
           {stats.map((s, i) => (
-            <div key={i} className={`pl-stats-card pl-stats-card--${s.glow}`}>
+            <div key={i} className={`pl-stats-chip pl-stats-chip--${s.glow}`}>
               <div className={`pl-stats-icon-wrap pl-stats-icon-wrap--${s.glow}`}>
                 <StatsIcon name={s.icon} />
               </div>
-              <div className="pl-stats-main">{s.main}</div>
-              <div className="pl-stats-sub">{s.sub}</div>
+              <div className="pl-stats-chip-text">
+                <div className="pl-stats-main">{s.main}</div>
+                <div className="pl-stats-sub">{s.sub}</div>
+              </div>
             </div>
           ))}
         </div>

@@ -12,6 +12,8 @@ import {
   SolutionGrid,
   HowItWorks,
   LiveDemo,
+  SolutionRow,
+  HowItWorksShowcase,
   SecurityApi,
   FinalCTA,
 } from "./landing";
@@ -65,6 +67,8 @@ export default function ProducerLandingPage() {
           <SolutionGrid />
           <HowItWorks />
           <LiveDemo />
+          <SolutionRow />
+          <HowItWorksShowcase />
           <SecurityApi />
           <FinalCTA />
         </>

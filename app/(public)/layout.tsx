@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { cookies } from "next/headers";
 import "@/src/styles/landing.css";
+import "@/src/styles/producer-landing.css";
 import { LanguageProvider } from "./_lib/LanguageContext";
 import PublicHeader from "./_components/PublicHeader";
 import GoToTopButton from "./_components/GoToTopButton";
@@ -76,11 +77,10 @@ export default async function PublicLayout({
 
   if (siteMode === "producer") {
     return (
-      <div className="landing producer-landing">
+      <div className="landing producer-landing pl-v2">
         <main id="main-content" role="main">
           {children}
         </main>
-        <GoToTopButton />
       </div>
     );
   }
