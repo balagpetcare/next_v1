@@ -1,0 +1,18 @@
+//
+// BPA SCSS entrypoint
+// Loaded after vendor app.scss imports.
+//
+
+@import "tokens";
+@import "bootstrap-vars";
+@import "theme";
+@import "layout";
+@import "components";
+@import "pages";
+@import "utilities";
+@import "fixes";
+
+// Optional panel-level overrides
+@import "panels/owner";
+@import "panels/admin";
+@import "panels/clinic";

@@ -60,13 +60,12 @@ export default function Page() {
           return;
         }
 
-        // /mother is terminal ONLY for isCustomerOnly users (no business panels, not business-intended)
+        // /mother is terminal for isCustomerOnly; otherwise post-auth-landing. Both dashboard flows go to /mother/dashboard.
         if (isCustomerOnly) {
-          if (!cancelled) setChecked(true);
+          router.replace("/mother/dashboard");
           return;
         }
 
-        // Authenticated but NOT customer-only: redirect to post-auth-landing
         if (process.env.NODE_ENV === "development") {
           console.log("[mother] X-Redirect-Reason: not_customer_only -> /post-auth-landing");
         }
@@ -87,37 +86,10 @@ export default function Page() {
     );
   }
 
+  router.replace("/mother/dashboard");
   return (
-    <div>
-      <h2>{t("mother.homeTitle")}</h2>
-      <p>{t("mother.homeSubtitle")}</p>
-
-      <ul>
-        <li><a href="/health">Health check page</a></li>
-        <li><a href="/debug">Debug info</a></li>
-      </ul>
-
-      <div
-        style={{
-          marginTop: 16,
-          padding: 12,
-          border: "1px solid #e5e7eb",
-          borderRadius: 10,
-        }}
-      >
-        <strong>Next steps:</strong>
-        <ol>
-          <li>
-            Create your real pages inside <code>app</code> for this site
-          </li>
-          <li>
-            Connect API later using <code>lib/api</code>
-          </li>
-          <li>
-            Add auth later (tokens/cookies) for protected areas
-          </li>
-        </ol>
-      </div>
+    <div className="min-vh-100 d-flex align-items-center justify-content-center">
+      <div className="text-secondary">{t("common.loading")}</div>
     </div>
   );
 }

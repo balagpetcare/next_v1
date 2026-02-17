@@ -45,7 +45,7 @@ export default function PublicHeader() {
           <div className="jamina-lang-switcher d-flex align-items-center">
             <LanguageSelect
               value={locale}
-              onChange={setLocale}
+              onChange={(locale: string) => setLocale(locale as "en" | "bn")}
               compact
               options={[
                 { locale: "en", label: t("header.langEn"), countryCode: "US" },

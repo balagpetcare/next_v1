@@ -1,0 +1,244 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import Link from "next/link";
+import { apiFetch } from "@/src/lib/apiFetch";
+import type { CategoryNode } from "./CategorySubcategorySelect";
+import CategorySubcategorySelect from "./CategorySubcategorySelect";
+import BrandSelect, { type Brand } from "./BrandSelect";
+import LkFormGroup from "@larkon-ui/components/LkFormGroup";
+import LkInput from "@larkon-ui/components/LkInput";
+import LkTextarea from "@larkon-ui/components/LkTextarea";
+import LkSelect from "@larkon-ui/components/LkSelect";
+import LkButton from "@larkon-ui/components/LkButton";
+
+type ProductFormData = {
+  name: string;
+  slug: string;
+  categoryId: string;
+  subCategoryId: string;
+  brandId: string;
+  description: string;
+  status: string;
+};
+
+type SubmitPayload = Omit<ProductFormData, "categoryId" | "brandId"> & {
+  categoryId: number | null;
+  brandId: number | null;
+};
+
+/** initialData: form strings + optional numeric categoryId/brandId for pre-selection */
+type InitialData = Omit<Partial<ProductFormData>, "categoryId" | "brandId"> & {
+  categoryId?: number;
+  brandId?: number;
+};
+
+type Props = {
+  initialData?: InitialData;
+  onSubmit: (data: SubmitPayload) => Promise<void>;
+  submitLabel?: string;
+  cancelHref?: string;
+};
+
+export default function ProductForm({
+  initialData,
+  onSubmit,
+  submitLabel = "Save",
+  cancelHref = "/owner/products",
+}: Props) {
+  const [formData, setFormData] = useState<ProductFormData>({
+    name: initialData?.name ?? "",
+    slug: initialData?.slug ?? "",
+    categoryId: initialData?.categoryId != null ? String(initialData.categoryId) : "",
+    subCategoryId: initialData?.subCategoryId ?? "",
+    brandId: initialData?.brandId != null ? String(initialData.brandId) : "",
+    description: initialData?.description ?? "",
+    status: initialData?.status ?? "ACTIVE",
+  });
+  const [categories, setCategories] = useState<CategoryNode[]>([]);
+  const [brands, setBrands] = useState<Brand[]>([]);
+  const [loadingMeta, setLoadingMeta] = useState(true);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const [catRes, brandRes] = await Promise.all([
+          apiFetch("/api/v1/meta/categories"),
+          apiFetch("/api/v1/meta/brands"),
+        ]);
+        
+        // Handle different response structures
+        let categoriesData: CategoryNode[] = [];
+        if (catRes) {
+          if (Array.isArray(catRes)) {
+            categoriesData = catRes;
+          } else if (Array.isArray((catRes as any)?.data)) {
+            categoriesData = (catRes as any).data;
+          } else if ((catRes as any)?.success && Array.isArray((catRes as any)?.data)) {
+            categoriesData = (catRes as any).data;
+          }
+        }
+        
+        let brandsData: Brand[] = [];
+        if (brandRes) {
+          if (Array.isArray(brandRes)) {
+            brandsData = brandRes;
+          } else if (Array.isArray((brandRes as any)?.data)) {
+            brandsData = (brandRes as any).data;
+          } else if ((brandRes as any)?.success && Array.isArray((brandRes as any)?.data)) {
+            brandsData = (brandRes as any).data;
+          }
+        }
+        
+        setCategories(categoriesData);
+        setBrands(brandsData);
+      } catch (e) {
+        console.error("Load meta error:", e);
+        setCategories([]);
+        setBrands([]);
+      } finally {
+        setLoadingMeta(false);
+      }
+    }
+    load();
+  }, []);
+
+  useEffect(() => {
+    if (initialData) {
+      const cid = initialData.categoryId != null ? String(initialData.categoryId) : "";
+      const bid = initialData.brandId != null ? String(initialData.brandId) : "";
+      setFormData((prev) => ({
+        ...prev,
+        name: initialData.name ?? prev.name,
+        slug: initialData.slug ?? prev.slug,
+        categoryId: cid || prev.categoryId,
+        subCategoryId: initialData.subCategoryId ?? prev.subCategoryId,
+        brandId: bid || prev.brandId,
+        description: initialData.description ?? prev.description,
+        status: initialData.status ?? prev.status,
+      }));
+    }
+  }, [initialData]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const categoryId = formData.subCategoryId
+        ? parseInt(formData.subCategoryId)
+        : formData.categoryId
+          ? parseInt(formData.categoryId)
+          : null;
+      const brandId = formData.brandId ? parseInt(formData.brandId) : null;
+      await onSubmit({
+        ...formData,
+        categoryId,
+        brandId,
+      });
+    } catch (err) {
+      console.error("Submit error:", err);
+      throw err;
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit} className="card radius-12">
+      <div className="card-body">
+        <div className="row g-3">
+          <div className="col-12">
+            <LkFormGroup label="Product Name" required>
+              <LkInput
+                type="text"
+                className="radius-12"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                required
+              />
+            </LkFormGroup>
+          </div>
+          <div className="col-12">
+            <LkFormGroup label="Slug">
+              <LkInput
+                type="text"
+                className="radius-12"
+                value={formData.slug}
+                onChange={(e) => setFormData({ ...formData, slug: e.target.value })}
+                placeholder="Leave blank to auto-generate from name"
+              />
+            </LkFormGroup>
+          </div>
+          {loadingMeta ? (
+            <div className="col-12 text-muted">Loading categories…</div>
+          ) : (
+            <div className="col-12">
+              <CategorySubcategorySelect
+                categories={categories}
+                categoryId={formData.categoryId}
+                subCategoryId={formData.subCategoryId}
+                onCategoryChange={(id) => {
+                  setFormData((prev) => ({
+                    ...prev,
+                    categoryId: id,
+                    subCategoryId: ""
+                  }));
+                }}
+                onSubCategoryChange={(id) => {
+                  setFormData((prev) => ({ ...prev, subCategoryId: id }));
+                }}
+              />
+            </div>
+          )}
+          <div className="col-12">
+            <BrandSelect
+              brands={brands}
+              value={formData.brandId}
+              onChange={(value) => setFormData({ ...formData, brandId: value })}
+              disabled={loadingMeta}
+              placeholder="Search and select brand (optional)"
+            />
+          </div>
+          <div className="col-12">
+            <LkFormGroup label="Description">
+              <LkTextarea
+                className="radius-12"
+                rows={4}
+                value={formData.description}
+                onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              />
+            </LkFormGroup>
+          </div>
+          <div className="col-12">
+            <LkFormGroup label="Status">
+              <LkSelect
+                className="radius-12"
+                value={formData.status}
+                onChange={(e) => setFormData({ ...formData, status: e.target.value })}
+              >
+                <option value="ACTIVE">Active</option>
+                <option value="INACTIVE">Inactive</option>
+              </LkSelect>
+            </LkFormGroup>
+          </div>
+          <div className="col-12 d-flex gap-2">
+            <LkButton
+              type="submit"
+              disabled={saving}
+              variant="primary"
+              className="radius-12"
+            >
+              {saving ? "Saving…" : submitLabel}
+            </LkButton>
+            {cancelHref && (
+              <Link href={cancelHref} className="btn btn-outline-secondary radius-12">
+                Cancel
+              </Link>
+            )}
+          </div>
+        </div>
+      </div>
+    </form>
+  );
+}

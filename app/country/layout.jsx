@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import MasterLayout from "@/src/masterLayout/MasterLayout";
 import { apiGet } from "@/lib/api";
 
 export default function CountryLayout({ children }) {
@@ -46,14 +45,12 @@ export default function CountryLayout({ children }) {
 
   if (!hasAccess) {
     return (
-      <MasterLayout>
-      <div className="alert alert-danger">
-        <strong>Access Denied!</strong> You currently do not have permission to access the Country Panel.  
+      <div className="alert alert-danger m-3">
+        <strong>Access Denied!</strong> You currently do not have permission to access the Country Panel.
         Please contact support for further assistance.
       </div>
-      </MasterLayout>
     );
   }
 
-  return <MasterLayout>{children}</MasterLayout>;
+  return <>{children}</>;
 }

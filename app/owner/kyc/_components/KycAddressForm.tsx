@@ -52,10 +52,10 @@ export default function KycAddressForm({
         longitude: 0,
         ...base,
         ...patch,
-        addressLine1: patch.addressLine1 ?? (addressLine1 || base?.addressLine1 || " "),
-        addressLine2: patch.addressLine2 ?? (addressLine2 || base?.addressLine2 || undefined),
-        landmark: patch.landmark ?? (landmark || base?.landmark || undefined),
       };
+      merged.addressLine1 = patch.addressLine1 ?? (addressLine1 || base?.addressLine1 || " ");
+      merged.addressLine2 = patch.addressLine2 ?? (addressLine2 || base?.addressLine2 || undefined);
+      merged.landmark = patch.landmark ?? (landmark || base?.landmark || undefined);
       onChange(merged);
     },
     [locValue, addressLine1, addressLine2, landmark, onChange]

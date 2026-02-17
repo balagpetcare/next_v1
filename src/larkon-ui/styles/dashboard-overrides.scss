@@ -1,0 +1,34 @@
+//
+// Dashboard-only overrides. Import only in app/<panel>/(larkon)/layout.tsx after app.scss.
+// Keeps spacing/typography consistent and avoids style leakage to public pages.
+// Uses theme CSS variables so light/dark and primary color apply to the entire dashboard.
+//
+
+.larkon-dashboard {
+  // Theme: ensure wrapper and content area use Bootstrap theme variables (no hard-coded light colors)
+  &.wrapper {
+    background-color: var(--bs-body-bg);
+    color: var(--bs-body-color);
+  }
+  .page-content {
+    background-color: var(--bs-body-bg);
+    color: var(--bs-body-color);
+  }
+
+  // Unify form control radius where radius-12 was used in legacy
+  .form-control,
+  .form-select {
+    &.radius-12 {
+      border-radius: 12px;
+    }
+  }
+  .form-control-sm.radius-12,
+  .form-select-sm.radius-12 {
+    border-radius: 10px;
+  }
+
+  // Consistent margin for form groups
+  .mb-3:last-child {
+    margin-bottom: 0 !important;
+  }
+}

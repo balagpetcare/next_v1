@@ -1,0 +1,18 @@
+//
+// BPA layout helpers.
+//
+
+.bpa-page {
+  padding-top: $bpa-page-spacing-y;
+  padding-bottom: $bpa-page-spacing-y;
+}
+
+// Sidebar: ensure menu triggers (div with .nav-link) never get button/select/form-control styling.
+.main-nav .navbar-nav .nav-item .nav-link[role="button"] {
+  border: 0;
+  background: transparent;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  appearance: none;
+}

@@ -2,7 +2,6 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import MasterLayout from "@/src/masterLayout/MasterLayout";
 import NotificationContainer from "@/app/owner/_components/Notification";
 import { getFallbackUrlForPanels } from "@/lib/authRedirect";
 
@@ -68,7 +67,7 @@ export default function StaffLayout({ children }) {
   return (
     <>
       <NotificationContainer />
-      <MasterLayout>{children}</MasterLayout>
+      {children}
     </>
   );
 }

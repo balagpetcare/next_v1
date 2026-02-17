@@ -364,7 +364,7 @@ export default function OwnerKycClientPage() {
             <KycDocumentsForm
               documentType={documentType}
               onDocumentTypeChange={setDocumentType}
-              existingDocs={docs}
+              existingDocs={docs.map(({ media, ...d }) => ({ ...d, media: media ?? undefined }))}
               onUploadComplete={load}
               disabled={locked}
             />

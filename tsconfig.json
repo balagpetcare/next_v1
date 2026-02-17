@@ -22,9 +22,16 @@
         "name": "next"
       }
     ],
+    "baseUrl": ".",
     "paths": {
       "@/*": [
         "./*"
+      ],
+      "@larkon/*": [
+        "src/larkon-admin/*"
+      ],
+      "@larkon-ui/*": [
+        "src/larkon-ui/*"
       ]
     }
   },
@@ -60,6 +67,8 @@
     ".next/country/dev/types/**/*.ts"
   ],
   "exclude": [
-    "node_modules"
+    "node_modules",
+    "_vendor_templates",
+    "src/larkon-admin/app"
   ]
 }

@@ -172,7 +172,7 @@ export default function KycDocumentsForm({
                                     existingImageUrl={url}
                                     output={{ maxWidth: 1800, maxHeight: 1800, quality: 0.92, mime: "image/jpeg" }}
                                     disabled={disabled || uploading}
-                                    onImageCropped={(blob) => blob && handleUpload(backendType, blob)}
+                                    onImageCropped={(blob: Blob | null) => blob && handleUpload(backendType, blob)}
                                   />
                                 </div>
                               )}
@@ -185,7 +185,7 @@ export default function KycDocumentsForm({
                           aspectRatio={slot === "SELFIE" ? 1 : 1.6}
                           output={{ maxWidth: 1800, maxHeight: 1800, quality: 0.92, mime: "image/jpeg" }}
                           disabled={disabled || uploading}
-                          onImageCropped={(blob) => blob && handleUpload(backendType, blob)}
+                          onImageCropped={(blob: Blob | null) => blob && handleUpload(backendType, blob)}
                         />
                       )}
                       {uploading && <div className="text-xs text-secondary-light mt-8">Uploading...</div>}

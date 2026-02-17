@@ -1,6 +1,6 @@
 "use client";
 
-export type AppKey = "owner" | "admin" | "shop" | "clinic" | "mother" | "producer" | "country";
+export type AppKey = "owner" | "admin" | "shop" | "clinic" | "mother" | "producer" | "country" | "staff";
 
 export type MenuItem = {
   id: string;
@@ -682,7 +682,20 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
     { id: "producer.products", label: "Products", href: "/producer/products", icon: "solar:box-outline", required: [] },
     { id: "producer.batches", label: "Batches", href: "/producer/batches", icon: "solar:archive-outline", required: [] },
   ],
+  staff: [
+    { id: "staff.dashboard", label: "Branches", href: "/staff/branches", icon: "solar:home-smile-outline", required: [] },
+    { id: "staff.workspace", label: "Workspace", href: "/staff/workspace", icon: "solar:widget-5-outline", required: [] },
+  ],
 };
+
+/**
+ * Returns the full menu tree for a panel (no permission filtering).
+ * Used by Larkon dashboard sidebar to restore full WowDash-style menus.
+ */
+export function getFullMenu(app: AppKey): MenuItem[] {
+  if (app === "owner") return CORE_OWNER_FALLBACK;
+  return REGISTRY[app as keyof typeof REGISTRY] || [];
+}
 
 export function buildMenu(app: AppKey, permissions: string[] | Set<string>, options: BuildMenuOptions = {}): MenuItem[] {
   const perms = permissions instanceof Set ? permissions : new Set((permissions || []).map((x) => String(x)));
@@ -735,5 +748,6 @@ export function appKeyFromPath(pathname?: string): AppKey {
   if (p.startsWith("/shop")) return "shop";
   if (p.startsWith("/clinic")) return "clinic";
   if (p.startsWith("/mother")) return "mother";
+  if (p.startsWith("/staff")) return "staff";
   return "owner";
 }
