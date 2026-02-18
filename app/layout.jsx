@@ -5,8 +5,8 @@ import PluginInit from "@/src/helper/PluginInit";
 import { I18nWrapper } from "@/app/(public)/_lib/I18nWrapper";
 
 export const metadata = {
-  title: "BPA Web Panels (Wowdash)",
-  description: "BPA multi-panel web using Wowdash Tailwind admin template",
+  title: "WPA — Pet Smart Solution",
+  description: "World Pet Association (WPA) — Pet Smart Solution. Multi-panel web for pet care and management.",
 };
 
 export default async function RootLayout({ children }) {

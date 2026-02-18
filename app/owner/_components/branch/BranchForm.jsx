@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useRef, useState, useMemo, useCallback } from "react";
 import { ownerGet, ownerPost, ownerPut, ownerUpload } from "@/app/owner/_lib/ownerApi";
 import BranchFormStepper from "./BranchFormStepper";
 import LocationField from "@/src/components/location/LocationField";
@@ -68,6 +68,11 @@ export default function BranchForm({
     OTHER: null,
   });
 
+  /** In edit mode, only hydrate formData once per branchId so user edits are not overwritten by effect re-runs (e.g. Strict Mode). */
+  const hydratedBranchIdRef = useRef(null);
+  /** Once user edits name or typeCodes, never overwrite them from the load effect. */
+  const userEditedStep1Ref = useRef(false);
+
   // Load branch types
   useEffect(() => {
     let alive = true;
@@ -101,6 +106,11 @@ export default function BranchForm({
   // Load existing branch data for edit mode
   useEffect(() => {
     if (mode !== "edit" || !branchIdProp) return;
+
+    const branchKey = String(branchIdProp);
+    if (String(hydratedBranchIdRef.current) !== branchKey) {
+      userEditedStep1Ref.current = false;
+    }
 
     let alive = true;
     setLoading(true);
@@ -183,7 +193,16 @@ export default function BranchForm({
         };
 
         console.log("Setting form data:", formDataToSet);
-        setFormData(formDataToSet);
+        const branchKey = String(branchIdProp);
+        const alreadyHydrated = String(hydratedBranchIdRef.current) === branchKey;
+        if (!alreadyHydrated) {
+          setFormData((prev) =>
+            userEditedStep1Ref.current
+              ? { ...formDataToSet, name: prev.name, typeCodes: prev.typeCodes }
+              : formDataToSet
+          );
+          hydratedBranchIdRef.current = branchKey;
+        }
 
         // Load documents
         const profileDocuments = profile?.documents || branchData?.documents || [];
@@ -348,10 +367,16 @@ export default function BranchForm({
           id = response?.data?.id || response?.id;
           setBranchId(String(id));
         } else {
-          await ownerPut(`/api/v1/owner/branches/${id}`, {
-            name: formData.name,
-            typeCodes: formData.typeCodes,
-          });
+          if (!id) {
+            setError("Branch ID is missing. Please refresh the page.");
+            setBusy(false);
+            return;
+          }
+          const payload = {
+            name: String(formData.name || "").trim(),
+            typeCodes: Array.isArray(formData.typeCodes) ? formData.typeCodes : [],
+          };
+          await ownerPut(`/api/v1/owner/branches/${id}`, payload);
         }
       }
 
@@ -400,6 +425,7 @@ export default function BranchForm({
       } else {
         // Final step - submit for verification
         await ownerPost(`/api/v1/owner/branches/${id}/profile/submit`, {});
+        setNotice("Branch updated successfully! Redirecting…");
         onDone?.();
       }
     } catch (e) {
@@ -513,10 +539,10 @@ export default function BranchForm({
         </div>
       )}
 
-      {/* STEP 1: Basic Info */}
+      {/* STEP 1: Basic Info — position relative + z-index so inputs are clickable above stepper */}
       {step === 1 && (
-        <div className="card radius-12 mb-24">
-          <div className="card-body p-28">
+        <div className="card radius-12 mb-24" style={{ position: "relative", zIndex: 5, pointerEvents: "auto" }}>
+          <div className="card-body p-28" style={{ pointerEvents: "auto" }}>
             <h5 className="mb-20 fw-bold">
               <i className="ri-building-2-line me-2 text-primary"></i>
               Basic Information
@@ -527,17 +553,37 @@ export default function BranchForm({
                 <label className="form-label fw-semibold mb-8">
                   Branch Name <span className="text-danger">*</span>
                 </label>
-                <input
-                  type="text"
-                  className="form-control radius-12"
-                  value={formData.name}
-                  onChange={(e) => updateField("name", e.target.value)}
-                  placeholder="e.g., Rampura Clinic Branch"
-                  disabled={busy}
-                />
+                {mode === "edit" ? (
+                  <input
+                    key={`step1-name-edit-${branchIdProp}-${loading}`}
+                    type="text"
+                    className="form-control radius-12"
+                    defaultValue={formData.name ?? ""}
+                    onChange={(e) => {
+                      userEditedStep1Ref.current = true;
+                      setFormData((p) => ({ ...p, name: e.target.value }));
+                    }}
+                    onBlur={(e) => setFormData((p) => ({ ...p, name: e.target.value.trim() }))}
+                    placeholder="e.g., Rampura Clinic Branch"
+                    disabled={busy}
+                    autoComplete="off"
+                    aria-label="Branch Name"
+                  />
+                ) : (
+                  <input
+                    type="text"
+                    className="form-control radius-12"
+                    value={formData.name ?? ""}
+                    onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
+                    placeholder="e.g., Rampura Clinic Branch"
+                    disabled={busy}
+                    autoComplete="off"
+                    aria-label="Branch Name"
+                  />
+                )}
               </div>
 
-              <div className="col-md-12">
+              <div className="col-md-12" key={`step1-types-${branchIdProp}-${loading}`}>
                 <label className="form-label fw-semibold mb-8">
                   Branch Types <span className="text-danger">*</span>
                 </label>
@@ -546,19 +592,32 @@ export default function BranchForm({
                 ) : (
                   <div className="row g-3">
                     {branchTypes.map((type) => {
-                      const isSelected = formData.typeCodes.includes(type.code);
+                      const code = type?.code ?? "";
+                      const safeId = `branch-type-${String(code).replace(/\s+/g, "-")}-${branchIdProp || "new"}`;
+                      const selected = Array.isArray(formData.typeCodes) ? formData.typeCodes : [];
+                      const isSelected = selected.includes(code);
+                      const isDisabled = busy || (isSelected && selected.length === 1);
                       return (
-                        <div key={type.code} className="col-12 col-md-6">
+                        <div key={code} className="col-12 col-md-6">
                           <div className="form-check">
                             <input
                               className="form-check-input"
                               type="checkbox"
-                              checked={isSelected}
-                              onChange={() => toggleType(type.code)}
-                              disabled={busy || (isSelected && formData.typeCodes.length === 1)}
-                              id={`type-${type.code}`}
+                              checked={!!isSelected}
+                              onChange={(e) => {
+                                e.stopPropagation();
+                                userEditedStep1Ref.current = true;
+                                const next = e.target.checked
+                                  ? [...selected, code]
+                                  : selected.filter((x) => x !== code);
+                                if (next.length === 0) return;
+                                setFormData((prev) => ({ ...prev, typeCodes: next }));
+                              }}
+                              disabled={isDisabled}
+                              id={safeId}
+                              aria-label={type.nameEn || code}
                             />
-                            <label className="form-check-label" htmlFor={`type-${type.code}`}>
+                            <label className="form-check-label" htmlFor={safeId}>
                               {type.nameEn}
                               {type.nameBn && <span className="text-muted ms-2">({type.nameBn})</span>}
                             </label>

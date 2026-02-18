@@ -3,6 +3,7 @@
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { Card, Col, Row, Button, FormCheck } from "react-bootstrap";
 import { detectAuthType } from "@/src/utils/authHelpers";
 import AuthFooter from "@/src/bpa/components/AuthFooter";
 import { isAllowedReturnTo } from "@/lib/authRedirect";
@@ -105,119 +106,132 @@ function LoginPageContent() {
   }
 
   return (
-    <section className="auth bg-base d-flex flex-wrap min-vh-100">
-      <div className="auth-left d-lg-block d-none">
-        <div className="d-flex align-items-center flex-column h-100 justify-content-center">
-          <img src="/assets/images/auth/auth-img.png" alt="Auth" />
-        </div>
-      </div>
+    <div className="d-flex flex-column vh-100 p-3">
+      <div className="d-flex flex-column flex-grow-1">
+        <Row className="h-100">
+          <Col xxl={7}>
+            <Row className="justify-content-center h-100">
+              <Col lg={6} className="py-lg-5">
+                <div className="d-flex flex-column h-100 justify-content-center">
+                  <div className="auth-logo mb-4">
+                    <Link href="/" className="d-inline-block">
+                      <img src="/assets/images/logo.png" alt="BPA" height={32} />
+                    </Link>
+                  </div>
+                  <h2 className="fw-bold fs-24">Sign In</h2>
+                  <p className="text-muted mt-1 mb-4">
+                    Enter your email or phone and password to access your account.
+                  </p>
 
-      <div className="auth-right py-32 px-24 d-flex flex-column justify-content-center">
-        <div className="max-w-464-px mx-auto w-100">
-          <div>
-            <Link href="/" className="mb-40 max-w-290-px d-inline-block">
-              <img src="/assets/images/logo.png" alt="BPA" />
-            </Link>
-            <h4 className="mb-12">Sign In to your Account</h4>
-            <p className="mb-32 text-secondary-light text-lg">
-              Welcome back! please enter your detail
-            </p>
-          </div>
+                  {invited ? (
+                    <div className="alert alert-success py-12 px-16 radius-8 mb-20">
+                      Your account was created successfully. Please login to continue.
+                    </div>
+                  ) : null}
 
-          {invited ? (
-            <div className="alert alert-success py-12 px-16 radius-8 mb-20">
-              Your account was created successfully. Please login to continue.
-            </div>
-          ) : null}
+                  {registered ? (
+                    <div className="alert alert-success py-12 px-16 radius-8 mb-20">
+                      Registration successful! Please login to continue.
+                    </div>
+                  ) : null}
 
-          {registered ? (
-            <div className="alert alert-success py-12 px-16 radius-8 mb-20">
-              Registration successful! Please login to continue.
-            </div>
-          ) : null}
+                  {err ? (
+                    <div className="alert alert-danger py-12 px-16 radius-8 mb-20">
+                      {err}
+                    </div>
+                  ) : null}
 
-          {err ? (
-            <div className="alert alert-danger py-12 px-16 radius-8 mb-20">
-              {err}
-            </div>
-          ) : null}
+                  <div className="mb-5">
+                    <form className="authentication-form" onSubmit={onSubmit}>
+                      <div className="mb-3">
+                        <label className="form-label" htmlFor="login-identifier">
+                          Email or Phone
+                        </label>
+                        <div className={`input-group ${identifier && !authType?.type ? "is-invalid" : ""}`}>
+                          <span className="input-group-text bg-light border-end-0">
+                            <i className={authType?.type === "email" ? "ri-mail-line" : "ri-phone-line"} />
+                          </span>
+                          <input
+                            id="login-identifier"
+                            type="text"
+                            className={`form-control ${identifier && !authType?.type ? "is-invalid" : ""}`}
+                            value={identifier}
+                            onChange={(e) => setIdentifier(e.target.value)}
+                            placeholder="Enter your email or phone number"
+                            autoComplete="username"
+                          />
+                        </div>
+                        {identifier && !authType?.type && (
+                          <div className="text-danger small mt-1">
+                            Please enter a valid email or phone number
+                          </div>
+                        )}
+                      </div>
 
-          <form onSubmit={onSubmit}>
-            <div className="icon-field mb-16">
-              <input
-                type="text"
-                className={`form-control h-56-px bg-neutral-50 radius-12 ${identifier && !authType?.type ? "is-invalid" : ""}`}
-                value={identifier}
-                onChange={(e) => setIdentifier(e.target.value)}
-                placeholder="Email or Phone Number"
-                autoComplete="username"
-              />
-              <span className="icon">
-                <i className={authType?.type === "email" ? "ri-mail-line" : "ri-phone-line"} />
-              </span>
-              {identifier && !authType?.type && (
-                <div className="text-danger small mt-4">
-                  Please enter a valid email or phone number
+                      <div className="mb-3">
+                        <div className="d-flex justify-content-between align-items-center mb-1">
+                          <label className="form-label mb-0" htmlFor="login-password">
+                            Password
+                          </label>
+                          <Link href="/forgot-password" className="text-muted text-decoration-none small">
+                            Forgot password?
+                          </Link>
+                        </div>
+                        <div className="input-group">
+                          <span className="input-group-text bg-light border-end-0">
+                            <i className="ri-lock-password-line" />
+                          </span>
+                          <input
+                            id="login-password"
+                            type="password"
+                            className="form-control"
+                            value={password}
+                            onChange={(e) => setPassword(e.target.value)}
+                            placeholder="Enter your password"
+                            autoComplete="current-password"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="mb-3">
+                        <FormCheck type="checkbox" id="login-remember" label="Remember me" />
+                      </div>
+
+                      <div className="mb-4 text-center d-grid">
+                        <Button variant="primary" type="submit" disabled={!canSubmit}>
+                          {loading ? "Signing in..." : "Sign In"}
+                        </Button>
+                      </div>
+                    </form>
+
+                    <p className="text-muted text-center mb-0">
+                      Don&apos;t have an account?{" "}
+                      <Link href="/register" className="text-dark fw-bold">
+                        Sign Up
+                      </Link>
+                    </p>
+                  </div>
+
+                  <AuthFooter />
                 </div>
-              )}
-            </div>
-
-            <div className="position-relative mb-20">
-              <div className="icon-field">
-                <input
-                  type="password"
-                  className="form-control h-56-px bg-neutral-50 radius-12"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Password"
-                  autoComplete="current-password"
+              </Col>
+            </Row>
+          </Col>
+          <Col xxl={5} className="d-none d-xxl-flex">
+            <Card className="h-100 mb-0 overflow-hidden">
+              <div className="d-flex flex-column h-100">
+                <img
+                  src="/assets/images/auth/auth-img.png"
+                  alt="Auth"
+                  className="w-100 h-100 object-fit-cover"
+                  style={{ objectFit: "cover" }}
                 />
-                <span className="icon">
-                  <i className="ri-lock-password-line" />
-                </span>
               </div>
-            </div>
-
-            <div className="">
-              <div className="d-flex justify-content-between gap-2">
-                <div className="form-check style-check d-flex align-items-center">
-                  <input
-                    className="form-check-input border border-neutral-300"
-                    type="checkbox"
-                    id="remeber"
-                  />
-                  <label className="form-check-label" htmlFor="remeber">
-                    Remember me
-                  </label>
-                </div>
-                <Link href="/forgot-password" className="text-primary-600 fw-medium">
-                  Forgot Password?
-                </Link>
-              </div>
-            </div>
-
-            <button
-              type="submit"
-              className="btn btn-primary-600 text-sm btn-sm px-12 py-16 w-100 radius-12 mt-32"
-              disabled={!canSubmit}
-            >
-              {loading ? "Signing in..." : "Sign In"}
-            </button>
-
-            <div className="mt-32 text-center text-sm">
-              <p className="mb-0">
-                Don't have an account?{" "}
-                <Link href="/register" className="text-primary-600 fw-semibold">
-                  Sign Up
-                </Link>
-              </p>
-            </div>
-          </form>
-
-          <AuthFooter />
-        </div>
+            </Card>
+          </Col>
+        </Row>
       </div>
-    </section>
+    </div>
   );
 }
 

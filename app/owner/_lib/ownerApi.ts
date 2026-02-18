@@ -1,8 +1,14 @@
 // Base API host (no trailing slash). Example: http://localhost:3000
 const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
 
+/** In browser use same-origin so Next.js rewrites /api to backend and cookies are sent (e.g. 3104 → 3000). */
+function getBase(): string {
+  if (typeof window !== "undefined") return "";
+  return API_BASE;
+}
+
 export async function ownerGet<T>(path: string): Promise<T | null> {
-  const res = await fetch(`${API_BASE}${path}`, { method: "GET", credentials: "include" });
+  const res = await fetch(`${getBase()}${path}`, { method: "GET", credentials: "include" });
   const j = await res.json().catch(() => null);
   // 403 = no owner access (e.g. KYC onboarding) — return null to avoid console noise; callers should handle null
   if (res.status === 403) return null;
@@ -13,7 +19,7 @@ export async function ownerGet<T>(path: string): Promise<T | null> {
 /** Same as ownerGet but returns null on 403/errors — use for optional UI (badges, counts) to avoid console noise */
 export async function ownerGetSafe<T>(path: string): Promise<T | null> {
   try {
-    const res = await fetch(`${API_BASE}${path}`, { method: "GET", credentials: "include" });
+    const res = await fetch(`${getBase()}${path}`, { method: "GET", credentials: "include" });
     if (res.status === 403) return null;
     const j = await res.json().catch(() => null);
     if (!res.ok) return null;
@@ -24,7 +30,7 @@ export async function ownerGetSafe<T>(path: string): Promise<T | null> {
 }
 
 export async function ownerPost<T>(path: string, body: any): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${getBase()}${path}`, {
     method: "POST",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -42,7 +48,7 @@ export async function ownerPost<T>(path: string, body: any): Promise<T> {
 }
 
 export async function ownerPut<T>(path: string, body: any): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${getBase()}${path}`, {
     method: "PUT",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -54,7 +60,7 @@ export async function ownerPut<T>(path: string, body: any): Promise<T> {
 }
 
 export async function ownerPatch<T>(path: string, body: any): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${getBase()}${path}`, {
     method: "PATCH",
     credentials: "include",
     headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -72,7 +78,7 @@ export async function ownerPatch<T>(path: string, body: any): Promise<T> {
 }
 
 export async function ownerDelete<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${getBase()}${path}`, {
     method: "DELETE",
     credentials: "include",
     headers: { Accept: "application/json" },
@@ -96,7 +102,7 @@ export async function getOwnerHubs(): Promise<{ id: number; name: string; code: 
 
 /** Multipart upload helper (FormData). Do NOT set Content-Type manually. */
 export async function ownerUpload<T>(path: string, formData: FormData): Promise<T> {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const res = await fetch(`${getBase()}${path}`, {
     method: "POST",
     credentials: "include",
     body: formData,

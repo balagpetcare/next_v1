@@ -5,7 +5,6 @@ import { Play } from 'next/font/google'
 import Image from 'next/image'
 import NextTopLoader from 'nextjs-toploader'
 import '@larkon/assets/scss/app.scss'
-import { DEFAULT_PAGE_TITLE } from '@larkon/context/constants'
 
 const play = Play({
   subsets: ['latin'],
@@ -15,10 +14,10 @@ const play = Play({
 
 export const metadata: Metadata = {
   title: {
-    template: '%s | Larkon Nextjs - Responsive Admin Dashboard Template',
-    default: DEFAULT_PAGE_TITLE,
+    template: '%s | WPA — Pet Smart Solution',
+    default: 'WPA — Pet Smart Solution | Admin Dashboard',
   },
-  description: 'Bootstrap 5 based  Responsive Admin Dashboard Template',
+  description: 'World Pet Association (WPA) — Pet Smart Solution. Admin dashboard for pet care and management.',
 }
 
 const splashScreenStyles = `
