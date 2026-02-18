@@ -146,7 +146,10 @@ export default function BranchForm({
 
         // Extract type codes from types array
         const typeCodes = Array.isArray(branchData?.types)
-          ? branchData.types.map((t) => t?.type?.code || t?.code).filter(Boolean)
+          ? branchData.types
+              .map((t) => t?.type?.code || t?.code)
+              .filter(Boolean)
+              .map((c) => String(c))
           : [];
 
         console.log("Extracted type codes:", typeCodes);
@@ -255,21 +258,13 @@ export default function BranchForm({
     setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  // Toggle branch type
-  const toggleType = (code) => {
+  const toggleTypeCode = (code, checked) => {
+    const c = String(code || "");
     setFormData((prev) => {
-      const current = Array.isArray(prev.typeCodes) ? prev.typeCodes : [];
-      const isSelected = current.includes(code);
-      
-      if (isSelected && current.length === 1) {
-        // Don't allow deselecting the last type
-        return prev;
-      }
-      
-      const next = isSelected
-        ? current.filter((c) => c !== code)
-        : [...current, code];
-      
+      const selected = Array.isArray(prev.typeCodes) ? prev.typeCodes.map(String) : [];
+      const next = checked
+        ? Array.from(new Set([...selected, c]))
+        : selected.filter((x) => x !== c);
       return { ...prev, typeCodes: next };
     });
   };
@@ -592,11 +587,11 @@ export default function BranchForm({
                 ) : (
                   <div className="row g-3">
                     {branchTypes.map((type) => {
-                      const code = type?.code ?? "";
-                      const safeId = `branch-type-${String(code).replace(/\s+/g, "-")}-${branchIdProp || "new"}`;
-                      const selected = Array.isArray(formData.typeCodes) ? formData.typeCodes : [];
+                      const code = String(type?.code ?? "");
+                      const safeId = `branch-type-${code.replace(/[^a-zA-Z0-9_-]/g, "-")}-${branchIdProp || "new"}`;
+                      const selected = Array.isArray(formData.typeCodes) ? formData.typeCodes.map(String) : [];
                       const isSelected = selected.includes(code);
-                      const isDisabled = busy || (isSelected && selected.length === 1);
+                      const isDisabled = busy;
                       return (
                         <div key={code} className="col-12 col-md-6">
                           <div className="form-check">
@@ -607,11 +602,7 @@ export default function BranchForm({
                               onChange={(e) => {
                                 e.stopPropagation();
                                 userEditedStep1Ref.current = true;
-                                const next = e.target.checked
-                                  ? [...selected, code]
-                                  : selected.filter((x) => x !== code);
-                                if (next.length === 0) return;
-                                setFormData((prev) => ({ ...prev, typeCodes: next }));
+                                toggleTypeCode(code, e.target.checked);
                               }}
                               disabled={isDisabled}
                               id={safeId}

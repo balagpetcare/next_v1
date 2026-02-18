@@ -16,3 +16,10 @@
   cursor: pointer;
   appearance: none;
 }
+
+// Notification dropdown: mobile full-screen sheet
+@media (max-width: 575.98px) {
+  .notification-dropdown-list {
+    max-height: calc(100vh - 180px) !important;
+  }
+}

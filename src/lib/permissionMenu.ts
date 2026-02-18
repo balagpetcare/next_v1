@@ -63,6 +63,28 @@ function filterTree(items: MenuItem[], perms: Set<string>): MenuItem[] {
 const CORE_OWNER_FALLBACK: MenuItem[] = [
   { id: "owner.dashboard", label: "Dashboard", href: "/owner/dashboard", icon: "solar:home-smile-outline", required: [] },
   {
+    id: "owner.operations",
+    label: "Operations",
+    icon: "solar:widget-5-outline",
+    required: [],
+    children: [
+      { id: "owner.operations.appointments", label: "Appointments", href: "/owner/dashboards/branch-manager", required: [] },
+      { id: "owner.operations.pos", label: "POS", href: "/owner/dashboards/branch-manager", required: [] },
+      { id: "owner.operations.orders", label: "Orders", href: "/owner/orders", required: [] },
+    ],
+  },
+  {
+    id: "owner.medical",
+    label: "Medical",
+    icon: "solar:medical-kit-outline",
+    required: [],
+    children: [
+      { id: "owner.medical.patients", label: "Patients", href: "/owner/dashboards/branch-manager", required: [] },
+      { id: "owner.medical.prescriptions", label: "Prescriptions", href: "/owner/dashboards/branch-manager", required: [] },
+      { id: "owner.medical.treatments", label: "Treatments", href: "/owner/dashboards/branch-manager", required: [] },
+    ],
+  },
+  {
     id: "owner.myBusiness",
     label: "My Business",
     icon: "solar:buildings-2-outline",
@@ -103,6 +125,16 @@ const CORE_OWNER_FALLBACK: MenuItem[] = [
       },
     ],
   },
+  {
+    id: "owner.people",
+    label: "People",
+    icon: "solar:users-group-rounded-outline",
+    required: [],
+    children: [
+      { id: "owner.people.staff", label: "Staff", href: "/owner/staff", required: [] },
+      { id: "owner.people.customers", label: "Customers", href: "/owner/dashboards/branch-manager", required: [] },
+    ],
+  },
     {
       id: "owner.accessStaff",
       label: "Access & Staff",
@@ -136,7 +168,9 @@ const CORE_OWNER_FALLBACK: MenuItem[] = [
     icon: "solar:box-outline",
     required: [],
     children: [
-      { id: "owner.inventory.overview", label: "Overview", href: "/owner/inventory", required: [] },
+      { id: "owner.inventory.products", label: "Products", href: "/owner/products", required: [] },
+      { id: "owner.inventory.overview", label: "Stock", href: "/owner/inventory", required: [] },
+      { id: "owner.inventory.vendors", label: "Vendors", href: "/owner/vendors", required: [] },
       { id: "owner.inventory.warehouse", label: "Warehouse", href: "/owner/inventory/warehouse", required: [] },
       { id: "owner.inventory.stockRequests", label: "Stock Requests", href: "/owner/inventory/stock-requests", required: [] },
       { id: "owner.inventory.transfers", label: "Transfers", href: "/owner/inventory/transfers", required: [] },
@@ -163,7 +197,25 @@ const CORE_OWNER_FALLBACK: MenuItem[] = [
     ],
   },
   { id: "owner.finance", label: "Finance", href: "/owner/finance", icon: "solar:wallet-outline", required: [] },
+  {
+    id: "owner.reports",
+    label: "Reports",
+    icon: "solar:chart-outline",
+    required: [],
+    children: [
+      { id: "owner.reports.sales", label: "Sales Report", href: "/owner/reports/sales", required: [] },
+      { id: "owner.reports.stock", label: "Stock Report", href: "/owner/reports/stock", required: [] },
+      { id: "owner.reports.revenue", label: "Revenue Analytics", href: "/owner/reports/revenue", required: [] },
+    ],
+  },
   { id: "owner.audit", label: "Audit & System", href: "/owner/audit", icon: "solar:shield-check-outline", required: [] },
+  {
+    id: "owner.settings",
+    label: "Settings",
+    icon: "solar:settings-outline",
+    required: [],
+    children: [{ id: "owner.settings.profile", label: "Profile", href: "/owner/settings", required: [] }],
+  },
   {
     id: "owner.teams",
     label: "Teams & Delegation",
@@ -182,6 +234,28 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
   owner: [
     { id: "owner.dashboard", label: "Dashboard", href: "/owner/dashboard", icon: "solar:home-smile-outline", required: [] },
     { id: "owner.workspace", label: "Workspace", href: "/owner/workspace", icon: "solar:widget-5-outline", required: [] },
+    {
+      id: "owner.operations",
+      label: "Operations",
+      icon: "solar:widget-5-outline",
+      required: [],
+      children: [
+        { id: "owner.operations.appointments", label: "Appointments", href: "/owner/dashboards/branch-manager", required: [] },
+        { id: "owner.operations.pos", label: "POS", href: "/owner/dashboards/branch-manager", required: [] },
+        { id: "owner.operations.orders", label: "Orders", href: "/owner/orders", required: ["orders.read"] },
+      ],
+    },
+    {
+      id: "owner.medical",
+      label: "Medical",
+      icon: "solar:medical-kit-outline",
+      required: [],
+      children: [
+        { id: "owner.medical.patients", label: "Patients", href: "/owner/dashboards/branch-manager", required: [] },
+        { id: "owner.medical.prescriptions", label: "Prescriptions", href: "/owner/dashboards/branch-manager", required: [] },
+        { id: "owner.medical.treatments", label: "Treatments", href: "/owner/dashboards/branch-manager", required: [] },
+      ],
+    },
     {
       id: "owner.dashboards",
       label: "Dashboards",
@@ -234,6 +308,16 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
       ],
     },
     {
+      id: "owner.people",
+      label: "People",
+      icon: "solar:users-group-rounded-outline",
+      required: [],
+      children: [
+        { id: "owner.people.staff", label: "Staff", href: "/owner/staff", required: ["staff.read"] },
+        { id: "owner.people.customers", label: "Customers", href: "/owner/dashboards/branch-manager", required: ["customers.read"] },
+      ],
+    },
+    {
       id: "owner.accessStaff",
       label: "Access & Staff",
       icon: "solar:user-check-outline",
@@ -266,7 +350,9 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
       icon: "solar:box-outline",
       required: ["inventory.read"],
       children: [
-        { id: "owner.inventory.overview", label: "Overview", href: "/owner/inventory", required: ["inventory.read"] },
+        { id: "owner.inventory.products", label: "Products", href: "/owner/products", required: ["product.read"] },
+        { id: "owner.inventory.overview", label: "Stock", href: "/owner/inventory", required: ["inventory.read"] },
+        { id: "owner.inventory.vendors", label: "Vendors", href: "/owner/vendors", required: ["inventory.read"] },
         { id: "owner.inventory.warehouse", label: "Warehouse", href: "/owner/inventory/warehouse", required: ["inventory.read"] },
         { id: "owner.inventory.stockRequests", label: "Stock Requests", href: "/owner/inventory/stock-requests", required: ["inventory.read"] },
         { id: "owner.inventory.transfers", label: "Transfers", href: "/owner/inventory/transfers", required: ["inventory.read"] },
@@ -307,13 +393,6 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
     },
     { id: "owner.notifications", label: "Notifications", href: "/owner/notifications", icon: "solar:bell-outline", required: [] },
     {
-      id: "owner.orders",
-      label: "Orders",
-      icon: "solar:bag-check-outline",
-      href: "/owner/orders",
-      required: ["orders.read", "org.read"],
-    },
-    {
       id: "owner.reports",
       label: "Reports",
       icon: "solar:chart-outline",
@@ -329,7 +408,7 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
       label: "Settings",
       icon: "solar:settings-outline",
       required: ["settings.read", "settings.manage"],
-      children: [{ id: "owner.settings.profile", label: "Profile", href: "/owner/settings", required: ["settings.read"] }],
+      children: [{ id: "owner.settings.profile", label: "Profile", href: "/owner/settings", required: [] }],
     },
   ],
   shop: [
@@ -683,7 +762,7 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
     { id: "producer.batches", label: "Batches", href: "/producer/batches", icon: "solar:archive-outline", required: [] },
   ],
   staff: [
-    { id: "staff.dashboard", label: "Branches", href: "/staff/branches", icon: "solar:home-smile-outline", required: [] },
+    { id: "staff.dashboard", label: "Branches", href: "/staff/branch", icon: "solar:home-smile-outline", required: [] },
     { id: "staff.workspace", label: "Workspace", href: "/staff/workspace", icon: "solar:widget-5-outline", required: [] },
   ],
 };

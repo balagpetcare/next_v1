@@ -76,7 +76,7 @@ function pickFormattedAddress(input: any): string | undefined {
     strOrNull(input?.formattedAddress) ||
     strOrNull(input?.fullPathText) ||
     strOrNull(input?.text) ||
-    strOrNull(input?.addressLine) ||
+    strOrNullPreserveSpaces(input?.addressLine) ||
     undefined
   );
 }
@@ -229,6 +229,8 @@ export function locationValueToAddressJson(
   if (!normalized) return {};
   const enriched = withLegacyLocationFields(normalized, value);
   const text = options?.addressText ?? enriched.text ?? enriched.fullPathText ?? "";
+  const addressLine =
+    typeof enriched.addressLine === "string" ? enriched.addressLine.trim() || null : null;
 
   const numOrUndefined = (v: any) => {
     const n = numOrNull(v);
@@ -244,7 +246,7 @@ export function locationValueToAddressJson(
     stateName: enriched.state ?? enriched.stateName ?? null,
     cityName: enriched.city ?? enriched.cityName ?? null,
     postalCode: enriched.postalCode ?? null,
-    addressLine: enriched.addressLine ?? null,
+    addressLine,
     formattedAddress: enriched.formattedAddress ?? null,
     provider: enriched.provider ?? null,
     providerPlaceId: enriched.providerPlaceId ?? null,

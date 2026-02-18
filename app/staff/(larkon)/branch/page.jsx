@@ -60,17 +60,15 @@ export default function StaffBranchSelectorPage() {
         const lastId = typeof window !== "undefined" ? localStorage.getItem(LAST_ACTIVE_BRANCH_KEY) : null;
         const lastIdNum = lastId ? Number(lastId) : NaN;
         const validLast = approved.some((b) => b.branchId === lastIdNum);
-        const targetId = validLast ? lastIdNum : approved[0].branchId;
-        if (typeof window !== "undefined") {
-          localStorage.setItem(LAST_ACTIVE_BRANCH_KEY, String(targetId));
+        if (validLast && lastIdNum) {
+          router.replace(`/staff/branch/${lastIdNum}`);
+          return;
         }
-        router.replace(`/staff/branch/${targetId}`);
-        return;
       }
 
-      // Only poll when at least one request is PENDING (waiting for approval)
+      // Only poll when no approved branches and at least one request is PENDING (waiting for approval)
       const hasPending = list.some((b) => b.status === "PENDING");
-      if (hasPending) {
+      if (approved.length === 0 && hasPending) {
         pollRef.current = setInterval(async () => {
           const next = await fetchBranchAccess();
           if (!mountedRef.current || !Array.isArray(next)) return;
@@ -140,7 +138,7 @@ export default function StaffBranchSelectorPage() {
             </p>
             <button
               className="btn btn-primary"
-              onClick={() => router.push("/staff/branches")}
+              onClick={() => router.push("/staff/branch")}
               aria-label="Request access"
             >
               Request Access
