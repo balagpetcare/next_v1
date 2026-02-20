@@ -6,10 +6,13 @@ import { useLarkonPanelBasePath } from '@larkon/context/LarkonPanelContext'
 import { Suspense, useMemo } from 'react'
 import AppMenu from './components/AppMenu'
 import HoverMenuToggle from './components/HoverMenuToggle'
+import { useStaffBranchMenuItems } from '@/src/lib/useStaffBranchMenuItems'
 
 const VerticalNavigationBarPage = () => {
   const basePath = useLarkonPanelBasePath()
-  const menuItems = useMemo(() => getMenuItems(basePath), [basePath])
+  const staffBranchItems = useStaffBranchMenuItems(basePath)
+  const panelItems = useMemo(() => getMenuItems(basePath), [basePath])
+  const menuItems = staffBranchItems ?? panelItems
   return (
     <div className="main-nav">
       <LogoBox />

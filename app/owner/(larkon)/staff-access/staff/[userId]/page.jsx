@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { use, useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 import { ownerGet, ownerPost } from "@/app/owner/_lib/ownerApi";
@@ -9,7 +9,8 @@ const ROLE_OPTIONS = ["BRANCH_MANAGER", "BRANCH_STAFF", "SELLER", "DELIVERY_MANA
 
 export default function StaffAccessDetailPage({ params }) {
   const router = useRouter();
-  const staffUserId = Number(params?.userId);
+  const resolved = use(params);
+  const staffUserId = Number(resolved?.userId);
   const [accessRows, setAccessRows] = useState([]);
   const [branches, setBranches] = useState([]);
   const [form, setForm] = useState({ branchId: "", role: "BRANCH_STAFF", note: "" });

@@ -3,9 +3,43 @@
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
+import { Card, Col, Row, Button } from "react-bootstrap";
 import { detectAuthType, validateRegistration } from "@/src/utils/authHelpers";
 import { apiPost } from "@/lib/api";
 import AuthFooter from "@/src/bpa/components/AuthFooter";
+
+/** Larkon-style two-column layout wrapper: form left, image right */
+function LarkonAuthLayout({ children }) {
+  return (
+    <div className="d-flex flex-column vh-100 p-3">
+      <div className="d-flex flex-column flex-grow-1">
+        <Row className="h-100">
+          <Col xxl={7}>
+            <Row className="justify-content-center h-100">
+              <Col lg={6} className="py-lg-5">
+                <div className="d-flex flex-column h-100 justify-content-center">
+                  {children}
+                </div>
+              </Col>
+            </Row>
+          </Col>
+          <Col xxl={5} className="d-none d-xxl-flex">
+            <Card className="h-100 mb-0 overflow-hidden">
+              <div className="d-flex flex-column h-100">
+                <img
+                  src="/assets/images/auth/auth-img.png"
+                  alt="Auth"
+                  className="w-100 h-100"
+                  style={{ objectFit: "cover" }}
+                />
+              </div>
+            </Card>
+          </Col>
+        </Row>
+      </div>
+    </div>
+  );
+}
 
 /**
  * Unified Registration Page with WowDash Template Design
@@ -150,123 +184,110 @@ function InviteRegistration({ token, onSuccess, isAuthenticated, userInfo }) {
   }
 
   return (
-    <section className="auth bg-base d-flex flex-wrap min-vh-100">
-      <div className="auth-left d-lg-block d-none">
-        <div className="d-flex align-items-center flex-column h-100 justify-content-center">
-          <img src="/assets/images/auth/auth-img.png" alt="Auth" />
-        </div>
+    <LarkonAuthLayout>
+      <div className="auth-logo mb-4">
+        <Link href="/" className="d-inline-block">
+          <img src="/assets/images/logo.png" alt="BPA" height={32} />
+        </Link>
       </div>
+      <h2 className="fw-bold fs-24">Complete Registration</h2>
+      <p className="text-muted mt-1 mb-4">Finish your signup using the invitation link.</p>
 
-      <div className="auth-right py-32 px-24 d-flex flex-column justify-content-center">
-        <div className="max-w-464-px mx-auto w-100">
-          <div>
-            <Link href="/" className="mb-40 max-w-290-px d-inline-block">
-              <img src="/assets/images/logo.png" alt="BPA" />
-            </Link>
-            <h4 className="mb-12">Complete Registration</h4>
-            <p className="mb-32 text-secondary-light text-lg">
-              Finish your signup using the invitation link.
-            </p>
+      {!token ? (
+        <div className="alert alert-warning py-12 px-16 radius-8 mb-20" role="alert">
+          No invite token found in the URL.
+        </div>
+      ) : null}
+
+      {error ? (
+        <div className="alert alert-danger py-12 px-16 radius-8 mb-20" role="alert">
+          {error}
+        </div>
+      ) : null}
+
+      {loading ? (
+        <div className="text-center py-24">
+          <div className="text-muted">Checking invitation…</div>
+        </div>
+      ) : verified ? (
+        <div className="mb-5">
+          {isAuthenticated ? (
+            <div className="alert alert-info py-12 px-16 radius-8 mb-20" role="alert">
+              You are signed in as {userInfo?.email || userInfo?.phone || "your account"}.
+            </div>
+          ) : null}
+          <div className="alert alert-success py-12 px-16 radius-8 mb-20" role="alert">
+            <div className="fw-semibold mb-4">Invite verified ✅</div>
+            {inviteInfo?.expiresAt ? (
+              <div className="text-sm mt-4">
+                Expires at: {new Date(inviteInfo.expiresAt).toLocaleString()}
+              </div>
+            ) : null}
+            {inviteInfo?.branch?.name && (
+              <div className="text-sm mt-4">
+                Branch: <b>{inviteInfo.branch.name}</b>
+              </div>
+            )}
+            {inviteInfo?.org?.name && (
+              <div className="text-sm mt-4">
+                Organization: <b>{inviteInfo.org.name}</b>
+              </div>
+            )}
+            {inviteInfo?.role && (
+              <div className="text-sm mt-4">
+                Role: <b>{inviteRoleLabel}</b>
+              </div>
+            )}
           </div>
 
-          {!token ? (
-            <div className="alert alert-warning py-12 px-16 radius-8 mb-20" role="alert">
-              No invite token found in the URL.
-            </div>
-          ) : null}
-
-          {error ? (
-            <div className="alert alert-danger py-12 px-16 radius-8 mb-20" role="alert">
-              {error}
-            </div>
-          ) : null}
-
-          {loading ? (
-            <div className="text-center py-24">
-              <div className="text-secondary-light">Checking invitation…</div>
-            </div>
-          ) : verified ? (
-            <div className="mb-20">
-              {isAuthenticated ? (
-                <div className="alert alert-info py-12 px-16 radius-8 mb-20" role="alert">
-                  You are signed in as {userInfo?.email || userInfo?.phone || "your account"}.
+          {!requiresRegistration ? (
+            <div className="mb-4">
+              <div className="alert alert-info py-12 px-16 radius-8 mb-20" role="alert">
+                <div className="fw-semibold mb-4">You already have an account</div>
+                <div className="text-sm">
+                  You can accept this invitation without creating a new account. No password is required.
                 </div>
-              ) : null}
-              <div className="alert alert-success py-12 px-16 radius-8 mb-20" role="alert">
-                <div className="fw-semibold mb-4">Invite verified ✅</div>
-               
-                {inviteInfo?.expiresAt ? (
-                  <div className="text-sm mt-4">
-                    Expires at: {new Date(inviteInfo.expiresAt).toLocaleString()}
-                  </div>
-                ) : null}
-                {inviteInfo?.branch?.name && (
-                  <div className="text-sm mt-4">
-                    Branch: <b>{inviteInfo.branch.name}</b>
-                  </div>
-                )}
-                {inviteInfo?.org?.name && (
-                  <div className="text-sm mt-4">
-                    Organization: <b>{inviteInfo.org.name}</b>
-                  </div>
-                )}
-                {inviteInfo?.role && (
-                  <div className="text-sm mt-4">
-                    Role: <b>{inviteRoleLabel}</b>
-                  </div>
-                )}
               </div>
-
-              {!requiresRegistration ? (
-                // Accept/Decline form for existing users
-                <div className="mb-20">
-                  <div className="alert alert-info py-12 px-16 radius-8 mb-20" role="alert">
-                    <div className="fw-semibold mb-4">You already have an account</div>
-                    <div className="text-sm">
-                      You can accept this invitation without creating a new account. No password is required.
-                    </div>
-                  </div>
-
-                  <div className="d-flex gap-12">
-                    <button
-                      type="button"
-                      className="btn btn-primary-600 text-sm btn-sm px-12 py-16 flex-grow-1 radius-12"
-                      onClick={handleAccept}
-                      disabled={submitting}
-                    >
-                      {submitting ? "Accepting..." : "Accept Invitation"}
-                    </button>
-                    <Link
-                      href="/login"
-                      className="btn btn-outline-secondary text-sm btn-sm px-12 py-16 flex-grow-1 radius-12"
-                    >
-                      Go to Login
-                    </Link>
-                  </div>
-                </div>
-              ) : (
-                // Registration form for new users
-                <form onSubmit={onSubmit}>
-                <div className="icon-field mb-16">
+              <div className="d-flex gap-2">
+                <Button variant="primary" onClick={handleAccept} disabled={submitting} className="flex-grow-1">
+                  {submitting ? "Accepting..." : "Accept Invitation"}
+                </Button>
+                <Link href="/login" className="btn btn-outline-secondary flex-grow-1 text-center">
+                  Go to Login
+                </Link>
+              </div>
+            </div>
+          ) : (
+            <form onSubmit={onSubmit} className="authentication-form">
+              <div className="mb-3">
+                <label className="form-label" htmlFor="invite-fullname">Full Name (Optional)</label>
+                <div className="input-group">
+                  <span className="input-group-text bg-light border-end-0">
+                    <i className="ri-user-3-line" />
+                  </span>
                   <input
+                    id="invite-fullname"
                     type="text"
-                    className="form-control h-56-px bg-neutral-50 radius-12"
+                    className="form-control"
                     placeholder="Full Name (Optional)"
                     value={fullName}
                     onChange={(e) => setFullName(e.target.value)}
                     autoComplete="name"
                     disabled={submitting}
                   />
-                  <span className="icon">
-                    <i className="ri-user-3-line" />
-                  </span>
                 </div>
-
-                <div className="icon-field mb-16">
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="invite-password">Set Password (min 4 characters)</label>
+                <div className={`input-group ${password && password.length < 4 ? "is-invalid" : ""}`}>
+                  <span className="input-group-text bg-light border-end-0">
+                    <i className="ri-lock-password-line" />
+                  </span>
                   <input
+                    id="invite-password"
                     type="password"
-                    className={`form-control h-56-px bg-neutral-50 radius-12 ${password && password.length < 4 ? "is-invalid" : ""}`}
-                    placeholder="Set Password (Minimum 4 characters)"
+                    className="form-control"
+                    placeholder="Set Password"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                     autoComplete="new-password"
@@ -274,18 +295,21 @@ function InviteRegistration({ token, onSuccess, isAuthenticated, userInfo }) {
                     disabled={submitting}
                     minLength={4}
                   />
-                  <span className="icon">
+                </div>
+                {password && password.length < 4 && (
+                  <div className="text-danger small mt-1">Password must be at least 4 characters</div>
+                )}
+              </div>
+              <div className="mb-3">
+                <label className="form-label" htmlFor="invite-confirm">Confirm Password</label>
+                <div className={`input-group ${password !== confirm && confirm ? "is-invalid" : ""}`}>
+                  <span className="input-group-text bg-light border-end-0">
                     <i className="ri-lock-password-line" />
                   </span>
-                  {password && password.length < 4 && (
-                    <div className="text-danger small mt-4">Password must be at least 4 characters</div>
-                  )}
-                </div>
-
-                <div className="icon-field mb-20">
                   <input
+                    id="invite-confirm"
                     type="password"
-                    className={`form-control h-56-px bg-neutral-50 radius-12 ${password !== confirm && confirm ? "is-invalid" : ""}`}
+                    className="form-control"
                     placeholder="Confirm Password"
                     value={confirm}
                     onChange={(e) => setConfirm(e.target.value)}
@@ -293,39 +317,29 @@ function InviteRegistration({ token, onSuccess, isAuthenticated, userInfo }) {
                     required
                     disabled={submitting}
                   />
-                  <span className="icon">
-                    <i className="ri-lock-password-line" />
-                  </span>
-                  {password !== confirm && confirm && (
-                    <div className="text-danger small mt-4">Passwords do not match</div>
-                  )}
                 </div>
-
-                  <button
-                    type="submit"
-                    className="btn btn-primary-600 text-sm btn-sm px-12 py-16 w-100 radius-12 mb-16"
-                    disabled={!canSubmit}
-                  >
-                    {submitting ? "Creating Account..." : "Create Account"}
-                  </button>
-                </form>
-              )}
-            </div>
-          ) : null}
-
-          <div className="mt-24 text-center">
-            <p className="text-secondary-light text-sm mb-0">
-              Already have an account?{" "}
-              <Link href="/login" className="text-primary-600 fw-semibold">
-                Sign In
-              </Link>
-            </p>
-          </div>
-
-          <AuthFooter />
+                {password !== confirm && confirm && (
+                  <div className="text-danger small mt-1">Passwords do not match</div>
+                )}
+              </div>
+              <div className="mb-4 text-center d-grid">
+                <Button variant="primary" type="submit" disabled={!canSubmit}>
+                  {submitting ? "Creating Account..." : "Create Account"}
+                </Button>
+              </div>
+            </form>
+          )}
         </div>
-      </div>
-    </section>
+      ) : null}
+
+      <p className="text-muted text-center mb-0 mt-3">
+        Already have an account?{" "}
+        <Link href="/login" className="text-dark fw-bold">
+          Sign In
+        </Link>
+      </p>
+      <AuthFooter />
+    </LarkonAuthLayout>
   );
 }
 
@@ -392,76 +406,76 @@ function UserRegistration({ onSuccess }) {
   }
 
   return (
-    <section className="auth bg-base d-flex flex-wrap min-vh-100">
-      <div className="auth-left d-lg-block d-none">
-        <div className="d-flex align-items-center flex-column h-100 justify-content-center">
-          <img src="/assets/images/auth/auth-img.png" alt="Auth" />
-        </div>
+    <LarkonAuthLayout>
+      <div className="auth-logo mb-4">
+        <Link href="/" className="d-inline-block">
+          <img src="/assets/images/logo.png" alt="BPA" height={32} />
+        </Link>
       </div>
+      <h2 className="fw-bold fs-24">Sign Up</h2>
+      <p className="text-muted mt-1 mb-4">New to our platform? Register a new account to get started.</p>
 
-      <div className="auth-right py-32 px-24 d-flex flex-column justify-content-center">
-        <div className="max-w-464-px mx-auto w-100">
-          <div>
-            <Link href="/" className="mb-40 max-w-290-px d-inline-block">
-              <img src="/assets/images/logo.png" alt="BPA" />
-            </Link>
-            <h4 className="mb-12">Create Account</h4>
-            <p className="mb-32 text-secondary-light text-lg">
-              Register a new user account to get started.
-            </p>
-          </div>
+      {error ? (
+        <div className="alert alert-danger py-12 px-16 radius-8 mb-20" role="alert">
+          {error}
+        </div>
+      ) : null}
 
-          {error ? (
-            <div className="alert alert-danger py-12 px-16 radius-8 mb-20" role="alert">
-              {error}
-            </div>
-          ) : null}
-
-          <form onSubmit={onSubmit}>
-            <div className="icon-field mb-16">
+      <div className="mb-5">
+        <form onSubmit={onSubmit} className="authentication-form">
+          <div className="mb-3">
+            <label className="form-label" htmlFor="reg-identifier">Email or Phone Number</label>
+            <div className={`input-group ${validation.errors.identifier || (identifier && !authType?.type) ? "is-invalid" : ""}`}>
+              <span className="input-group-text bg-light border-end-0">
+                <i className={authType?.type === "email" ? "ri-mail-line" : "ri-phone-line"} />
+              </span>
               <input
+                id="reg-identifier"
                 type="text"
-                className={`form-control h-56-px bg-neutral-50 radius-12 ${validation.errors.identifier ? "is-invalid" : ""}`}
-                placeholder="Email or Phone Number"
+                className="form-control"
+                placeholder="Enter your email or phone number"
                 value={identifier}
                 onChange={(e) => setIdentifier(e.target.value)}
                 autoComplete="username"
                 required
                 disabled={loading}
               />
-              <span className="icon">
-                <i className={authType?.type === "email" ? "ri-mail-line" : "ri-phone-line"} />
-              </span>
-              {validation.errors.identifier && (
-                <div className="text-danger small mt-4">{validation.errors.identifier}</div>
-              )}
-              {identifier && !authType?.type && !validation.errors.identifier && (
-                <div className="text-danger small mt-4">
-                  Please enter a valid email or phone number
-                </div>
-              )}
             </div>
-
-            <div className="icon-field mb-16">
+            {(validation.errors.identifier || (identifier && !authType?.type)) && (
+              <div className="text-danger small mt-1">
+                {validation.errors.identifier || "Please enter a valid email or phone number"}
+              </div>
+            )}
+          </div>
+          <div className="mb-3">
+            <label className="form-label" htmlFor="reg-name">Full Name (Optional)</label>
+            <div className="input-group">
+              <span className="input-group-text bg-light border-end-0">
+                <i className="ri-user-3-line" />
+              </span>
               <input
+                id="reg-name"
                 type="text"
-                className="form-control h-56-px bg-neutral-50 radius-12"
+                className="form-control"
                 placeholder="Full Name (Optional)"
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 autoComplete="name"
                 disabled={loading}
               />
-              <span className="icon">
-                <i className="ri-user-3-line" />
-              </span>
             </div>
-
-            <div className="icon-field mb-16">
+          </div>
+          <div className="mb-3">
+            <label className="form-label" htmlFor="reg-password">Password</label>
+            <div className={`input-group ${validation.errors.password ? "is-invalid" : ""}`}>
+              <span className="input-group-text bg-light border-end-0">
+                <i className="ri-lock-password-line" />
+              </span>
               <input
+                id="reg-password"
                 type="password"
-                className={`form-control h-56-px bg-neutral-50 radius-12 ${validation.errors.password ? "is-invalid" : ""}`}
-                placeholder="Password"
+                className="form-control"
+                placeholder="Enter your password (min 4 characters)"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 autoComplete="new-password"
@@ -469,18 +483,21 @@ function UserRegistration({ onSuccess }) {
                 disabled={loading}
                 minLength={4}
               />
-              <span className="icon">
+            </div>
+            {validation.errors.password && (
+              <div className="text-danger small mt-1">{validation.errors.password}</div>
+            )}
+          </div>
+          <div className="mb-3">
+            <label className="form-label" htmlFor="reg-confirm">Confirm Password</label>
+            <div className={`input-group ${password !== confirmPassword && confirmPassword ? "is-invalid" : ""}`}>
+              <span className="input-group-text bg-light border-end-0">
                 <i className="ri-lock-password-line" />
               </span>
-              {validation.errors.password && (
-                <div className="text-danger small mt-4">{validation.errors.password}</div>
-              )}
-            </div>
-
-            <div className="icon-field mb-16">
               <input
+                id="reg-confirm"
                 type="password"
-                className={`form-control h-56-px bg-neutral-50 radius-12 ${password !== confirmPassword && confirmPassword ? "is-invalid" : ""}`}
+                className="form-control"
                 placeholder="Confirm Password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -488,36 +505,26 @@ function UserRegistration({ onSuccess }) {
                 required
                 disabled={loading}
               />
-              <span className="icon">
-                <i className="ri-lock-password-line" />
-              </span>
-              {password !== confirmPassword && confirmPassword && (
-                <div className="text-danger small mt-4">Passwords do not match</div>
-              )}
             </div>
-
-            <button
-              type="submit"
-              className="btn btn-primary-600 text-sm btn-sm px-12 py-16 w-100 radius-12"
-              disabled={!canSubmit}
-            >
+            {password !== confirmPassword && confirmPassword && (
+              <div className="text-danger small mt-1">Passwords do not match</div>
+            )}
+          </div>
+          <div className="mb-4 text-center d-grid">
+            <Button variant="primary" type="submit" disabled={!canSubmit}>
               {loading ? "Creating Account..." : "Create Account"}
-            </button>
-
-            <div className="mt-24 text-center">
-              <p className="text-secondary-light text-sm mb-0">
-                Already have an account?{" "}
-                <Link href="/login" className="text-primary-600 fw-semibold">
-                  Sign In
-                </Link>
-              </p>
-            </div>
-          </form>
-
-          <AuthFooter />
-        </div>
+            </Button>
+          </div>
+        </form>
+        <p className="text-muted text-center mb-0">
+          Already have an account?{" "}
+          <Link href="/login" className="text-dark fw-bold">
+            Sign In
+          </Link>
+        </p>
       </div>
-    </section>
+      <AuthFooter />
+    </LarkonAuthLayout>
   );
 }
 
@@ -569,35 +576,35 @@ function RegisterPageContent() {
   // Show loading state while checking authentication
   if (checkingAuth) {
     return (
-      <section className="auth bg-base d-flex flex-wrap min-vh-100">
-        <div className="auth-right py-32 px-24 d-flex flex-column justify-content-center w-100">
-          <div className="max-w-464-px mx-auto w-100 text-center">
-            <div className="text-secondary-light">Loading...</div>
-          </div>
+      <LarkonAuthLayout>
+        <div className="auth-logo mb-4">
+          <Link href="/" className="d-inline-block">
+            <img src="/assets/images/logo.png" alt="BPA" height={32} />
+          </Link>
         </div>
-      </section>
+        <div className="text-center text-muted">Loading...</div>
+      </LarkonAuthLayout>
     );
   }
 
   // Show success message
   if (success) {
     return (
-      <section className="auth bg-base d-flex flex-wrap min-vh-100">
-        <div className="auth-right py-32 px-24 d-flex flex-column justify-content-center w-100">
-          <div className="max-w-464-px mx-auto w-100">
-            <div className="card p-32 radius-12 text-center">
-              <div className="mb-16">
-                <div className="text-success" style={{ fontSize: 64 }}>
-                  <i className="ri-checkbox-circle-fill" />
-                </div>
-              </div>
-              <h4 className="mb-8">Registration Successful!</h4>
-              <p className="text-secondary-light mb-16">Your account has been created successfully.</p>
-              <p className="text-secondary-light text-sm">Redirecting to login page...</p>
-            </div>
-          </div>
+      <LarkonAuthLayout>
+        <div className="auth-logo mb-4">
+          <Link href="/" className="d-inline-block">
+            <img src="/assets/images/logo.png" alt="BPA" height={32} />
+          </Link>
         </div>
-      </section>
+        <div className="card p-4 text-center">
+          <div className="mb-3 text-success" style={{ fontSize: 48 }}>
+            <i className="ri-checkbox-circle-fill" />
+          </div>
+          <h4 className="mb-2">Registration Successful!</h4>
+          <p className="text-muted mb-2">Your account has been created successfully.</p>
+          <p className="text-muted small mb-0">Redirecting to login page...</p>
+        </div>
+      </LarkonAuthLayout>
     );
   }
 
@@ -616,54 +623,33 @@ function RegisterPageContent() {
   // If user is already authenticated, show message with login option
   if (isAuthenticated) {
     return (
-      <section className="auth bg-base d-flex flex-wrap min-vh-100">
-        <div className="auth-left d-lg-block d-none">
-          <div className="d-flex align-items-center flex-column h-100 justify-content-center">
-            <img src="/assets/images/auth/auth-img.png" alt="Auth" />
+      <LarkonAuthLayout>
+        <div className="auth-logo mb-4">
+          <Link href="/" className="d-inline-block">
+            <img src="/assets/images/logo.png" alt="BPA" height={32} />
+          </Link>
+        </div>
+        <h2 className="fw-bold fs-24">Already Signed In</h2>
+        <p className="text-muted mt-1 mb-4">You are already logged in to your account.</p>
+        <div className="alert alert-info py-12 px-16 radius-8 mb-20" role="alert">
+          <div className="fw-semibold mb-2">
+            {userInfo?.name || userInfo?.email || userInfo?.phone || "User"}
+          </div>
+          <div className="text-sm">
+            {userInfo?.email && <div>Email: {userInfo.email}</div>}
+            {userInfo?.phone && <div>Phone: {userInfo.phone}</div>}
           </div>
         </div>
-
-        <div className="auth-right py-32 px-24 d-flex flex-column justify-content-center">
-          <div className="max-w-464-px mx-auto w-100">
-            <div>
-              <Link href="/" className="mb-40 max-w-290-px d-inline-block">
-                <img src="/assets/images/logo.png" alt="BPA" />
-              </Link>
-              <h4 className="mb-12">Already Signed In</h4>
-              <p className="mb-32 text-secondary-light text-lg">
-                You are already logged in to your account.
-              </p>
-            </div>
-
-            <div className="alert alert-info py-12 px-16 radius-8 mb-20" role="alert">
-              <div className="fw-semibold mb-4">
-                {userInfo?.name || userInfo?.email || userInfo?.phone || "User"}
-              </div>
-              <div className="text-sm">
-                {userInfo?.email && <div>Email: {userInfo.email}</div>}
-                {userInfo?.phone && <div>Phone: {userInfo.phone}</div>}
-              </div>
-            </div>
-
-            <div className="d-flex flex-column gap-12">
-              <Link
-                href="/post-auth-landing"
-                className="btn btn-primary-600 text-sm btn-sm px-12 py-16 w-100 radius-12"
-              >
-                Go to Dashboard
-              </Link>
-              <Link
-                href="/login"
-                className="btn btn-light text-sm btn-sm px-12 py-16 w-100 radius-12"
-              >
-                Sign In to Different Account
-              </Link>
-            </div>
-
-            <AuthFooter />
-          </div>
+        <div className="d-grid gap-2 mb-4">
+          <Link href="/post-auth-landing" className="btn btn-primary">
+            Go to Dashboard
+          </Link>
+          <Link href="/login" className="btn btn-outline-secondary">
+            Sign In to Different Account
+          </Link>
         </div>
-      </section>
+        <AuthFooter />
+      </LarkonAuthLayout>
     );
   }
 

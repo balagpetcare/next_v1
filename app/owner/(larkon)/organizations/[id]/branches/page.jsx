@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useMemo } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ownerGet } from "@/app/owner/_lib/ownerApi";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
@@ -17,12 +17,28 @@ function pickArray(resp) {
 
 export default function OrganizationBranchesPage() {
   const params = useParams();
+  const searchParams = useSearchParams();
+  const router = useRouter();
   const orgId = useMemo(() => String(params?.id || ""), [params]);
+  const updatedParam = searchParams.get("updated") === "1";
 
   const [branches, setBranches] = useState([]);
   const [organization, setOrganization] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [showUpdatedToast, setShowUpdatedToast] = useState(false);
+
+  // Show success toast when landing with ?updated=1, then clear URL and hide after delay
+  useEffect(() => {
+    if (!updatedParam) return;
+    setShowUpdatedToast(true);
+    const url = new URL(window.location.href);
+    url.searchParams.delete("updated");
+    const clean = url.pathname + (url.search ? url.search : "");
+    router.replace(clean, { scroll: false });
+    const t = setTimeout(() => setShowUpdatedToast(false), 4000);
+    return () => clearTimeout(t);
+  }, [updatedParam, router]);
 
   useEffect(() => {
     async function loadData() {
@@ -75,6 +91,13 @@ export default function OrganizationBranchesPage() {
           </Link>,
         ]}
       />
+
+      {showUpdatedToast && (
+        <div className="alert alert-success radius-12 mb-24" role="alert">
+          <i className="ri-checkbox-circle-line me-2" />
+          Branch updated successfully.
+        </div>
+      )}
 
       {error && (
         <div className="alert alert-danger radius-12 mb-24">

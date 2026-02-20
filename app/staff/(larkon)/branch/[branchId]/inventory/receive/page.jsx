@@ -118,8 +118,15 @@ export default function StaffBranchInventoryReceivePage() {
         <Link href={`/staff/branch/${branchId}/inventory`} className="btn btn-outline-secondary btn-sm">
           ← Back to Inventory
         </Link>
-        <h5 className="mb-0">Receive Stock (GRN)</h5>
+        <h5 className="mb-0">Opening stock</h5>
       </div>
+      <p className="text-secondary-light small mb-24">
+        To receive transfers, go to{" "}
+        <Link href={`/staff/branch/${branchId}/inventory/incoming`} className="text-primary">
+          Inventory → Incoming dispatches
+        </Link>
+        .
+      </p>
 
       {success && (
         <div className="alert alert-success">Received successfully. Redirecting...</div>
@@ -128,7 +135,7 @@ export default function StaffBranchInventoryReceivePage() {
         <div className="alert alert-danger">{error}</div>
       )}
 
-      <Card title="Receive form" subtitle="Supplier/reference optional">
+      <Card title="Opening stock" subtitle="Record initial stock at this location">
         {loading ? (
           <p className="text-secondary-light">Loading locations...</p>
         ) : locations.length === 0 ? (

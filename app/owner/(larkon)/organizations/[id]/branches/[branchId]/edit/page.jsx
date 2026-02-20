@@ -81,7 +81,7 @@ export default function EditBranchPage() {
             organizationId={orgId}
             branchId={branchId}
             onDone={() => {
-              router.replace(detailsHref);
+              router.replace(`${listHref}?updated=1`);
               router.refresh();
             }}
           />

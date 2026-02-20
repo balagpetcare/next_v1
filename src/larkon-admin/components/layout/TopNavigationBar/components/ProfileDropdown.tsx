@@ -23,7 +23,7 @@ function getProfileDropdownLinks(basePath: string): {
     return { profile: '/owner/settings', settings: '/owner/settings', support: '/owner/notifications', logout: '/owner/logout' }
   }
   if (p === '/staff') {
-    return { profile: '/staff/branches', settings: '/staff/branches', support: null, logout: '/api/logout' }
+    return { profile: '/staff/branch', settings: '/staff/branch', support: null, logout: '/api/logout' }
   }
   // shop, clinic, producer, mother: generic panel paths
   return {
