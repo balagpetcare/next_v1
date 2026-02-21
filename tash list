@@ -1,0 +1,19 @@
+  V-A1.0.2                                              [m d067c51 [[34morigin/V-A1.0.2[m: ahead 2] fix(owner-sidebar): remove duplicate menu entries and clarify icons
+  feature/master-catalog-pagination-fix                 [m 252b5bb [[34morigin/feature/master-catalog-pagination-fix[m] fix(master-catalog): show pagination in both grid and table views
+  main                                                  [m 8dd0d78 [[34morigin/main[m: ahead 6] Merge feature/master-catalog-pagination-fix into main
+  master                                                [m e47b871 V-A1.0.1: Lorakun Admin Intigration
+  ver/V-A1.0.1                                          [m e47b871 [[34morigin/ver/V-A1.0.1[m] V-A1.0.1: Lorakun Admin Intigration
+  ver/V100.0.01.05                                      [m 8c2ea74 [[34morigin/ver/V100.0.01.05[m] release: V100.0.01.05
+  ver/V100.0.01.06                                      [m 49d554c [[34morigin/ver/V100.0.01.06[m] release: V100.0.01.06
+* [32mver/V100.0.01.07                                      [m 8e4af98 [[34morigin/ver/V100.0.01.07[m: ahead 1] feat: inventory/vendors/staff UI modules
+  work/V100.0.01.08-frontend-inventory-ui               [m 82fc446 [[34morigin/work/V100.0.01.08-frontend-inventory-ui[m] release: V100.0.01.07
+  [31mremotes/origin/HEAD                                   [m -> origin/main
+  [31mremotes/origin/V-A1.0.2                               [m b724863 V-A1.0.2 Staffs and Notifications Running
+  [31mremotes/origin/feature/master-catalog-pagination-fix  [m 252b5bb fix(master-catalog): show pagination in both grid and table views
+  [31mremotes/origin/main                                   [m 0fa57a9 http://localhost:3105/ Full Design Completed
+  [31mremotes/origin/master                                 [m e47b871 V-A1.0.1: Lorakun Admin Intigration
+  [31mremotes/origin/ver/V-A1.0.1                           [m e47b871 V-A1.0.1: Lorakun Admin Intigration
+  [31mremotes/origin/ver/V100.0.01.05                       [m 8c2ea74 release: V100.0.01.05
+  [31mremotes/origin/ver/V100.0.01.06                       [m 49d554c release: V100.0.01.06
+  [31mremotes/origin/ver/V100.0.01.07                       [m 82fc446 release: V100.0.01.07
+  [31mremotes/origin/work/V100.0.01.08-frontend-inventory-ui[m 82fc446 release: V100.0.01.07

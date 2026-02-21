@@ -115,3 +115,33 @@ select,input {
 	border-radius: var(--bs-border-radius);
 	transition: border-color .15s ease-in-out,box-shadow .15s ease-in-out;
 }
+
+/* Products list: sticky table header, clickable rows */
+.products-table-wrapper thead th {
+	position: sticky;
+	top: 0;
+	background: var(--bs-light, #f8f9fa);
+	z-index: 1;
+}
+.table-row-clickable {
+	cursor: pointer;
+}
+.table-row-clickable:hover {
+	background-color: rgba(0, 0, 0, 0.04);
+}
+
+/* Products table: more-actions button */
+.btn-icon-more {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	border: 1px solid var(--bs-border-color-translucent, rgba(0, 0, 0, 0.08));
+}
+.btn-icon-more:hover {
+	background-color: rgba(0, 0, 0, 0.06);
+	border-color: var(--bs-border-color-translucent, rgba(0, 0, 0, 0.12));
+}
+
+.form-check-input {
+	height: 1.45em !important;
+  }

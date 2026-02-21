@@ -1,0 +1,98 @@
+/* Larkon-style KPI cards: premium lift, equal height, orange icon badge */
+.strip {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 16px;
+}
+
+@media (max-width: 575px) {
+  .strip {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+    gap: 12px;
+    overflow-x: auto;
+    padding-bottom: 6px;
+    -webkit-overflow-scrolling: touch;
+    grid-auto-flow: column;
+    grid-auto-columns: minmax(120px, 1fr);
+  }
+  .strip::-webkit-scrollbar {
+    height: 4px;
+  }
+}
+
+.card {
+  background: #fff;
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 12px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.06);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  min-height: 88px;
+}
+
+.card:hover {
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+  transform: translateY(-2px);
+}
+
+.cardBody {
+  padding: 1rem;
+  min-height: 88px;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.content {
+  min-width: 0;
+  flex: 1;
+}
+
+.label {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #64748b;
+  margin-bottom: 4px;
+  line-height: 1.2;
+}
+
+.value {
+  font-weight: 700;
+  font-size: 1.5rem;
+  line-height: 1.2;
+  color: #0f172a;
+}
+
+/* Larkon reference: circular icon badge with orange accent */
+.iconWrap {
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: rgba(249, 115, 22, 0.12);
+  border: 1px solid rgba(249, 115, 22, 0.3);
+  color: #ea580c;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+}
+
+@media (max-width: 575px) {
+  .card {
+    min-height: 80px;
+  }
+  .cardBody {
+    min-height: 80px;
+    padding: 0.75rem;
+  }
+  .iconWrap {
+    width: 40px;
+    height: 40px;
+    font-size: 1.1rem;
+  }
+  .value {
+    font-size: 1.25rem;
+  }
+}

@@ -271,6 +271,23 @@ export async function staffInventoryAlerts(branchId: string) {
   return Array.isArray(res?.data) ? res.data : [];
 }
 
+/** GET /api/v1/inventory/dashboard - Cards: totalSkus, lowStockCount, outOfStockCount, etc. */
+export async function staffInventoryDashboard(branchId: string) {
+  const res = await apiGet<{ success?: boolean; data?: { totalSkus?: number; totalStockQty?: number; lowStockCount?: number; outOfStockCount?: number; expiringCount?: number } }>(`/api/v1/inventory/dashboard?branchId=${branchId}`);
+  return res?.data ?? null;
+}
+
+/** GET /api/v1/inventory/ledger - Ledger history for drawer (locationId, variantId, page, limit) */
+export async function staffInventoryLedger(opts: { locationId: number; variantId: number; page?: number; limit?: number }) {
+  const params = new URLSearchParams();
+  params.set("locationId", String(opts.locationId));
+  params.set("variantId", String(opts.variantId));
+  if (opts.page != null) params.set("page", String(opts.page));
+  if (opts.limit != null) params.set("limit", String(opts.limit));
+  const res = await apiGet<{ success?: boolean; data?: any[]; pagination?: any }>(`/api/v1/inventory/ledger?${params}`);
+  return { items: res?.data ?? [], pagination: (res as any)?.pagination ?? {} };
+}
+
 export async function staffInventoryLocations() {
   const res = await apiGet<{ success?: boolean; data?: any[] }>("/api/v1/inventory/locations");
   return Array.isArray(res?.data) ? res.data : [];
@@ -381,6 +398,60 @@ export async function staffStockRequestSubmit(id: number) {
 export async function staffStockRequestCancel(id: number) {
   return apiPost<{ success?: boolean; data?: any; message?: string }>(`/api/v1/stock-requests/${id}/cancel`, {});
 }
+
+/** GET /api/v1/inventory/stock-request-products - Paginated products with variant-wise stock for New Stock Request picker */
+export async function staffStockRequestProducts(
+  branchId: string,
+  opts?: {
+    search?: string;
+    page?: number;
+    limit?: number;
+    sort?: "recommended" | "low_stock" | "most_used" | "name_asc";
+    stockStatus?: "all" | "low" | "out";
+  }
+) {
+  const params = new URLSearchParams();
+  params.set("branchId", branchId);
+  if (opts?.search) params.set("search", opts.search);
+  if (opts?.page != null) params.set("page", String(opts.page));
+  if (opts?.limit != null) params.set("limit", String(opts.limit));
+  if (opts?.sort) params.set("sort", opts.sort);
+  if (opts?.stockStatus) params.set("stockStatus", opts.stockStatus);
+  const res = await apiGet<{ success?: boolean; data?: StockRequestProduct[]; pagination?: StockRequestProductsPagination }>(
+    `/api/v1/inventory/stock-request-products?${params}`
+  );
+  return {
+    items: (res as any)?.data ?? [],
+    pagination: (res as any)?.pagination ?? { page: 1, limit: 30, total: 0, totalPages: 1 },
+  };
+}
+
+export type StockRequestProductVariant = {
+  id: number;
+  sku: string;
+  title: string;
+  barcode: string | null;
+  productId: number;
+  stockOnHand: number;
+  lowStockThreshold: number;
+  usageMetric: number;
+};
+
+export type StockRequestProduct = {
+  id: number;
+  name: string;
+  slug: string;
+  category: { id: number; name: string } | null;
+  brand: { id: number; name: string } | null;
+  variants: StockRequestProductVariant[];
+};
+
+export type StockRequestProductsPagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
 
 // ========== Staff Branch POS / Sales (Phase 5B) ==========
 /** GET /api/v1/pos/products?branchId= – products with variants and stock for POS */

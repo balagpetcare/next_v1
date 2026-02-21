@@ -72,6 +72,17 @@ The `/owner/products` page (port 3104) was redesigned with a toolbar, modern tab
 7. /owner/products/new, /owner/products/[id], /owner/products/[id]/edit – unchanged; all links work.
 8. Mobile width – cards list and wrapping toolbar.
 
+## Larkon KPI card standard
+
+For consistency with the Larkon Orders List reference:
+
+- **Card:** Light background, `border-radius: 12px`, subtle border, shadow (`0 2px 8px`), hover lift (stronger shadow + slight `translateY(-2px)`).
+- **Layout:** Label (small, muted, top) → value (large, bold) → circular icon badge on the **right**.
+- **Icon badge:** Circle with **orange** accent: `background: rgba(249, 115, 22, 0.12)`, `border: 1px solid rgba(249, 115, 22, 0.3)`, `color: #ea580c`. Size ~44px desktop, 40px mobile.
+- **Strip:** CSS Grid `repeat(auto-fill, minmax(140px, 1fr))`, gap 16px, equal-height cards.
+
+Implemented in `src/components/products-ui/ProductsKpiStrip.tsx` and `ProductsKpiStrip.module.css`.
+
 ## Optional follow-ups
 
 - Stock column: backend could add inventory sum per product to list response; then show sum + “Low” badge.

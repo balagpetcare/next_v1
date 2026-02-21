@@ -2,6 +2,7 @@
 
 import { memo } from "react";
 import Link from "next/link";
+import { Dropdown } from "react-bootstrap";
 import type { ProductListItem } from "./products.types";
 
 const APPROVAL_LABELS: Record<string, string> = {
@@ -152,22 +153,22 @@ function ProductRow({
             <img
               src={firstMedia}
               alt=""
-              className="rounded flex-shrink-0"
-              style={{ width: 40, height: 40, objectFit: "cover" }}
+              className="flex-shrink-0"
+              style={{ width: 40, height: 40, objectFit: "cover", borderRadius: 8 }}
             />
           ) : (
             <div
-              className="rounded bg-light flex-shrink-0 d-flex align-items-center justify-content-center text-muted"
-              style={{ width: 40, height: 40 }}
+              className="flex-shrink-0 d-flex align-items-center justify-content-center text-muted"
+              style={{ width: 40, height: 40, borderRadius: 8, background: "var(--bs-light, #f8f9fa)" }}
             >
               <i className="ri-image-line" aria-hidden />
             </div>
           )}
-          <div>
-            <span className="fw-semibold">{product.name}</span>
-            {mediaCount > 0 && (
-              <span className="ms-1 small text-muted">({mediaCount})</span>
-            )}
+          <div className="min-w-0">
+            <div className="fw-semibold text-truncate">{product.name}</div>
+            <div className="small text-muted text-truncate">
+              {firstSku !== "—" ? firstSku : product.category?.name ?? "—"}
+            </div>
           </div>
         </div>
       </td>
@@ -195,45 +196,52 @@ function ProductRow({
         {product.updatedAt ? new Date(product.updatedAt).toLocaleDateString() : "—"}
       </td>
       <td onClick={(e) => e.stopPropagation()}>
-        <div className="d-flex gap-1">
-          <button
-            type="button"
-            className="btn btn-sm btn-light radius-12"
-            title="Quick view"
-            onClick={() => onOpenQuickView(product.id)}
+        <Dropdown align="end">
+          <Dropdown.Toggle
+            variant="light"
+            size="sm"
+            className="btn-icon-more radius-12"
+            style={{ width: 32, height: 32, padding: 0 }}
+            aria-label={`Actions for ${product.name}`}
           >
-            <i className="ri-eye-line" aria-hidden />
-          </button>
-          <Link
-            href={`/owner/products/${product.id}/edit`}
-            className="btn btn-sm btn-light radius-12"
-            title="Edit"
-          >
-            <i className="ri-edit-line" aria-hidden />
-          </Link>
-          <Link
-            href={`/owner/products/${product.id}/variants`}
-            className="btn btn-sm btn-light radius-12"
-            title="Variants"
-          >
-            <i className="ri-list-check-2" aria-hidden />
-          </Link>
-          <Link
-            href={`/owner/products/${product.id}`}
-            className="btn btn-sm btn-light radius-12"
-            title="View full"
-          >
-            <i className="ri-external-link-line" aria-hidden />
-          </Link>
-          <button
-            type="button"
-            className="btn btn-sm btn-light radius-12 text-danger"
-            title="Delete"
-            onClick={() => onDelete(product.id)}
-          >
-            <i className="ri-delete-bin-line" aria-hidden />
-          </button>
-        </div>
+            <i className="ri-more-2-fill" aria-hidden />
+          </Dropdown.Toggle>
+          <Dropdown.Menu>
+            <Dropdown.Item
+              as="button"
+              onClick={() => onOpenQuickView(product.id)}
+            >
+              <i className="ri-eye-line me-2" aria-hidden />
+              View
+            </Dropdown.Item>
+            <Dropdown.Item as={Link} href={`/owner/products/${product.id}/edit`}>
+              <i className="ri-edit-line me-2" aria-hidden />
+              Edit
+            </Dropdown.Item>
+            <Dropdown.Item as={Link} href={`/owner/products/${product.id}/variants`}>
+              <i className="ri-list-check-2 me-2" aria-hidden />
+              Variants
+            </Dropdown.Item>
+            <Dropdown.Item
+              as="a"
+              href={`/owner/products/${product.id}`}
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <i className="ri-external-link-line me-2" aria-hidden />
+              Open in new tab
+            </Dropdown.Item>
+            <Dropdown.Divider />
+            <Dropdown.Item
+              as="button"
+              className="text-danger"
+              onClick={() => onDelete(product.id)}
+            >
+              <i className="ri-delete-bin-line me-2" aria-hidden />
+              Delete
+            </Dropdown.Item>
+          </Dropdown.Menu>
+        </Dropdown>
       </td>
     </tr>
   );
@@ -291,7 +299,7 @@ function ProductsTable({
             <th>Price</th>
             <th>Status</th>
             <th>Updated</th>
-            <th className="text-end" style={{ width: 200 }}>Actions</th>
+            <th className="text-end" style={{ width: 56 }}>Actions</th>
           </tr>
         </thead>
         <tbody>

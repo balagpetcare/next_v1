@@ -25,7 +25,7 @@ export default function AdminNotificationsPage() {
   const load = async () => {
     try {
       setLoading(true);
-      const params = new URLSearchParams({ limit: "50" });
+      const params = new URLSearchParams({ limit: "50", panel: "admin" });
       if (filter === "unread") params.set("unread", "1");
       const res = await apiGet(`/api/v1/notifications?${params}`);
       const items = res?.data?.items ?? [];

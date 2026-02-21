@@ -51,6 +51,7 @@ export default function OwnerNotificationsPage() {
   const { fetchCount, markRead, readAll } = useNotifications({
     enabled: true,
     soundEnabled: true,
+    panel: "owner",
   });
   const [filter, setFilter] = useState("all");
   const [items, setItems] = useState([]);
@@ -60,7 +61,7 @@ export default function OwnerNotificationsPage() {
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const params = new URLSearchParams({ limit: "50", scope: "page" });
+      const params = new URLSearchParams({ limit: "50", scope: "page", panel: "owner" });
       if (filter === "unread") params.set("unread", "1");
       else if (filter !== "all") params.set("type", filter);
       const res = await apiGet(`/api/v1/notifications?${params}`);

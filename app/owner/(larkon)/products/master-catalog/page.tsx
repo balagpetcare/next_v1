@@ -11,6 +11,7 @@ import { useAlreadyAddedSet } from "./_components/useAlreadyAddedSet";
 import { MasterCatalogSkeleton } from "./_components/MasterCatalogSkeleton";
 import { BulkAddConfirmModal } from "./_components/BulkAddConfirmModal";
 import type { MasterProduct, Brand, Category, StatusFilter } from "./_components/masterCatalog.types";
+import { Pagination } from "@/src/components/common/Pagination";
 
 const SEARCH_DEBOUNCE_MS = 300;
 const BULK_CONCURRENCY = 6;
@@ -635,26 +636,13 @@ export default function MasterCatalogPage() {
               {/* Pagination: shared by both grid and table, outside overflow container */}
               {!loading && filteredByStatus.length > 0 && totalPages > 1 && (
                 <div className="d-flex justify-content-center mt-4">
-                  <nav>
-                    <ul className="pagination mb-0">
-                      <li className={`page-item ${page === 1 ? "disabled" : ""}`}>
-                        <button className="page-link radius-12" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>Previous</button>
-                      </li>
-                      {(() => {
-                        const delta = 2;
-                        const low = Math.max(1, page - delta);
-                        const high = Math.min(totalPages, page + delta);
-                        return Array.from({ length: high - low + 1 }, (_, i) => low + i).map((p) => (
-                          <li key={p} className={`page-item ${p === page ? "active" : ""}`}>
-                            <button className="page-link radius-12" onClick={() => setPage(p)}>{p}</button>
-                          </li>
-                        ));
-                      })()}
-                      <li className={`page-item ${page === totalPages ? "disabled" : ""}`}>
-                        <button className="page-link radius-12" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next</button>
-                      </li>
-                    </ul>
-                  </nav>
+                  <Pagination
+                    currentPage={page}
+                    totalPages={totalPages}
+                    onPageChange={setPage}
+                    align="center"
+                    ariaLabel="Master catalog pagination"
+                  />
                 </div>
               )}
             </div>

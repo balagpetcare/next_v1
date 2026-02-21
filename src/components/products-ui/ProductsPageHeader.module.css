@@ -1,0 +1,70 @@
+/* Larkon premium header: single row, aligned controls */
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--bs-body-bg, #fff);
+  border-bottom: 1px solid var(--bs-border-color-translucent, rgba(0, 0, 0, 0.08));
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+  padding: 0.75rem 0;
+}
+
+.rowInner {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  min-height: 44px;
+}
+
+@media (min-width: 992px) {
+  .rowInner {
+    flex-wrap: nowrap;
+  }
+}
+
+@media (max-width: 991px) {
+  .rowInner {
+    flex-wrap: wrap;
+  }
+}
+
+.titleBlock {
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-height: 40px;
+}
+
+@media (min-width: 992px) {
+  .controls {
+    flex-wrap: nowrap;
+  }
+}
+
+.ctrlBtn {
+  height: 40px;
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+}
+
+.addBtn {
+  height: 40px;
+  padding-left: 1rem;
+  padding-right: 1rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+}

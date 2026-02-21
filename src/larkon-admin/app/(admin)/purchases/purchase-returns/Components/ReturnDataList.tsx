@@ -4,6 +4,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import React from 'react'
 import { Card, CardBody, CardFooter, CardTitle, Col, Dropdown, DropdownItem, DropdownMenu, DropdownToggle, Row } from 'react-bootstrap'
+import { PaginationWithRouter } from '@/src/components/common/PaginationWithRouter'
 
 const PurchaseListPage = async () => {
   const PurchaseListPage = await getAllOrders()
@@ -108,35 +109,7 @@ const PurchaseListPage = async () => {
             </div>
           </CardBody>
           <CardFooter className="border-top">
-            <nav aria-label="Page navigation example">
-              <ul className="pagination justify-content-end mb-0">
-                <li className="page-item">
-                  <Link className="page-link" href="">
-                    Previous
-                  </Link>
-                </li>
-                <li className="page-item active">
-                  <Link className="page-link" href="">
-                    1
-                  </Link>
-                </li>
-                <li className="page-item">
-                  <Link className="page-link" href="">
-                    2
-                  </Link>
-                </li>
-                <li className="page-item">
-                  <Link className="page-link" href="">
-                    3
-                  </Link>
-                </li>
-                <li className="page-item">
-                  <Link className="page-link" href="">
-                    Next
-                  </Link>
-                </li>
-              </ul>
-            </nav>
+            <PaginationWithRouter currentPage={1} totalPages={3} align="end" ariaLabel="Page navigation example" />
           </CardFooter>
         </Card>
       </Col>
