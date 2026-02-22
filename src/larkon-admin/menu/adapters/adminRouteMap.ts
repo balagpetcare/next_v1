@@ -1,6 +1,7 @@
 /**
  * Admin route mapping: permissionMenu hrefs → actual app/admin routes.
  * Used when REGISTRY.admin hrefs don't match existing page paths.
+ * SINGLE SOURCE: only this file defines IMPLEMENTED_ADMIN_HREFS for admin sidebar.
  */
 
 /** permissionMenu href → actual route (where pages exist under app/admin/(larkon)) */
@@ -64,21 +65,35 @@ export function showUnimplementedAdminRoutes(): boolean {
 }
 
 /**
- * Normalize href for IMPLEMENTED_ADMIN_HREFS lookup.
- * Ensures trailing slash and whitespace don't break matching.
+ * Normalize href for lookup: safe for non-string, trim, collapse internal whitespace,
+ * remove trailing slash, ensure starts with "/".
  */
 function normalizeHrefForLookup(href: string | undefined): string {
-  if (!href || typeof href !== 'string') return ''
-  return href.trim().replace(/\/+$/, '')
+  if (href == null) return ''
+  const s = typeof href === 'string' ? href : String(href)
+  const trimmed = s.trim()
+  if (!trimmed) return ''
+  const collapsed = trimmed.replace(/\s+/g, ' ').trim()
+  const noTrailing = collapsed.replace(/\/+$/, '')
+  const withLeading = noTrailing.startsWith('/') ? noTrailing : `/${noTrailing}`
+  return withLeading
+}
+
+/**
+ * Canonical lookup key for IMPLEMENTED_ADMIN_HREFS: normalize(permissionMenu href).
+ * Set contains permissionMenu hrefs (e.g. /admin/health), not mapped routes.
+ */
+function getLookupHref(href: string | undefined): string {
+  return normalizeHrefForLookup(href)
 }
 
 /**
  * Returns true if this href should be shown in admin sidebar.
- * Uses normalized href for Set lookup so "/admin/health" and "/admin/health/" match.
+ * Lookup: getLookupHref(href) → normalized permissionMenu href; Set.has(lookup).
  */
 export function isImplementedAdminHref(href: string | undefined): boolean {
-  const norm = normalizeHrefForLookup(href)
-  if (!norm) return false
+  const lookup = getLookupHref(href)
+  if (!lookup) return false
   if (showUnimplementedAdminRoutes()) return true
-  return IMPLEMENTED_ADMIN_HREFS.has(norm)
+  return IMPLEMENTED_ADMIN_HREFS.has(lookup)
 }

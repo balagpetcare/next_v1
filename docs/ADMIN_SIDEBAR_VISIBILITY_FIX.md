@@ -57,20 +57,29 @@ src/larkon-admin/menu/adapters/adminRouteMap.ts
 
 ---
 
+## Final root cause
+
+- **Single source confirmed:** Only `src/larkon-admin/menu/adapters/adminRouteMap.ts` defines `IMPLEMENTED_ADMIN_HREFS`; only `panelMenus.ts` imports it. No duplicate modules.
+- **Deterministic lookup:** Visibility must use a **normalized** permissionMenu href for `Set.has()` because the Set stores permissionMenu hrefs (e.g. `/admin/health`), not mapped routes. Any trailing slash, leading/trailing whitespace, or collapsed internal spaces on `item.href` would make the lookup fail.
+- **Fix:** Harden `normalizeHrefForLookup` (non-string safe, trim, collapse internal whitespace, strip trailing slash, ensure leading `/`) and use `getLookupHref(href)` so every check uses the same canonical key.
+
+---
+
 ## STEP 2 — FIX (Applied)
 
 ### Changes
 
 1. **adminRouteMap.ts**
-   - Added `normalizeHrefForLookup(href)` — trim, strip trailing slash for Set lookup
-   - `isImplementedAdminHref()` now normalizes href before `IMPLEMENTED_ADMIN_HREFS.has()` check
-   - Ensures "/admin/health" and "/admin/health/" both match
+   - **normalizeHrefForLookup:** Handles non-string safely; trim; collapse internal whitespace (`/\s+/g` → single space); remove trailing slash; ensure starts with `"/"`.
+   - **getLookupHref(href):** Returns normalized permissionMenu href for Set lookup (no map in lookup — Set contains menu hrefs).
+   - **isImplementedAdminHref:** Uses `getLookupHref(href)` then `IMPLEMENTED_ADMIN_HREFS.has(lookup)`.
+   - Comment: single source of IMPLEMENTED_ADMIN_HREFS for admin sidebar.
 
 2. **Manu.ts / panelMenus.ts**
-   - No change — already uses `getFullMenu("admin")` from permissionMenu REGISTRY.admin (no MENU_ITEMS fallback)
-   - Filter order: mapAdminHref for display URL, then isImplementedAdminHref(original href) for visibility
+   - No change — already uses `getFullMenu("admin")` from permissionMenu REGISTRY.admin (no MENU_ITEMS fallback).
+   - Filter order: mapAdminHref for display URL, then isImplementedAdminHref(original href) for visibility.
 
-### Files Changed
+### Files changed
 
 - `src/larkon-admin/menu/adapters/adminRouteMap.ts`
 
@@ -86,3 +95,15 @@ src/larkon-admin/menu/adapters/adminRouteMap.ts
    npm run dev:admin
    ```
 3. **Env override (optional):** Set `NEXT_PUBLIC_ADMIN_MENU_SHOW_UNIMPLEMENTED=true` in `.env.local` to show all REGISTRY.admin items (bypasses IMPLEMENTED_ADMIN_HREFS).
+
+### Optional: evidence log
+
+To confirm which file runs and what hrefs are checked, temporarily add in `isImplementedAdminHref()` (before `return IMPLEMENTED_ADMIN_HREFS.has(lookup)`):
+
+```ts
+if (typeof process !== 'undefined' && process.env?.NODE_ENV !== 'production') {
+  console.log('[adminRouteMap]', { raw: href, lookup, mapped: mapAdminHref(href), setHas: IMPLEMENTED_ADMIN_HREFS.has(lookup) })
+}
+```
+
+Run `npm run dev:admin`, open admin, capture one run. Remove the log after confirming.
