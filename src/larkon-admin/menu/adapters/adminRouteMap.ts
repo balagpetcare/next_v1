@@ -64,10 +64,21 @@ export function showUnimplementedAdminRoutes(): boolean {
 }
 
 /**
+ * Normalize href for IMPLEMENTED_ADMIN_HREFS lookup.
+ * Ensures trailing slash and whitespace don't break matching.
+ */
+function normalizeHrefForLookup(href: string | undefined): string {
+  if (!href || typeof href !== 'string') return ''
+  return href.trim().replace(/\/+$/, '')
+}
+
+/**
  * Returns true if this href should be shown in admin sidebar.
+ * Uses normalized href for Set lookup so "/admin/health" and "/admin/health/" match.
  */
 export function isImplementedAdminHref(href: string | undefined): boolean {
-  if (!href) return false
+  const norm = normalizeHrefForLookup(href)
+  if (!norm) return false
   if (showUnimplementedAdminRoutes()) return true
-  return IMPLEMENTED_ADMIN_HREFS.has(href)
+  return IMPLEMENTED_ADMIN_HREFS.has(norm)
 }
