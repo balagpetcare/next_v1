@@ -299,7 +299,7 @@ export default function DispatchReceiveDrawer({ show, onHide, dispatchId, branch
                 <button type="button" className="btn btn-outline-primary btn-sm" disabled={submitting || receiveSuccess || !hasRemaining} onClick={handleReceiveAll}>
                   Receive all
                 </button>
-                <Link href={`/staff/branch/${branchId}/inventory/incoming/${dispatchId}`} className="btn btn-outline-secondary btn-sm">
+                <Link href={`/staff/branch/${branchId}/inventory/incoming/${dispatchId}`} className="btn btn-outline-secondary btn-sm" aria-label="Open full receive page">
                   Full page
                 </Link>
               </div>
