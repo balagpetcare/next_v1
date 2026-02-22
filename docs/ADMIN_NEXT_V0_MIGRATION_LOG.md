@@ -41,12 +41,7 @@ Notes:
 
 Remaining B routes:
 
-- `/admin/authenticity/dashboard`
-- `/admin/authenticity/factories`
-- `/admin/authenticity/products`
-- `/admin/authenticity/batches`
-- `/admin/authenticity/serials`
-- `/admin/authenticity/alerts`
+- None. Batch B migration is complete.
 
 ## Batch 2 - B routes (commerce POS)
 
@@ -78,3 +73,16 @@ Migrated:
 
 - `/admin/pricing`
 - `/admin/online-store`
+
+## Batch 2 - B routes (product authenticity)
+
+Date: 2026-02-22
+
+Migrated:
+
+- `/admin/authenticity/dashboard`
+- `/admin/authenticity/factories`
+- `/admin/authenticity/products`
+- `/admin/authenticity/batches`
+- `/admin/authenticity/serials`
+- `/admin/authenticity/alerts`

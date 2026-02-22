@@ -32,12 +32,6 @@ export const STUB_ADMIN_HREFS: Set<string> = new Set([
   '/admin/content/cms',
   '/admin/system/integrations',
   '/admin/system/sessions',
-  '/admin/authenticity/dashboard',
-  '/admin/authenticity/factories',
-  '/admin/authenticity/products',
-  '/admin/authenticity/batches',
-  '/admin/authenticity/serials',
-  '/admin/authenticity/alerts',
 ])
 
 /**
