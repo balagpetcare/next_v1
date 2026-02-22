@@ -87,6 +87,11 @@ These permissionMenu hrefs map to different page paths:
 | `/admin/inventory` | `/admin/inventory/warehouse` |
 | `/admin/support` | `/admin/support/help-center` |
 
+## Stub detection and SOON badge
+
+- **STUB_ADMIN_HREFS** (in `src/larkon-admin/menu/adapters/adminRouteMap.ts`): Set of permissionMenu hrefs that point to Coming Soon stub pages. Same list as the “Stub Pages Added” table above.
+- **SOON badge:** Sidebar menu items whose href is in STUB_ADMIN_HREFS render a small “SOON” badge (secondary variant) next to the label. Implemented items are unchanged. See `isStubAdminHref()` and `panelMenus.ts` → `convertItem()`.
+
 ## Behavior
 
 - **NEXT_PUBLIC_ADMIN_MENU_SHOW_UNIMPLEMENTED:** Unchanged. When `true`, shows all REGISTRY.admin items regardless of IMPLEMENTED_ADMIN_HREFS.

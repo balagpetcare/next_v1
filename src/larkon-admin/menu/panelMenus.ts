@@ -4,7 +4,7 @@
  */
 import type { MenuItemType } from '@larkon/types/menu'
 import { getFullMenu, type AppKey } from '../../lib/permissionMenu'
-import { mapAdminHref, isImplementedAdminHref } from './adapters/adminRouteMap'
+import { mapAdminHref, isImplementedAdminHref, isStubAdminHref } from './adapters/adminRouteMap'
 
 const BASE_TO_APP: Record<string, AppKey> = {
   '/admin': 'admin',
@@ -68,6 +68,10 @@ function convertItem(
     icon: item.icon ?? 'solar:widget-5-outline',
     url,
     parentKey: parentKey ?? undefined,
+  }
+  // Show SOON badge for admin stub routes (Coming Soon pages)
+  if (app === 'admin' && item.href && isStubAdminHref(item.href)) {
+    node.badge = { variant: 'secondary', text: 'SOON' }
   }
   if (item.children && item.children.length > 0) {
     const kids = item.children

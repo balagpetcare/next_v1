@@ -14,6 +14,54 @@ export const ADMIN_ROUTE_MAP: Record<string, string> = {
 }
 
 /**
+ * permissionMenu hrefs that currently show a "Coming Soon" stub page.
+ * Used to render a SOON badge next to menu labels. See docs/ADMIN_SIDEBAR_FULL_RESTORE.md.
+ */
+export const STUB_ADMIN_HREFS: Set<string> = new Set([
+  '/admin/live-monitor',
+  '/admin/products/moderation',
+  '/admin/products/master-catalog',
+  '/admin/products/master-catalog/import',
+  '/admin/products/approvals',
+  '/admin/vendors',
+  '/admin/pricing',
+  '/admin/online-store',
+  '/admin/returns',
+  '/admin/pos/transactions',
+  '/admin/transfers',
+  '/admin/services',
+  '/admin/appointments',
+  '/admin/delivery',
+  '/admin/delivery/jobs',
+  '/admin/delivery/riders',
+  '/admin/delivery/hubs',
+  '/admin/delivery/incidents',
+  '/admin/support/tickets',
+  '/admin/support/reviews',
+  '/admin/support/reports',
+  '/admin/content',
+  '/admin/content/announcements',
+  '/admin/content/notifications',
+  '/admin/content/templates',
+  '/admin/content/cms',
+  '/admin/system',
+  '/admin/system/integrations',
+  '/admin/system/sessions',
+  '/admin/analytics',
+  '/admin/audit',
+  '/admin/onboarding',
+  '/admin/onboarding/publish-requests',
+  '/admin/onboarding/partner-applications',
+  '/admin/docs',
+  '/admin/authenticity/dashboard',
+  '/admin/authenticity/factories',
+  '/admin/authenticity/products',
+  '/admin/authenticity/batches',
+  '/admin/authenticity/serials',
+  '/admin/authenticity/alerts',
+])
+
+/**
  * permissionMenu hrefs that have working pages (direct or via map).
  * Includes full REGISTRY.admin structure: implemented pages + Larkon stubs.
  * When ADMIN_MENU_SHOW_UNIMPLEMENTED=false, only these items are shown.
@@ -154,4 +202,14 @@ export function isImplementedAdminHref(href: string | undefined): boolean {
   if (!lookup) return false
   if (showUnimplementedAdminRoutes()) return true
   return IMPLEMENTED_ADMIN_HREFS.has(lookup)
+}
+
+/**
+ * Returns true if this href points to a stub (Coming Soon) page.
+ * Used to show SOON badge next to menu labels. Does not affect visibility.
+ */
+export function isStubAdminHref(href: string | undefined): boolean {
+  const lookup = getLookupHref(href)
+  if (!lookup) return false
+  return STUB_ADMIN_HREFS.has(lookup)
 }
