@@ -230,7 +230,7 @@ export default function GlobalImpactSection() {
       <div className="impact__container max-w-6xl mx-auto">
         <header className="impact__header mb-6 sm:mb-8">
           <h2 className="impact__title">{t("globalImpact.title")}</h2>
-          <p className="impact__subtitle">{t("globalImpact.subtitle")}</p>
+          <p className="pb-4 impact__subtitle">{t("globalImpact.subtitle")}</p>
         </header>
 
         <div className="impact__grid gap-4 sm:gap-6 lg:gap-8">

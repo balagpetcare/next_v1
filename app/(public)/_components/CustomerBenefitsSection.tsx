@@ -16,7 +16,7 @@ export default function CustomerBenefitsSection() {
   return (
     <section id="love" className="lp-section-soft px-4 sm:px-6 lg:px-8 py-100 sm:py-100 lg:py-20" aria-labelledby="customer-benefits-title">
       <div className="max-w-6xl mx-auto">
-        <h2 id="customer-benefits-title" className="lp-h2 pb-60 mb-6 sm:mb-8">
+        <h2 id="customer-benefits-title" className="lp-h2 pb-16 mb-6 sm:mb-8">
           {t("customerBenefits.title")}
         </h2>
         <div className="jamina-customer-bars gap-4 sm:gap-6 lg:gap-8">

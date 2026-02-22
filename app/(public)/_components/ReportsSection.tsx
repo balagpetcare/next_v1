@@ -52,7 +52,7 @@ export default function ReportsSection() {
     <section id="growth" className="lp-section jamina-reports px-4 sm:px-6 lg:px-8 py-100 sm:py-100 lg:py-20" aria-labelledby="reports-title">
       <div className="lp-container max-w-6xl mx-auto">
         <div className="jamina-reports-head mb-6 sm:mb-8">
-          <h2 id="reports-title" className="lp-h2 pb-60 jamina-reports-title">
+          <h2 id="reports-title" className="lp-h2 pb-16 jamina-reports-title">
             {t("reports.title")}
           </h2>
           <p className="lp-subtitle jamina-reports-subtitle">

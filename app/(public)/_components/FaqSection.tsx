@@ -15,7 +15,7 @@ export default function FaqSection() {
   return (
     <section id="faq" className="lp-section jamina-faq-section px-4 sm:px-6 lg:px-8 py-100 sm:py-100 lg:py-20" aria-labelledby="faq-title">
       <div className="max-w-6xl mx-auto">
-        <h2 id="faq-title" className="lp-h2 pb-60 mb-6 sm:mb-8">
+        <h2 id="faq-title" className="lp-h2 pb-16 mb-6 sm:mb-8">
           {t("faq.title")}
         </h2>
         <div className="lp-container">

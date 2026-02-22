@@ -18,7 +18,7 @@ export default function ServiceSalesSection() {
     <section id="sales" className="jamina-sales px-4 sm:px-6 lg:px-8 py-100 sm:py-100 lg:py-20" aria-labelledby="service-sales-title">
       <div className="lp-container max-w-6xl mx-auto">
         <div className="jamina-sales-head mb-6 sm:mb-8">
-          <h2 id="service-sales-title" className="lp-h2 pb-60 pb-50 jamina-sales-title">
+          <h2 id="service-sales-title" className="lp-h2 pb-16 pb-50 jamina-sales-title">
             {t("serviceSales.title")}
           </h2>
         </div>

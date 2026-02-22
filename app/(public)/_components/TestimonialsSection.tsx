@@ -26,7 +26,7 @@ export default function TestimonialsSection() {
   return (
     <section id="testimonials" className="lp-section jamina-testimonials-section px-4 sm:px-6 lg:px-8 py-100 sm:py-100 lg:py-20" aria-labelledby="testimonials-title">
       <div className="max-w-6xl mx-auto">
-        <h2 id="testimonials-title" className="lp-h2 pb-60 mb-6 sm:mb-8">
+        <h2 id="testimonials-title" className="lp-h2 pb-16 mb-6 sm:mb-8">
           {t("testimonials.title")}
         </h2>
         <div className="lp-container">

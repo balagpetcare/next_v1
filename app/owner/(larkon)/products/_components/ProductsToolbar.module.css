@@ -1,0 +1,254 @@
+/* Products toolbar – filters বামে, overflow ঠিক */
+
+.toolbar {
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--bs-border-color, #dee2e6);
+  overflow-x: hidden;
+}
+
+/* Left column: take remaining space so filters have room for one line; can shrink to avoid overflow */
+.filtersCol {
+  min-width: 0;
+  flex: 1 1 0%;
+}
+
+.control {
+  height: 38px;
+}
+
+.searchWrap input {
+  height: 38px;
+}
+
+/* Filters box – overflow যেন ডানদিকে না সরে */
+.filtersSection {
+  padding: 0.5rem 0;
+  min-width: 0;
+  overflow: hidden;
+  max-width: 100%;
+  width: 100%;
+}
+
+/* ফিল্টার এক লাইনে – ডেস্কটপে nowrap, জায়গা কমলে wrap */
+.filtersRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: nowrap;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+  padding-bottom: 2px;
+  overflow-x: auto;
+}
+
+@media (min-width: 992px) {
+  .filtersRow {
+    flex-wrap: nowrap;
+  }
+}
+
+@media (max-width: 991px) {
+  .filtersRow {
+    flex-wrap: wrap;
+    overflow-x: visible;
+  }
+}
+
+.searchWrap {
+  flex: 0 0 auto;
+  min-width: 180px;
+  max-width: 100%;
+}
+
+@media (min-width: 992px) {
+  .searchWrap {
+    max-width: 280px;
+  }
+}
+
+@media (max-width: 991px) {
+  .searchWrap {
+    min-width: 100%;
+    max-width: 100%;
+  }
+}
+
+.filter {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+
+@media (min-width: 992px) {
+  .filter {
+    min-width: 130px;
+  }
+}
+
+.sortSelect {
+  min-width: 150px;
+  max-width: 100%;
+}
+
+@media (max-width: 991px) {
+  .filter,
+  .sortSelect {
+    min-width: 120px;
+  }
+}
+
+@media (max-width: 576px) {
+  .filter,
+  .sortSelect {
+    min-width: 100%;
+  }
+}
+
+.productCount {
+  margin-left: 0.25rem;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* Right: action buttons */
+.actionsSection {
+  padding: 0.5rem 0;
+}
+
+.actionBtn {
+  flex: 0 0 auto;
+}
+
+/* Bulk actions row (when items selected) */
+.bulkRow {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid var(--bs-border-color-translucent, rgba(0, 0, 0, 0.08));
+}
+.toolbar {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+/* Main row: left filters + right actions */
+.mainRow {
+  width: 100%;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+/* Filters box */
+.filtersSection {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 10px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* The filters line: NO SCROLL, auto-fit, wraps */
+.filtersCol {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+
+  flex-wrap: wrap;     /* ✅ no scroll; wrap to next line */
+  overflow: visible;   /* ✅ no scrollbars */
+}
+
+/* Unified control height */
+.control {
+  height: 38px;
+}
+
+/* Search takes more space */
+.searchWrap {
+  flex: 1 1 380px;
+  min-width: 260px;
+  max-width: 520px;
+}
+
+/* Each filter auto fits */
+.filter {
+  flex: 1 1 180px;
+  min-width: 170px;
+}
+
+/* sort a bit tighter */
+.sortSelect {
+  flex: 1 1 180px;
+  min-width: 180px;
+}
+
+/* count never wraps */
+.productCount {
+  white-space: nowrap;
+  flex: 0 0 auto;
+}
+
+/* Actions area */
+.actionsSection {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.actionBtn {
+  flex: 0 0 auto;
+}
+
+/* Bulk row */
+.bulkRow {
+  width: 100%;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* Responsive: stack actions under filters */
+@media (max-width: 992px) {
+  .mainRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .actionsSection {
+    justify-content: flex-start;
+  }
+
+  .searchWrap {
+    min-width: 100%;
+    max-width: 100%;
+    flex: 1 1 100%;
+  }
+
+  .filter,
+  .sortSelect {
+    min-width: 48%;
+  }
+}
+
+@media (max-width: 576px) {
+  .filter,
+  .sortSelect {
+    min-width: 100%;
+  }
+}

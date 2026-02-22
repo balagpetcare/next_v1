@@ -124,7 +124,7 @@ export default function EcosystemSection() {
   return (
     <section id="ecosystem" className="lp-section eco2-section jamina-ecosystem px-4 sm:px-6 lg:px-8 py-100 sm:py-100 lg:py-20" aria-labelledby="ecosystem-title">
       <div className="lp-container max-w-6xl mx-auto">
-        <h2 id="ecosystem-title" className="lp-h2 pb-60 mb-6 sm:mb-8">
+        <h2 id="ecosystem-title" className="lp-h2 pb-16 mb-6 sm:mb-8">
           {t("ecosystem.title")}
         </h2>
         <p className="lp-subtitle">{t("ecosystem.subtitle")}</p>

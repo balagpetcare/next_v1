@@ -7,6 +7,7 @@ import Link from 'next/link'
 import { Fragment } from 'react'
 export const dynamic = 'force-dynamic'
 import { Card, CardBody, Col, Row } from 'react-bootstrap'
+import { PaginationWithRouter } from '@/src/components/common/PaginationWithRouter'
 
 export const metadata: Metadata = { title: 'Role List' }
 
@@ -115,33 +116,7 @@ const RoleListPage = async () => {
             </div>
           </div>
           <Col sm={'auto'} className="mt-3 mt-sm-0">
-            <ul className="pagination  m-0">
-              <li className="page-item">
-                <Link href="" className="page-link">
-                  <IconifyIcon icon="bx:left-arrow-alt" />
-                </Link>
-              </li>
-              <li className="page-item active">
-                <Link href="" className="page-link">
-                  1
-                </Link>
-              </li>
-              <li className="page-item">
-                <Link href="" className="page-link">
-                  2
-                </Link>
-              </li>
-              <li className="page-item">
-                <Link href="" className="page-link">
-                  3
-                </Link>
-              </li>
-              <li className="page-item">
-                <Link href="" className="page-link">
-                  <IconifyIcon icon="bx:right-arrow-alt" />
-                </Link>
-              </li>
-            </ul>
+            <PaginationWithRouter currentPage={1} totalPages={3} align="end" ariaLabel="Role list pagination" />
           </Col>
         </Row>
       </Card>

@@ -29,10 +29,10 @@ export default function HowToStartDiagramSection() {
     >
       <div className="lp-container max-w-6xl mx-auto">
         <div className="jamina-diagram-head mb-6 sm:mb-8">
-          <h2 id="diagram-title" className="lp-h2 pb-10 jamina-diagram-title">
+          <h2 id="diagram-title" className="lp-h2 pb-1 jamina-diagram-title">
             {t("howToStartDiagram.title")}
           </h2>
-          <p className="lp-subtitle pb-40 jamina-diagram-subtitle">
+          <p className="lp-subtitle pb-4 jamina-diagram-subtitle">
             {t("howToStartDiagram.subtitle")}
           </p>
         </div>

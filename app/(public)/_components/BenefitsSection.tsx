@@ -18,7 +18,7 @@ export default function BenefitsSection() {
   return (
     <section id="benefits" className="lp-section jamina-benefits-section px-4 sm:px-6 lg:px-8 py-100 sm:py-100 lg:py-20" aria-labelledby="benefits-title">
       <div className="max-w-6xl mx-auto">
-        <h2 id="benefits-title" className="lp-h2 pb-60 mb-6 sm:mb-8">
+        <h2 id="benefits-title" className="lp-h2 pb-16 mb-6 sm:mb-8">
           {t("benefits.sectionTitle")}
         </h2>
         <div className="lp-container">
