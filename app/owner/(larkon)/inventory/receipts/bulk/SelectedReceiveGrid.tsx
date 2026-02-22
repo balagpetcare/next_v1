@@ -20,7 +20,7 @@ type SelectedReceiveGridProps = {
 
 /**
  * Right panel: Editable Selected Items grid
- * - Product, Variant, Qty, Unit Cost, Lot, Mfg, Expiry, Remove
+ * - Product, Variant (display; change via Product Browser or Spreadsheet mode), Qty, Unit Cost, Lot, Mfg, Expiry, Remove
  * - Inline validation (qty>0, unit cost warning, expiry warning)
  * - Keyboard: Enter/Tab next cell, Ctrl+D duplicate, Ctrl+Enter submit
  * - Dedupe: same variant → focus + flash (handled by parent)
