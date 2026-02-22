@@ -169,12 +169,12 @@ export default function StaffBranchInventoryReceivePage() {
       </div>
 
       <Tab.Container activeKey={tab} onSelect={(k) => setTab(k ?? "incoming")}>
-        <Nav variant="tabs" className="mb-24">
+        <Nav variant="tabs" className="mb-24" role="tablist" aria-label="Receive Center tabs">
           <Nav.Item>
-            <Nav.Link eventKey="incoming">Incoming dispatches</Nav.Link>
+            <Nav.Link eventKey="incoming" role="tab" aria-selected={tab === "incoming"}>Incoming dispatches</Nav.Link>
           </Nav.Item>
           <Nav.Item>
-            <Nav.Link eventKey="opening">Opening stock</Nav.Link>
+            <Nav.Link eventKey="opening" role="tab" aria-selected={tab === "opening"}>Opening stock</Nav.Link>
           </Nav.Item>
         </Nav>
 
