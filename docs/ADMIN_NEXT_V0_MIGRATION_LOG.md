@@ -41,13 +41,6 @@ Notes:
 
 Remaining B routes:
 
-- `/admin/delivery`
-- `/admin/content`
-- `/admin/system`
-- `/admin/audit`
-- `/admin/onboarding`
-- `/admin/onboarding/publish-requests`
-- `/admin/onboarding/partner-applications`
 - `/admin/authenticity/dashboard`
 - `/admin/authenticity/factories`
 - `/admin/authenticity/products`
@@ -62,6 +55,20 @@ Date: 2026-02-22
 Migrated:
 
 - `/admin/pos/transactions`
+
+## Batch 2 - B routes (governance and onboarding)
+
+Date: 2026-02-22
+
+Migrated:
+
+- `/admin/delivery`
+- `/admin/content`
+- `/admin/system`
+- `/admin/audit`
+- `/admin/onboarding`
+- `/admin/onboarding/publish-requests`
+- `/admin/onboarding/partner-applications`
 
 ## Batch 2 - B routes (commerce follow-up)
 
