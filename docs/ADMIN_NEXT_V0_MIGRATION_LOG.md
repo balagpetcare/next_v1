@@ -25,3 +25,35 @@ Route map updates:
 Still stub (next phases):
 
 - All planned B routes and all C routes remain in stub state after this batch.
+
+## Batch 2 - B routes (priority stream started)
+
+Date: 2026-02-22
+
+Migrated:
+
+- `/admin/products/master-catalog/import`
+- `/admin/products/approvals`
+
+Notes:
+
+- `master-catalog/import` uses credentialed `fetch` for multipart upload because `apiGet/apiPost/apiPatch` are JSON-focused helpers.
+
+Remaining B routes:
+
+- `/admin/pricing`
+- `/admin/online-store`
+- `/admin/pos/transactions`
+- `/admin/delivery`
+- `/admin/content`
+- `/admin/system`
+- `/admin/audit`
+- `/admin/onboarding`
+- `/admin/onboarding/publish-requests`
+- `/admin/onboarding/partner-applications`
+- `/admin/authenticity/dashboard`
+- `/admin/authenticity/factories`
+- `/admin/authenticity/products`
+- `/admin/authenticity/batches`
+- `/admin/authenticity/serials`
+- `/admin/authenticity/alerts`
