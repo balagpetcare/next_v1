@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Offcanvas } from "react-bootstrap";
+import { Modal, Button, Offcanvas } from "react-bootstrap";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 import { ownerGet, ownerPost } from "@/app/owner/_lib/ownerApi";
 import { useToast } from "@/src/hooks/useToast";
@@ -33,12 +33,17 @@ export default function BulkReceivePage() {
   const [showBrowserDrawer, setShowBrowserDrawer] = useState(false);
   const [focusedRowId, setFocusedRowId] = useState<string | null>(null);
   const [flashRowId, setFlashRowId] = useState<string | null>(null);
+  const [showBranchDispatchModal, setShowBranchDispatchModal] = useState(false);
+  const [dispatchSourceWarehouseId, setDispatchSourceWarehouseId] = useState<string>("");
+  const [creatingDispatch, setCreatingDispatch] = useState(false);
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const vendorSearchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevLocationIdRef = useRef<string>("");
 
   const selectedLocation = locations.find((l) => String(l.id) === locationId);
   const orgId = selectedLocation?.branch?.orgId;
+
+  const warehouseLocations = locations.filter((l) => l.type === "CENTRAL_WAREHOUSE");
 
   const loadLocations = useCallback(async () => {
     setLoading(true);
@@ -209,6 +214,10 @@ export default function BulkReceivePage() {
       toast.warning("Add at least one line with variant and quantity.");
       return;
     }
+    if (selectedLocation?.type && selectedLocation.type !== "CENTRAL_WAREHOUSE") {
+      setShowBranchDispatchModal(true);
+      return;
+    }
     setSubmitting(true);
     setLastReceipt(null);
     try {
@@ -234,7 +243,11 @@ export default function BulkReceivePage() {
       setInvoiceDate("");
       setNotes("");
     } catch (err: unknown) {
-      const j = (err as { response?: { errors?: { rowIndex: number; message: string }[] } })?.response;
+      const j = (err as { response?: { code?: string; errors?: { rowIndex: number; message: string }[] } })?.response;
+      if (j?.code === "BRANCH_LOCATION_REQUIRES_DISPATCH") {
+        setShowBranchDispatchModal(true);
+        return;
+      }
       if (j?.errors?.length) {
         toast.error(`Validation: ${j.errors.map((e) => `Row ${e.rowIndex + 1}: ${e.message}`).join("; ")}`);
       } else {
@@ -242,6 +255,41 @@ export default function BulkReceivePage() {
       }
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const handleCreateDispatch = async () => {
+    if (!locationId || !dispatchSourceWarehouseId) {
+      toast.warning(warehouseLocations.length === 0 ? "No warehouse locations found. Create a CENTRAL_WAREHOUSE location first." : "Select source warehouse.");
+      return;
+    }
+    const lines = rows
+      .map((r) => ({ variantId: r.variantId, quantity: parseInt(r.quantity, 10) || 0 }))
+      .filter((l) => l.variantId != null && l.quantity > 0);
+    if (lines.length === 0) {
+      toast.warning("Add at least one line with variant and quantity.");
+      return;
+    }
+    setCreatingDispatch(true);
+    try {
+      const res = await ownerPost<{ success: boolean; data: { dispatchId: number; stockRequestId?: number } }>(
+        "/api/v1/inventory/direct-dispatch",
+        {
+          fromLocationId: parseInt(dispatchSourceWarehouseId, 10),
+          toLocationId: parseInt(locationId, 10),
+          lines,
+          note: notes.trim() || undefined,
+        }
+      );
+      const dispatchId = res?.data?.dispatchId;
+      setShowBranchDispatchModal(false);
+      setRows([emptyRow()]);
+      setNotes("");
+      toast.success(`Dispatch created (#${dispatchId ?? "—"}). Waiting for branch confirmation.`);
+    } catch (err: unknown) {
+      toast.error(getMessageFromApiError(err as Error));
+    } finally {
+      setCreatingDispatch(false);
     }
   };
 
@@ -506,6 +554,57 @@ export default function BulkReceivePage() {
           </div>
         </div>
       </div>
+
+      {/* Branch location: Create Dispatch modal */}
+      <Modal
+        show={showBranchDispatchModal}
+        onHide={() => setShowBranchDispatchModal(false)}
+        onEnter={() => warehouseLocations.length > 0 && setDispatchSourceWarehouseId(String(warehouseLocations[0].id))}
+        centered
+        className="radius-12"
+      >
+        <Modal.Header closeButton className="border-bottom">
+          <Modal.Title>Branch locations require confirmation</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted mb-3">
+            To send products to this location, create a dispatch so the branch manager can receive and confirm quantities.
+          </p>
+          {warehouseLocations.length === 0 ? (
+            <div className="alert alert-warning mb-0">
+              No warehouse (CENTRAL_WAREHOUSE) locations found. Create one at Inventory → Locations.
+            </div>
+          ) : (
+            <div className="mb-2">
+              <label className="form-label small">Source warehouse</label>
+              <select
+                className="form-select form-select-sm"
+                value={dispatchSourceWarehouseId}
+                onChange={(e) => setDispatchSourceWarehouseId(e.target.value)}
+              >
+                <option value="">Select warehouse</option>
+                {warehouseLocations.map((loc) => (
+                  <option key={loc.id} value={loc.id}>
+                    {loc.name} {loc.branch ? `(${loc.branch.name})` : ""}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+        </Modal.Body>
+        <Modal.Footer className="border-top">
+          <Button variant="outline-secondary" onClick={() => setShowBranchDispatchModal(false)}>
+            Change location
+          </Button>
+          <Button
+            variant="primary"
+            onClick={handleCreateDispatch}
+            disabled={creatingDispatch || warehouseLocations.length === 0 || !dispatchSourceWarehouseId}
+          >
+            {creatingDispatch ? "Creating…" : "Create dispatch"}
+          </Button>
+        </Modal.Footer>
+      </Modal>
 
       {/* Mobile: Product Browser drawer */}
       <Offcanvas
