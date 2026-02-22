@@ -41,8 +41,6 @@ Notes:
 
 Remaining B routes:
 
-- `/admin/pricing`
-- `/admin/online-store`
 - `/admin/pos/transactions`
 - `/admin/delivery`
 - `/admin/content`
@@ -57,3 +55,12 @@ Remaining B routes:
 - `/admin/authenticity/batches`
 - `/admin/authenticity/serials`
 - `/admin/authenticity/alerts`
+
+## Batch 2 - B routes (commerce follow-up)
+
+Date: 2026-02-22
+
+Migrated:
+
+- `/admin/pricing`
+- `/admin/online-store`

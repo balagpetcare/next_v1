@@ -18,8 +18,6 @@ export const ADMIN_ROUTE_MAP: Record<string, string> = {
  * Used to render a SOON badge next to menu labels. See docs/ADMIN_SIDEBAR_FULL_RESTORE.md.
  */
 export const STUB_ADMIN_HREFS: Set<string> = new Set([
-  '/admin/pricing',
-  '/admin/online-store',
   '/admin/pos/transactions',
   '/admin/appointments',
   '/admin/delivery',
