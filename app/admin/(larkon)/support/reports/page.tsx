@@ -1,19 +1,7 @@
 'use client'
 
-import PageTItle from '@larkon/components/PageTItle'
-import { Card } from 'react-bootstrap'
+import ComingSoonPage from '@/src/bpa/admin/components/ComingSoonPage'
 
 export default function SupportReportsPage() {
-  return (
-    <>
-      <PageTItle title="REPORTS / ABUSE" />
-      <Card>
-        <Card.Body>
-          <p className="text-secondary mb-0">
-            Module not enabled yet. Reports and abuse admin panel coming soon.
-          </p>
-        </Card.Body>
-      </Card>
-    </>
-  )
+  return <ComingSoonPage title="REPORTS / ABUSE" />
 }
