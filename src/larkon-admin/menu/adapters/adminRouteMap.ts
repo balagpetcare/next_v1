@@ -17,38 +17,22 @@ export const ADMIN_ROUTE_MAP: Record<string, string> = {
  * When ADMIN_MENU_SHOW_UNIMPLEMENTED=false, only these items are shown.
  */
 export const IMPLEMENTED_ADMIN_HREFS: Set<string> = new Set([
-  '/admin/dashboard',
-  '/admin/users',
-  '/admin/staff',
+  '/admin/branch-types',
   '/admin/branches',
+  '/admin/countries',
+  '/admin/dashboard',
+  '/admin/inventory',
+  '/admin/orders',
   '/admin/organizations',
   '/admin/permissions',
-  '/admin/roles', // → /admin/role/role-list
-  '/admin/products', // → /admin/products/product-list
-  '/admin/orders', // → /admin/orders/orders-list
-  '/admin/inventory', // → /admin/inventory/warehouse
-  '/admin/support', // → /admin/support/help-center
+  '/admin/products',
+  '/admin/roles',
   '/admin/settings',
-  '/admin/support/faqs',
-  '/admin/support/privacy-policy',
-  '/admin/support/help-center',
-  '/admin/notifications',
-  '/admin/profile',
-  '/admin/review',
-  '/admin/category/category-list',
-  '/admin/customer/customer-list',
-  '/admin/seller/seller-list',
-  '/admin/products/product-list',
-  '/admin/products/product-grid',
-  '/admin/orders/orders-list',
-  '/admin/inventory/warehouse',
-  '/admin/inventory/received-orders',
-  '/admin/purchases/purchase-list',
-  '/admin/widgets',
-  '/admin/super-admin-whitelist',
-  '/admin/countries',
+  '/admin/staff',
   '/admin/states',
-  '/admin/branch-types',
+  '/admin/super-admin-whitelist',
+  '/admin/support',
+  '/admin/users',
 ])
 
 /**

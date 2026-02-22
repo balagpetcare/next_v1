@@ -16,7 +16,9 @@
     "start": "next start -p 3100",
     "lint": "cross-env ESLINT_USE_FLAT_CONFIG=true eslint . --max-warnings 0",
     "check:landing": "node scripts/check-landing-isolation.mjs",
-    "check:ui-standards": "node scripts/check-ui-standards.mjs"
+    "check:ui-standards": "node scripts/check-ui-standards.mjs",
+    "admin:generate-implemented-hrefs": "node scripts/admin/generateImplementedAdminHrefs.mjs",
+    "admin:generate-implemented-hrefs:write": "node scripts/admin/generateImplementedAdminHrefs.mjs --write"
   },
   "dependencies": {
     "@fullcalendar/bootstrap": "^6.1.20",
