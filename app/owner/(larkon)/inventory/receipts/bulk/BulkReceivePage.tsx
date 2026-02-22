@@ -80,6 +80,7 @@ export default function BulkReceivePage() {
 
   const selectedVariantIds = new Set(rows.filter((r) => r.variantId != null).map((r) => r.variantId as number));
 
+  /** Dedupe: if same variant already in grid, focus that row and flash highlight instead of adding duplicate */
   const addVariant = useCallback(
     (v: VariantOption) => {
       setRows((prev) => {
@@ -133,6 +134,7 @@ export default function BulkReceivePage() {
     setRows((prev) => (prev.length <= 1 ? [emptyRow()] : prev.filter((r) => r.id !== rowId)));
   }, []);
 
+  /** Location reset: if lines exist, confirm before clearing */
   const handleLocationChange = (newLocId: string) => {
     const hasLines = rows.some((r) => r.variantId != null || r.quantity || r.sku);
     if (hasLines && prevLocationIdRef.current && prevLocationIdRef.current !== newLocId) {
