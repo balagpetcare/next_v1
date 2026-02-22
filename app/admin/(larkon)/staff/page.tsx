@@ -244,13 +244,13 @@ export default function AdminStaffPage() {
                   <div className="mb-2">
                     <span className="small text-muted">Roles: </span>
                     {staffRoles.length
-                      ? staffRoles.map((r) => <SmallPill key={r} text={r} />)
+                      ? staffRoles.map((r: string) => <SmallPill key={r} text={r} />)
                       : '—'}
                   </div>
                   <div className="mb-3">
                     <span className="small text-muted">Branches: </span>
                     {staffBranches.length
-                      ? staffBranches.map((b) => <SmallPill key={b} text={b} />)
+                      ? staffBranches.map((b: string) => <SmallPill key={b} text={b} />)
                       : '—'}
                   </div>
                   {canWrite ? (

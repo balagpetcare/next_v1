@@ -230,7 +230,7 @@ export default function OwnerProductsPage() {
         } else if (actionId === "export") {
           const rows = products.filter((p) => ids.includes(p.id));
           const headers = ["id", "name", "slug", "status", "approvalStatus"];
-          const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => JSON.stringify((r as Record<string, unknown>)[h] ?? "")).join(","))].join("\n");
+          const csv = [headers.join(","), ...rows.map((r) => headers.map((h) => JSON.stringify((r as unknown as Record<string, unknown>)[h] ?? "")).join(","))].join("\n");
           const blob = new Blob([csv], { type: "text/csv" });
           const a = document.createElement("a");
           a.href = URL.createObjectURL(blob);

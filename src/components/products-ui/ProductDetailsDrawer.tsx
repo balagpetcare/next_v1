@@ -126,8 +126,8 @@ export function ProductDetailsDrawer({
         await apiFetch(`/api/v1/products/${productId}/publish`, { method: "POST" });
         notify.success("Success", "Product published");
         onUpdated?.();
-        const res = (await apiFetch(`/api/v1/products/${productId}`)) as { data?: ProductDetail };
-        setProduct(res?.data ?? res ?? null);
+        const res = (await apiFetch(`/api/v1/products/${productId}`)) as { data?: ProductDetail } | ProductDetail;
+        setProduct(res && typeof res === 'object' && 'data' in res ? (res as { data?: ProductDetail }).data ?? null : (res as ProductDetail | null));
       } catch (e: unknown) {
         notify.error("Error", (e as Error)?.message || "Failed to publish");
       } finally {

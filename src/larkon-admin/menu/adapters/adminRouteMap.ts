@@ -21,6 +21,8 @@ export const IMPLEMENTED_ADMIN_HREFS: Set<string> = new Set([
   '/admin/branches',
   '/admin/countries',
   '/admin/dashboard',
+  '/admin/fundraising',
+  '/admin/health',
   '/admin/inventory',
   '/admin/orders',
   '/admin/organizations',
@@ -33,6 +35,9 @@ export const IMPLEMENTED_ADMIN_HREFS: Set<string> = new Set([
   '/admin/super-admin-whitelist',
   '/admin/support',
   '/admin/users',
+  '/admin/verification-metrics',
+  '/admin/verifications',
+  '/admin/wallet',
 ])
 
 /**

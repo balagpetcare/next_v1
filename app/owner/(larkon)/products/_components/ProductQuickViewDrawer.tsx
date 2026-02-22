@@ -100,8 +100,8 @@ export function ProductQuickViewDrawer({ productId, show, onHide, onUpdated }: P
           await apiFetch(`/api/v1/products/${productId}/publish`, { method: "POST" });
           notify.success("Success", "Product published");
           onUpdated?.();
-          const res = (await apiFetch(`/api/v1/products/${productId}`)) as { data?: ProductDetail };
-          setProduct(res?.data ?? res ?? null);
+          const res = (await apiFetch(`/api/v1/products/${productId}`)) as { data?: ProductDetail } | ProductDetail;
+          setProduct(res && typeof res === 'object' && 'data' in res ? (res as { data?: ProductDetail }).data ?? null : (res as ProductDetail | null));
         } catch (e: any) {
           notify.error("Error", e?.message || "Failed to publish");
         } finally {

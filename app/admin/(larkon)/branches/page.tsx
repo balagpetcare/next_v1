@@ -166,13 +166,13 @@ export default function AdminBranchesPage() {
                               className="form-check-input"
                               id={`edit-cap-${c}`}
                               checked={checked}
-                              onChange={(e) => {
-                                const next = e.target.checked
-                                  ? [...editingCaps.filter((x) => x !== c), c]
-                                  : editingCaps.filter((x) => x !== c)
+                                onChange={(e) => {
+                                  const next = e.target.checked
+                                    ? [...editingCaps.filter((x: string) => x !== c), c]
+                                    : editingCaps.filter((x: string) => x !== c)
                                 setEditing({
                                   ...editing,
-                                  capabilities: next.map((cap) => ({ capability: cap })),
+                                  capabilities: next.map((cap: string) => ({ capability: cap })),
                                 })
                               }}
                             />
