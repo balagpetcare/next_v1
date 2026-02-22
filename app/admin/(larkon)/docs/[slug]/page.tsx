@@ -45,7 +45,8 @@ export default function AdminDocViewPage() {
     <div className="container-fluid">
       <PageHeader
         title={doc?.title ?? slug}
-        subtitle={<Link href="/admin/docs" className="text-decoration-none">Back to docs</Link>}
+        subtitle="Back to docs"
+        right={<Link href="/admin/docs" className="btn btn-sm btn-outline-secondary">Back to list</Link>}
       />
       <SectionCard title="">
         {loading ? <div className="text-secondary">Loading...</div> : null}

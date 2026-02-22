@@ -95,6 +95,11 @@ declare module "leaflet/dist/leaflet.css" {
   export default url;
 }
 
+declare module "*.css" {
+  const url: string;
+  export default url;
+}
+
 declare module "@/src/bpa/components/PageHeader" {
   import { ReactNode } from "react";
   export interface PageHeaderProps {

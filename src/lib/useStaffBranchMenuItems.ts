@@ -4,7 +4,7 @@ import { useMemo } from "react";
 import { usePathname } from "next/navigation";
 import type { MenuItemType } from "@larkon/types/menu";
 import { useBranchContext } from "@/lib/useBranchContext";
-import { getFilteredBranchSidebar } from "@/src/lib/branchSidebarConfig";
+import { getFilteredBranchSidebar, type BranchSummaryCounts } from "@/src/lib/branchSidebarConfig";
 
 /**
  * Returns permission-filtered sidebar menu for /staff/branch/:branchId.
@@ -21,13 +21,15 @@ export function useStaffBranchMenuItems(basePath: string): MenuItemType[] | null
     if (basePath !== "/staff" || !branchId || isLoading) return null;
 
     const permissions = myAccess?.permissions ?? [];
-    const counts = {
-      approvals: todayBoard?.approvalsPending?.length ?? kpis?.approvalsPending ?? undefined,
-      lowStock: kpis?.lowStockCount ?? undefined,
-      clinicQueue: todayBoard?.appointmentsQueue?.length ?? undefined,
+    const approvalsLen = Array.isArray((todayBoard as { approvalsPending?: unknown[] })?.approvalsPending) ? (todayBoard as { approvalsPending: unknown[] }).approvalsPending.length : undefined;
+    const clinicLen = Array.isArray((todayBoard as { appointmentsQueue?: unknown[] })?.appointmentsQueue) ? (todayBoard as { appointmentsQueue: unknown[] }).appointmentsQueue.length : undefined;
+    const counts: BranchSummaryCounts = {
+      approvals: typeof approvalsLen === "number" ? approvalsLen : (typeof kpis?.approvalsPending === "number" ? kpis.approvalsPending : undefined),
+      lowStock: typeof kpis?.lowStockCount === "number" ? kpis.lowStockCount : undefined,
+      clinicQueue: typeof clinicLen === "number" ? clinicLen : undefined,
     };
 
-    const groups = getFilteredBranchSidebar(branchId, branch, permissions, counts);
+    const groups = getFilteredBranchSidebar(branchId, branch as { type?: string; [k: string]: any } | null, permissions, counts);
 
     const items: MenuItemType[] = [
       {
