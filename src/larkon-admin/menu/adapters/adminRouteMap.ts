@@ -18,6 +18,10 @@ export const ADMIN_ROUTE_MAP: Record<string, string> = {
  */
 export const IMPLEMENTED_ADMIN_HREFS: Set<string> = new Set([
   '/admin/dashboard',
+  '/admin/users',
+  '/admin/staff',
+  '/admin/branches',
+  '/admin/organizations',
   '/admin/permissions',
   '/admin/roles', // → /admin/role/role-list
   '/admin/products', // → /admin/products/product-list
