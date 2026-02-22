@@ -1,25 +1,22 @@
-import { MENU_ITEMS } from '@larkon/assets/data/menu-items'
 import type { MenuItemType } from '@larkon/types/menu'
 import { getPanelMenuItems } from '@larkon/menu/panelMenus'
 
-/** Minimal fallback when panel has no full menu defined. */
+/** Minimal fallback when panel has no full menu (e.g. empty permissions or error). */
 function getMinimalPanelMenu(basePath: string): MenuItemType[] {
   const p = basePath.replace(/\/$/, '')
   return [
-    { key: 'dashboard', label: 'Dashboard', icon: 'solar:widget-5-bold-duotone', url: `${p}/dashboard` },
-    { key: 'settings', label: 'Settings', icon: 'solar:settings-bold-duotone', url: `${p}/settings` },
-    { key: 'profile', label: 'Profile', icon: 'solar:chat-square-like-bold-duotone', url: `${p}/profile` },
+    { key: 'dashboard', label: 'Dashboard', icon: 'solar:home-smile-outline', url: `${p}/dashboard` },
+    { key: 'settings', label: 'Settings', icon: 'solar:settings-outline', url: `${p}/settings` },
   ]
 }
 
 /**
  * Returns menu items for the current panel. Use basePath from LarkonPanelContext.
- * For /admin returns full MENU_ITEMS; for owner/shop/clinic/mother/producer/country/staff returns
- * full restored menu from permissionMenu registry; otherwise minimal menu.
+ * All panels (admin, owner, shop, clinic, etc.) use permissionMenu registry via getPanelMenuItems.
+ * Falls back to minimal menu if registry returns null/empty.
  */
 export const getMenuItems = (basePath?: string): MenuItemType[] => {
   const path = basePath ?? '/admin'
-  if (path === '/admin') return MENU_ITEMS
   const panelItems = getPanelMenuItems(path)
   if (panelItems && panelItems.length > 0) return panelItems
   return getMinimalPanelMenu(path)
