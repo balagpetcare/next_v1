@@ -15,30 +15,88 @@ export const ADMIN_ROUTE_MAP: Record<string, string> = {
 
 /**
  * permissionMenu hrefs that have working pages (direct or via map).
+ * Includes full REGISTRY.admin structure: implemented pages + Larkon stubs.
  * When ADMIN_MENU_SHOW_UNIMPLEMENTED=false, only these items are shown.
  */
 export const IMPLEMENTED_ADMIN_HREFS: Set<string> = new Set([
-  '/admin/branch-types',
-  '/admin/branches',
-  '/admin/countries',
+  // Dashboard
   '/admin/dashboard',
-  '/admin/fundraising',
-  '/admin/health',
-  '/admin/inventory',
-  '/admin/orders',
-  '/admin/organizations',
-  '/admin/permissions',
-  '/admin/products',
-  '/admin/roles',
-  '/admin/settings',
-  '/admin/staff',
-  '/admin/states',
-  '/admin/super-admin-whitelist',
-  '/admin/support',
-  '/admin/users',
+  '/admin/live-monitor',
+  // Verification Center
   '/admin/verification-metrics',
   '/admin/verifications',
+  // Users & Access
+  '/admin/users',
+  '/admin/staff',
+  '/admin/roles',
+  '/admin/permissions',
+  '/admin/super-admin-whitelist',
+  // Country Governance
+  '/admin/countries',
+  '/admin/states',
+  // Organizations & Branches
+  '/admin/organizations',
+  '/admin/branches',
+  '/admin/branch-types',
+  // Commerce & Catalog
+  '/admin/products',
+  '/admin/products/moderation',
+  '/admin/products/master-catalog',
+  '/admin/products/master-catalog/import',
+  '/admin/products/approvals',
+  '/admin/vendors',
+  '/admin/pricing',
+  '/admin/online-store',
+  // Orders & Finance
+  '/admin/orders',
+  '/admin/returns',
   '/admin/wallet',
+  '/admin/fundraising',
+  '/admin/pos/transactions',
+  '/admin/transfers',
+  // Clinic Operations
+  '/admin/services',
+  '/admin/appointments',
+  // Delivery & Logistics
+  '/admin/delivery',
+  '/admin/delivery/jobs',
+  '/admin/delivery/riders',
+  '/admin/delivery/hubs',
+  '/admin/delivery/incidents',
+  // Inventory Intelligence
+  '/admin/inventory',
+  // Support & Moderation
+  '/admin/support',
+  '/admin/support/tickets',
+  '/admin/support/reviews',
+  '/admin/support/reports',
+  // Content & Notifications
+  '/admin/content',
+  '/admin/content/announcements',
+  '/admin/content/notifications',
+  '/admin/content/templates',
+  '/admin/content/cms',
+  // System & Settings
+  '/admin/system',
+  '/admin/health',
+  '/admin/system/integrations',
+  '/admin/system/sessions',
+  '/admin/settings',
+  '/admin/analytics',
+  // Audit & Security
+  '/admin/audit',
+  '/admin/onboarding',
+  '/admin/onboarding/publish-requests',
+  '/admin/onboarding/partner-applications',
+  // Planning & Docs
+  '/admin/docs',
+  // Product Authenticity
+  '/admin/authenticity/dashboard',
+  '/admin/authenticity/factories',
+  '/admin/authenticity/products',
+  '/admin/authenticity/batches',
+  '/admin/authenticity/serials',
+  '/admin/authenticity/alerts',
 ])
 
 /**
