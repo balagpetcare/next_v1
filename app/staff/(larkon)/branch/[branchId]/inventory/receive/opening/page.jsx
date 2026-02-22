@@ -122,8 +122,8 @@ export default function StaffBranchInventoryReceiveOpeningPage() {
       </div>
       <p className="text-secondary-light small mb-24">
         To receive transfers, go to{" "}
-        <Link href={`/staff/branch/${branchId}/inventory/incoming`} className="text-primary">
-          Inventory → Incoming dispatches
+        <Link href={`/staff/branch/${branchId}/inventory/receive`} className="text-primary">
+          Receive Center → Incoming dispatches
         </Link>
         .
       </p>
