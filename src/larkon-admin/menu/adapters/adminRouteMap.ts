@@ -45,6 +45,10 @@ export const IMPLEMENTED_ADMIN_HREFS: Set<string> = new Set([
   '/admin/inventory/received-orders',
   '/admin/purchases/purchase-list',
   '/admin/widgets',
+  '/admin/super-admin-whitelist',
+  '/admin/countries',
+  '/admin/states',
+  '/admin/branch-types',
 ])
 
 /**
