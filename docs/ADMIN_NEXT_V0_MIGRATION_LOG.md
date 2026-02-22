@@ -41,7 +41,6 @@ Notes:
 
 Remaining B routes:
 
-- `/admin/pos/transactions`
 - `/admin/delivery`
 - `/admin/content`
 - `/admin/system`
@@ -55,6 +54,14 @@ Remaining B routes:
 - `/admin/authenticity/batches`
 - `/admin/authenticity/serials`
 - `/admin/authenticity/alerts`
+
+## Batch 2 - B routes (commerce POS)
+
+Date: 2026-02-22
+
+Migrated:
+
+- `/admin/pos/transactions`
 
 ## Batch 2 - B routes (commerce follow-up)
 
