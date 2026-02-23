@@ -3,6 +3,7 @@
 import PageTItle from '@larkon/components/PageTItle'
 import { apiGet, apiPost } from '@/lib/api'
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { Card, Col, Row } from 'react-bootstrap'
 
 function SmallPill({ text }: { text: string }) {
@@ -236,7 +237,12 @@ export default function AdminStaffPage() {
             <Col key={s.id} md={6} lg={4}>
               <Card>
                 <Card.Body>
-                  <h6 className="card-title">Staff #{s.id}</h6>
+                  <div className="d-flex justify-content-between align-items-start mb-2">
+                    <h6 className="card-title mb-0">Staff #{s.id}</h6>
+                    <Link href={`/admin/staff/${s.id}`} className="btn btn-sm btn-outline-primary">
+                      View
+                    </Link>
+                  </div>
                   <p className="text-muted small mb-2">
                     userId: <strong>{s.userId}</strong>
                     {s.fullName ? ` — ${s.fullName}` : null}
