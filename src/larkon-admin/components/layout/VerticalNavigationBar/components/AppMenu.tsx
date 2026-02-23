@@ -8,7 +8,12 @@ import { usePathname } from 'next/navigation'
 import { Fragment, KeyboardEvent, MouseEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { Collapse } from 'react-bootstrap'
 
-const MenuItemWithChildren = ({ item, className, linkClassName, subMenuClassName, activeMenuItems, toggleMenu }: SubMenus) => {
+const shouldRenderItemIcon = (item: MenuItemType, depth: number) => {
+  if (!item.icon) return false
+  return depth === 0 || item.showIcon === true
+}
+
+const MenuItemWithChildren = ({ item, className, linkClassName, subMenuClassName, activeMenuItems, toggleMenu, depth = 0 }: SubMenus) => {
   const [open, setOpen] = useState<boolean>(() => activeMenuItems?.includes(item.key) ?? false)
   const key = item.key
   const userToggledRef = useRef<{ key: string; open: boolean; ts: number } | null>(null)
@@ -57,10 +62,10 @@ const MenuItemWithChildren = ({ item, className, linkClassName, subMenuClassName
         aria-expanded={open}
         className={clsx(linkClassName)}
       >
-        {item.icon && (
+        {shouldRenderItemIcon(item, depth) && (
           <span className="nav-icon">
             {' '}
-            <IconifyIcon icon={item.icon} />{' '}
+            <IconifyIcon icon={item.icon!} />{' '}
           </span>
         )}
         <span className="nav-text">{item.label}</span>
@@ -84,9 +89,10 @@ const MenuItemWithChildren = ({ item, className, linkClassName, subMenuClassName
                       className="sub-nav-item"
                       subMenuClassName="nav sub-navbar-nav"
                       toggleMenu={toggleMenu}
+                      depth={depth + 1}
                     />
                   ) : (
-                    <MenuItem item={child} className="sub-nav-item" linkClassName={clsx('sub-nav-link', getActiveClass(child))} />
+                    <MenuItem item={child} className="sub-nav-item" linkClassName={clsx('sub-nav-link', getActiveClass(child))} depth={depth + 1} />
                   )}
                 </Fragment>
               )
@@ -98,20 +104,20 @@ const MenuItemWithChildren = ({ item, className, linkClassName, subMenuClassName
   )
 }
 
-const MenuItem = ({ item, className, linkClassName }: SubMenus) => {
+const MenuItem = ({ item, className, linkClassName, depth = 0 }: SubMenus) => {
   return (
     <li className={className}>
-      <MenuItemLink item={item} className={linkClassName} />
+      <MenuItemLink item={item} className={linkClassName} depth={depth} />
     </li>
   )
 }
 
-const MenuItemLink = ({ item, className }: SubMenus) => {
+const MenuItemLink = ({ item, className, depth = 0 }: SubMenus) => {
   return (
     <Link href={item.url ?? ''} target={item.target} className={clsx(className, { disabled: item.isDisabled })}>
-      {item.icon && (
+      {shouldRenderItemIcon(item, depth) && (
         <span className="nav-icon">
-          <IconifyIcon icon={item.icon} />
+          <IconifyIcon icon={item.icon!} />
         </span>
       )}
       <span className="nav-text">{item.label}</span>
@@ -224,9 +230,10 @@ const AppMenu = ({ menuItems }: AppMenuProps) => {
                     linkClassName={clsx('nav-link menu-arrow', getActiveClass(item))}
                     subMenuClassName="nav sub-navbar-nav"
                     activeMenuItems={activeMenuItems}
+                    depth={0}
                   />
                 ) : (
-                  <MenuItem item={item} linkClassName={clsx('nav-link', getActiveClass(item))} className="nav-item" />
+                  <MenuItem item={item} linkClassName={clsx('nav-link', getActiveClass(item))} className="nav-item" depth={0} />
                 )}
               </>
             )}

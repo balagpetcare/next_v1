@@ -5,6 +5,7 @@ export type MenuItemType = {
   label: string
   isTitle?: boolean
   icon?: string
+  showIcon?: boolean
   url?: string
   badge?: {
     variant: string
@@ -23,6 +24,7 @@ export type SubMenus = {
   activeMenuItems?: Array<string>
   toggleMenu?: (item: MenuItemType, status: boolean) => void
   className?: string
+  depth?: number
 }
 
 export type TabMenuItem = {
