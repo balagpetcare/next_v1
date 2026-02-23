@@ -1,9 +1,11 @@
 'use client'
 
-import PageTItle from '@larkon/components/PageTItle'
 import { apiGet, apiPatch, apiPost } from '@/lib/api'
 import { useEffect, useMemo, useState } from 'react'
+import Link from 'next/link'
 import { Card, Col, Row } from 'react-bootstrap'
+import AdminPageShell from '@/src/bpa/admin/components/AdminPageShell'
+import { adminToast } from '@/src/bpa/admin/lib/adminToast'
 
 const CAPS = ['clinic', 'shop', 'online_sales', 'delivery_hub', 'hq_warehouse']
 
@@ -68,9 +70,11 @@ export default function AdminBranchesPage() {
       setCode('')
       setAddress('')
       setCaps(['clinic'])
+      adminToast.success('Branch created')
       await load()
     } catch (e2) {
       setError((e2 as Error)?.message ?? 'Create failed')
+      adminToast.error((e2 as Error)?.message ?? 'Create failed')
     }
   }
 
@@ -85,16 +89,20 @@ export default function AdminBranchesPage() {
         isActive: editing.isActive,
         capabilities: editingCaps.map((cap: string) => ({ capability: cap })),
       })
+      adminToast.success('Branch updated')
       setEditing(null)
       await load()
     } catch (e2) {
       setError((e2 as Error)?.message ?? 'Update failed')
+      adminToast.error((e2 as Error)?.message ?? 'Update failed')
     }
   }
 
   return (
-    <>
-      <PageTItle title="BRANCHES" />
+    <AdminPageShell
+      title="Branches"
+      breadcrumbs={[{ label: 'Organization & Branches' }, { label: 'Branches' }]}
+    >
       <div className="d-flex justify-content-between align-items-center mb-3">
         <p className="text-muted mb-0 small">
           Create/update branches and set capabilities (clinic/shop/online etc.).
@@ -297,13 +305,18 @@ export default function AdminBranchesPage() {
                         </td>
                         <td>{b.isActive ? 'Active' : 'Inactive'}</td>
                         <td>
-                          <button
-                            type="button"
-                            className="btn btn-sm btn-outline-primary"
-                            onClick={() => setEditing(b)}
-                          >
-                            Edit
-                          </button>
+                          <div className="d-flex gap-1">
+                            <Link href={`/admin/branches/${b.id}`} className="btn btn-sm btn-outline-primary">
+                              View
+                            </Link>
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-secondary"
+                              onClick={() => setEditing(b)}
+                            >
+                              Edit
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -321,6 +334,6 @@ export default function AdminBranchesPage() {
           </Card>
         </Col>
       </Row>
-    </>
+    </AdminPageShell>
   )
 }
