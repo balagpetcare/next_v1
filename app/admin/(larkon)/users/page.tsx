@@ -1,23 +1,30 @@
 'use client'
 
-import PageTItle from '@larkon/components/PageTItle'
 import { apiGet, apiPatch, apiPost } from '@/lib/api'
-import { useEffect, useState } from 'react'
-import { toast } from 'react-toastify'
+import { useEffect, useState, useCallback } from 'react'
 import Link from 'next/link'
-import { Card, Col, Row } from 'react-bootstrap'
+import { Card } from 'react-bootstrap'
+import AdminPageShell from '@/src/bpa/admin/components/AdminPageShell'
+import AdminFiltersBar from '@/src/bpa/admin/components/AdminFiltersBar'
+import { useAdminFilters } from '@/src/bpa/admin/hooks/useAdminFilters'
+import { adminToast } from '@/src/bpa/admin/lib/adminToast'
 
 export default function AdminUsersPage() {
+  const { search, setSearch, filters, setFilter, reset } = useAdminFilters(
+    { status: '' },
+    { defaultLimit: 50 }
+  )
+  const q = search
+  const status = filters.status ?? ''
+
   const [items, setItems] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [q, setQ] = useState('')
-  const [status, setStatus] = useState('')
   const [form, setForm] = useState({ email: '', phone: '', displayName: 'New User', password: '' })
   const [editing, setEditing] = useState<any>(null)
   const [showCreate, setShowCreate] = useState(false)
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
@@ -31,11 +38,11 @@ export default function AdminUsersPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [q, status])
 
   useEffect(() => {
     load()
-  }, [q, status])
+  }, [load])
 
   async function onCreate(e: React.FormEvent) {
     e.preventDefault()
@@ -57,14 +64,14 @@ export default function AdminUsersPage() {
         displayName: form.displayName.trim() || 'New User',
         password: form.password,
       })
-      toast.success('User created')
+      adminToast.success('User created')
       setForm({ email: '', phone: '', displayName: 'New User', password: '' })
       setShowCreate(false)
       await load()
     } catch (e2) {
       const msg = (e2 as Error)?.message ?? 'Create failed'
       setError(msg)
-      toast.error(msg)
+      adminToast.error(msg)
     }
   }
 
@@ -72,41 +79,21 @@ export default function AdminUsersPage() {
     setError('')
     try {
       await apiPatch(`/api/v1/admin/users/${user.id}`, { status: newStatus })
-      toast.success(`User ${newStatus === 'ACTIVE' ? 'activated' : newStatus === 'BLOCKED' ? 'blocked' : 'updated'}`)
+      adminToast.success(`User ${newStatus === 'ACTIVE' ? 'activated' : newStatus === 'BLOCKED' ? 'blocked' : 'updated'}`)
       setEditing(null)
       await load()
     } catch (e2) {
       const msg = (e2 as Error)?.message ?? 'Update failed'
       setError(msg)
-      toast.error(msg)
+      adminToast.error(msg)
     }
   }
 
   return (
-    <>
-      <PageTItle title="USERS" />
-      <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <div className="d-flex gap-2 align-items-center flex-wrap">
-          <input
-            type="text"
-            className="form-control form-control-sm"
-            style={{ width: 180 }}
-            placeholder="Search..."
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-          <select
-            className="form-select form-select-sm"
-            style={{ width: 120 }}
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            <option value="">All status</option>
-            <option value="ACTIVE">Active</option>
-            <option value="BLOCKED">Blocked</option>
-            <option value="DELETED">Deleted</option>
-          </select>
-        </div>
+    <AdminPageShell
+      title="Users"
+      breadcrumbs={[{ label: 'People & Access' }, { label: 'Users' }]}
+      actions={
         <div className="d-flex gap-2">
           <button
             type="button"
@@ -116,13 +103,43 @@ export default function AdminUsersPage() {
             {showCreate ? 'Cancel' : 'Create User'}
           </button>
           <Link href="/admin/staff" className="btn btn-outline-secondary btn-sm">
-            Manage Staff (roles & branches)
+            Manage Staff
           </Link>
-          <button type="button" className="btn btn-outline-secondary btn-sm" onClick={load} disabled={loading}>
+          <button type="button" className="btn btn-outline-primary btn-sm" onClick={load} disabled={loading} aria-label="Refresh">
             {loading ? 'Loading…' : 'Refresh'}
           </button>
         </div>
-      </div>
+      }
+    >
+      <AdminFiltersBar
+        searchPlaceholder="Search users…"
+        searchValue={q}
+        onSearchChange={setSearch}
+        filters={[
+          {
+            key: 'status',
+            label: 'Status',
+            render: (value, onChange) => (
+              <select
+                id="admin-filter-status"
+                className="form-select form-select-sm"
+                style={{ width: 140 }}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                aria-label="Filter by status"
+              >
+                <option value="">All status</option>
+                <option value="ACTIVE">Active</option>
+                <option value="BLOCKED">Blocked</option>
+                <option value="DELETED">Deleted</option>
+              </select>
+            ),
+          },
+        ]}
+        filterValues={filters}
+        onFilterChange={setFilter}
+        onReset={reset}
+      />
 
       {error ? (
         <div className="alert alert-danger" role="alert">
@@ -214,43 +231,48 @@ export default function AdminUsersPage() {
                       </span>
                     </td>
                     <td>
-                      {editing?.id === u.id ? (
-                        <div className="d-flex gap-1">
-                          {u.status !== 'ACTIVE' && (
+                      <div className="d-flex gap-1 align-items-center flex-wrap">
+                        <Link href={`/admin/users/${u.id}`} className="btn btn-sm btn-outline-primary">
+                          View
+                        </Link>
+                        {editing?.id === u.id ? (
+                          <>
+                            {u.status !== 'ACTIVE' && (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-success"
+                                onClick={() => onStatusChange(u, 'ACTIVE')}
+                              >
+                                Activate
+                              </button>
+                            )}
+                            {u.status !== 'BLOCKED' && (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-warning"
+                                onClick={() => onStatusChange(u, 'BLOCKED')}
+                              >
+                                Block
+                              </button>
+                            )}
                             <button
                               type="button"
-                              className="btn btn-sm btn-success"
-                              onClick={() => onStatusChange(u, 'ACTIVE')}
+                              className="btn btn-sm btn-outline-secondary"
+                              onClick={() => setEditing(null)}
                             >
-                              Activate
+                              Done
                             </button>
-                          )}
-                          {u.status !== 'BLOCKED' && (
-                            <button
-                              type="button"
-                              className="btn btn-sm btn-warning"
-                              onClick={() => onStatusChange(u, 'BLOCKED')}
-                            >
-                              Block
-                            </button>
-                          )}
+                          </>
+                        ) : (
                           <button
                             type="button"
                             className="btn btn-sm btn-outline-secondary"
-                            onClick={() => setEditing(null)}
+                            onClick={() => setEditing(u)}
                           >
-                            Done
+                            Edit status
                           </button>
-                        </div>
-                      ) : (
-                        <button
-                          type="button"
-                          className="btn btn-sm btn-outline-primary"
-                          onClick={() => setEditing(u)}
-                        >
-                          Edit status
-                        </button>
-                      )}
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -264,6 +286,6 @@ export default function AdminUsersPage() {
           </div>
         </Card.Body>
       </Card>
-    </>
+    </AdminPageShell>
   )
 }

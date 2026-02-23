@@ -1,22 +1,30 @@
 'use client'
 
-import PageTItle from '@larkon/components/PageTItle'
 import { apiGet, apiPatch, apiPost } from '@/lib/api'
-import { useEffect, useState } from 'react'
-import { toast } from 'react-toastify'
+import { useEffect, useState, useCallback } from 'react'
+import Link from 'next/link'
 import { Card, Col, Row } from 'react-bootstrap'
+import AdminPageShell from '@/src/bpa/admin/components/AdminPageShell'
+import AdminFiltersBar from '@/src/bpa/admin/components/AdminFiltersBar'
+import { useAdminFilters } from '@/src/bpa/admin/hooks/useAdminFilters'
+import { adminToast } from '@/src/bpa/admin/lib/adminToast'
 
 export default function AdminOrganizationsPage() {
+  const { search, setSearch, filters, setFilter, reset } = useAdminFilters(
+    { status: '' },
+    { defaultLimit: 50 }
+  )
+  const q = search
+  const status = filters.status ?? ''
+
   const [items, setItems] = useState<any[]>([])
   const [users, setUsers] = useState<any[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [q, setQ] = useState('')
-  const [status, setStatus] = useState('')
   const [editing, setEditing] = useState<any>(null)
   const [form, setForm] = useState({ ownerUserId: '', name: '', supportPhone: '', status: 'DRAFT' })
 
-  async function load() {
+  const load = useCallback(async () => {
     setLoading(true)
     setError('')
     try {
@@ -30,7 +38,7 @@ export default function AdminOrganizationsPage() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [q, status])
 
   async function loadUsers() {
     try {
@@ -43,7 +51,7 @@ export default function AdminOrganizationsPage() {
 
   useEffect(() => {
     load()
-  }, [q, status])
+  }, [load])
 
   useEffect(() => {
     loadUsers()
@@ -64,12 +72,12 @@ export default function AdminOrganizationsPage() {
         supportPhone: form.supportPhone.trim() || undefined,
         status: form.status || undefined,
       })
-      toast.success('Organization created')
+      adminToast.success('Organization created')
       setForm({ ownerUserId: '', name: '', supportPhone: '', status: 'DRAFT' })
       await load()
     } catch (e2) {
       setError((e2 as Error)?.message ?? 'Create failed')
-      toast.error((e2 as Error)?.message)
+      adminToast.error((e2 as Error)?.message)
     }
   }
 
@@ -83,45 +91,55 @@ export default function AdminOrganizationsPage() {
         supportPhone: editing.supportPhone || undefined,
         status: editing.status,
       })
-      toast.success('Organization updated')
+      adminToast.success('Organization updated')
       setEditing(null)
       await load()
     } catch (e2) {
       setError((e2 as Error)?.message ?? 'Update failed')
-      toast.error((e2 as Error)?.message)
+      adminToast.error((e2 as Error)?.message)
     }
   }
 
   return (
-    <>
-      <PageTItle title="ORGANIZATIONS" />
-      <div className="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
-        <div className="d-flex gap-2 align-items-center flex-wrap">
-          <input
-            type="text"
-            className="form-control form-control-sm"
-            style={{ width: 180 }}
-            placeholder="Search..."
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-          />
-          <select
-            className="form-select form-select-sm"
-            style={{ width: 120 }}
-            value={status}
-            onChange={(e) => setStatus(e.target.value)}
-          >
-            <option value="">All status</option>
-            <option value="DRAFT">Draft</option>
-            <option value="PENDING">Pending</option>
-            <option value="ACTIVE">Active</option>
-            <option value="SUSPENDED">Suspended</option>
-          </select>
-        </div>
-        <button type="button" className="btn btn-outline-secondary btn-sm" onClick={load} disabled={loading}>
+    <AdminPageShell
+      title="Organizations"
+      breadcrumbs={[{ label: 'Organization & Branches' }, { label: 'Organizations' }]}
+      actions={
+        <button type="button" className="btn btn-outline-primary btn-sm" onClick={load} disabled={loading} aria-label="Refresh">
           {loading ? 'Loading…' : 'Refresh'}
         </button>
-      </div>
+      }
+    >
+      <AdminFiltersBar
+        searchPlaceholder="Search organizations…"
+        searchValue={q}
+        onSearchChange={setSearch}
+        filters={[
+          {
+            key: 'status',
+            label: 'Status',
+            render: (value, onChange) => (
+              <select
+                id="admin-filter-status"
+                className="form-select form-select-sm"
+                style={{ width: 140 }}
+                value={value}
+                onChange={(e) => onChange(e.target.value)}
+                aria-label="Filter by status"
+              >
+                <option value="">All status</option>
+                <option value="DRAFT">Draft</option>
+                <option value="PENDING">Pending</option>
+                <option value="ACTIVE">Active</option>
+                <option value="SUSPENDED">Suspended</option>
+              </select>
+            ),
+          },
+        ]}
+        filterValues={filters}
+        onFilterChange={setFilter}
+        onReset={reset}
+      />
 
       {error ? (
         <div className="alert alert-danger" role="alert">
@@ -254,7 +272,10 @@ export default function AdminOrganizationsPage() {
                         <td><span className="badge bg-light-subtle text-muted">{o.status}</span></td>
                         <td>{o._count?.branches ?? '—'}</td>
                         <td>
-                          <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => setEditing(o)}>Edit</button>
+                          <div className="d-flex gap-1">
+                            <Link href={`/admin/organizations/${o.id}`} className="btn btn-sm btn-outline-primary">View</Link>
+                            <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setEditing(o)}>Edit</button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -270,6 +291,6 @@ export default function AdminOrganizationsPage() {
           </Card>
         </Col>
       </Row>
-    </>
+    </AdminPageShell>
   )
 }
