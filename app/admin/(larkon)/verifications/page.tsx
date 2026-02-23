@@ -1,9 +1,10 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
-import PageHeader from '@/src/bpa/components/PageHeader'
+import { useSearchParams } from 'next/navigation'
 import { apiGet, apiPost } from '@/lib/api'
+import AdminPageShell from '@/src/bpa/admin/components/AdminPageShell'
 import FilterPanel from '@/src/bpa/admin/components/FilterPanel'
 import SectionCard from '@/src/bpa/admin/components/SectionCard'
 import StatusChip from '@/src/bpa/admin/components/StatusChip'
@@ -114,6 +115,7 @@ function RiskSignalsWidget({ row }: { entityType?: string; entityId?: unknown; r
 }
 
 export default function VerificationInboxPage() {
+  const searchParams = useSearchParams()
   const [tab, setTab] = useState('owners')
   const [status, setStatus] = useState('')
   const [search, setSearch] = useState('')
@@ -158,6 +160,34 @@ export default function VerificationInboxPage() {
       setDetailLoading(false)
     }
   }, [])
+
+  const lastAppliedQuery = useRef<string>('')
+
+  useEffect(() => {
+    const q = searchParams.toString()
+    if (q === lastAppliedQuery.current) return
+    lastAppliedQuery.current = q
+
+    const mapTab = (t: string) => {
+      if (t === 'producer-orgs') return 'producer_orgs'
+      return t
+    }
+
+    const tabParam = searchParams.get('tab')
+    const statusParam = searchParams.get('status')
+    const qParam = searchParams.get('q')
+    const openParam = searchParams.get('open')
+
+    const targetTab = tabParam ? mapTab(tabParam) : null
+    if (targetTab && TABS.some((x) => x.key === targetTab)) setTab(targetTab)
+    if (statusParam != null) setStatus(statusParam)
+    if (qParam != null) setSearch(qParam)
+
+    const openId = openParam ? Number(openParam) : NaN
+    if (targetTab && Number.isFinite(openId) && openId > 0) {
+      openDrawer(targetTab, openId)
+    }
+  }, [openDrawer, searchParams])
 
   const closeDrawer = useCallback(() => {
     setDrawer({ open: false, type: null, id: null })
@@ -258,22 +288,20 @@ export default function VerificationInboxPage() {
   }, [detail, overview, commentApi, drawer.id, tabConf])
 
   return (
-    <div className="container-fluid">
-      <PageHeader
-        title="Verification Inbox"
-        subtitle="Unified queue for Owner, Organization, Branch, Staff, and Producer Org verification"
-        right={
-          <div className="d-flex flex-wrap gap-2 align-items-center">
-            <Link href="/admin/verifications/owners" className="btn btn-sm btn-outline-secondary">Owner list</Link>
-            <Link href="/admin/verifications/organizations" className="btn btn-sm btn-outline-secondary">Org list</Link>
-            <Link href="/admin/verifications/branches" className="btn btn-sm btn-outline-secondary">Branch list</Link>
-            <Link href="/admin/verifications/staff" className="btn btn-sm btn-outline-secondary">Staff list</Link>
-            <Link href="/admin/verifications/producer-orgs" className="btn btn-sm btn-outline-secondary">Producer orgs</Link>
-            <Link href="/admin/verification-metrics" className="btn btn-sm btn-outline-secondary">Metrics</Link>
-          </div>
-        }
-      />
-
+    <AdminPageShell
+      title="Verification Inbox"
+      breadcrumbs={[{ label: 'Governance' }, { label: 'Verifications' }]}
+      actions={
+        <div className="d-flex flex-wrap gap-2 align-items-center">
+          <Link href="/admin/verification-metrics" className="btn btn-sm btn-outline-primary">Metrics</Link>
+          <Link href="/admin/verifications/owners" className="btn btn-sm btn-outline-secondary">Owners</Link>
+          <Link href="/admin/verifications/organizations" className="btn btn-sm btn-outline-secondary">Organizations</Link>
+          <Link href="/admin/verifications/branches" className="btn btn-sm btn-outline-secondary">Branches</Link>
+          <Link href="/admin/verifications/staff" className="btn btn-sm btn-outline-secondary">Staff</Link>
+          <Link href="/admin/verifications/producer-orgs" className="btn btn-sm btn-outline-secondary">Producer orgs</Link>
+        </div>
+      }
+    >
       {error ? <div className="alert alert-danger">{error}</div> : null}
 
       <div className="d-flex flex-wrap gap-2 mb-3">
@@ -370,6 +398,6 @@ export default function VerificationInboxPage() {
           />
         ) : null}
       />
-    </div>
+    </AdminPageShell>
   )
 }

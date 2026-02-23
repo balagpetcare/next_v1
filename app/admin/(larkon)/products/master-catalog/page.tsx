@@ -2,10 +2,12 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Icon } from '@iconify/react'
-import PageHeader from '@/src/bpa/components/PageHeader'
+import Link from 'next/link'
 import SectionCard from '@/src/bpa/admin/components/SectionCard'
 import StatusChip from '@/src/bpa/admin/components/StatusChip'
+import AdminPageShell from '@/src/bpa/admin/components/AdminPageShell'
 import { apiGet, apiPatch } from '@/lib/api'
+import { adminToast } from '@/src/bpa/admin/lib/adminToast'
 
 export default function MasterCatalogPage() {
   const [rows, setRows] = useState<any[]>([])
@@ -39,34 +41,36 @@ export default function MasterCatalogPage() {
   const toggleActive = async (row: any) => {
     try {
       await apiPatch(`/api/v1/products/master-catalog/${row.id}`, { isActive: !row.isActive })
+      adminToast.success('Status updated')
       await load()
     } catch (e: any) {
       setError(e?.message ?? 'Failed to update status')
+      adminToast.error((e as Error)?.message ?? 'Failed to update status')
     }
   }
 
   return (
-    <div className="container-fluid">
-      <PageHeader
-        title="Master Product Catalog"
-        subtitle={`Total: ${filtered.length} products`}
-        right={
-          <div className="d-flex align-items-center gap-2">
-            <input
-              type="text"
-              className="form-control form-control-sm"
-              placeholder="Search name, barcode..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              style={{ width: 260 }}
-            />
-            <button className="btn btn-outline-primary btn-sm d-flex align-items-center gap-1" onClick={load} disabled={loading}>
-              <Icon icon="solar:refresh-outline" />
-              Refresh
-            </button>
-          </div>
-        }
-      />
+    <AdminPageShell
+      title="Master Product Catalog"
+      breadcrumbs={[{ label: 'Operations' }, { label: 'Master Catalog' }]}
+      actions={
+        <div className="d-flex align-items-center gap-2">
+          <input
+            type="text"
+            className="form-control form-control-sm"
+            placeholder="Search name, barcode..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ width: 260 }}
+            aria-label="Search catalog"
+          />
+          <button className="btn btn-outline-primary btn-sm d-flex align-items-center gap-1" onClick={load} disabled={loading} aria-label="Refresh">
+            <Icon icon="solar:refresh-outline" aria-hidden />
+            Refresh
+          </button>
+        </div>
+      }
+    >
       {error ? <div className="alert alert-danger">{error}</div> : null}
 
       <SectionCard title="Catalog Items">
@@ -92,9 +96,13 @@ export default function MasterCatalogPage() {
                   <td>{row.category?.name ?? '—'}</td>
                   <td><StatusChip status={row.isActive ? 'ACTIVE' : 'INACTIVE'} /></td>
                   <td className="text-end">
-                    <button className="btn btn-sm btn-outline-secondary" onClick={() => toggleActive(row)}>
-                      {row.isActive ? 'Deactivate' : 'Activate'}
-                    </button>
+                    <div className="d-inline-flex gap-2">
+                      <Link className="btn btn-sm btn-outline-primary" href={`/admin/products/master-catalog/${row.id}`}>View</Link>
+                      <Link className="btn btn-sm btn-outline-primary" href={`/admin/products/master-catalog/${row.id}?edit=true`}>Edit</Link>
+                      <button className="btn btn-sm btn-outline-secondary" onClick={() => toggleActive(row)}>
+                        {row.isActive ? 'Deactivate' : 'Activate'}
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -103,6 +111,6 @@ export default function MasterCatalogPage() {
           </table>
         </div>
       </SectionCard>
-    </div>
+    </AdminPageShell>
   )
 }
