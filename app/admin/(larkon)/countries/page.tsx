@@ -4,7 +4,7 @@ import PageTItle from '@larkon/components/PageTItle'
 import { apiGet, apiPatch, apiPost } from '@/lib/api'
 import { useEffect, useState } from 'react'
 import { toast } from 'react-toastify'
-import { Card, Col, Row } from 'react-bootstrap'
+import { Card, Col, Row, Modal, ModalHeader, ModalBody, ModalFooter, Button } from 'react-bootstrap'
 
 export default function AdminCountriesPage() {
   const [items, setItems] = useState<any[]>([])
@@ -13,6 +13,11 @@ export default function AdminCountriesPage() {
   const [q, setQ] = useState('')
   const [editing, setEditing] = useState<any>(null)
   const [form, setForm] = useState({ code: '', name: '', currencyCode: '', timezoneDefault: '', isActive: true })
+  const [assignModalCountry, setAssignModalCountry] = useState<any>(null)
+  const [orgsList, setOrgsList] = useState<any[]>([])
+  const [assignOrgId, setAssignOrgId] = useState<string>('')
+  const [assignSubmitting, setAssignSubmitting] = useState(false)
+  const [clearConfirmCountry, setClearConfirmCountry] = useState<any>(null)
 
   async function load() {
     setLoading(true)
@@ -75,6 +80,52 @@ export default function AdminCountriesPage() {
     } catch (e2) {
       setError((e2 as Error)?.message ?? 'Update failed')
       toast.error((e2 as Error)?.message)
+    }
+  }
+
+  useEffect(() => {
+    if (assignModalCountry) {
+      apiGet<{ data?: any[] }>('/api/v1/admin/organizations')
+        .then((res) => setOrgsList(res?.data ?? []))
+        .catch(() => setOrgsList([]))
+      setAssignOrgId(assignModalCountry.controllerOrgId ? String(assignModalCountry.controllerOrgId) : '')
+    }
+  }, [assignModalCountry])
+
+  async function onAssignController() {
+    if (!assignModalCountry) return
+    const orgId = assignOrgId ? Number(assignOrgId) : null
+    setAssignSubmitting(true)
+    setError('')
+    try {
+      await apiPost(`/api/v1/admin/countries/${assignModalCountry.id}/assign-controller`, {
+        controllerOrgId: orgId,
+      })
+      toast.success(orgId ? 'Controller organization assigned.' : 'Controller cleared.')
+      setAssignModalCountry(null)
+      setAssignOrgId('')
+      await load()
+    } catch (e2) {
+      const msg = (e2 as Error)?.message ?? 'Assign failed'
+      toast.error(msg)
+      setError(msg)
+    } finally {
+      setAssignSubmitting(false)
+    }
+  }
+
+  async function onClearController() {
+    if (!clearConfirmCountry) return
+    setError('')
+    try {
+      await apiPost(`/api/v1/admin/countries/${clearConfirmCountry.id}/assign-controller`, {
+        controllerOrgId: null,
+      })
+      toast.success('Controller cleared.')
+      setClearConfirmCountry(null)
+      await load()
+    } catch (e2) {
+      toast.error((e2 as Error)?.message ?? 'Clear failed')
     }
   }
 
@@ -221,19 +272,18 @@ export default function AdminCountriesPage() {
                 <table className="table align-middle mb-0 table-hover table-centered">
                   <thead className="bg-light-subtle">
                     <tr>
-                      <th>ID</th>
-                      <th>Code</th>
+                      <th>ISO</th>
                       <th>Name</th>
                       <th>Currency</th>
                       <th>Timezone</th>
                       <th>Status</th>
-                      <th>Action</th>
+                      <th>Controller org</th>
+                      <th>Actions</th>
                     </tr>
                   </thead>
                   <tbody>
                     {items.map((c) => (
                       <tr key={c.id}>
-                        <td>{c.id}</td>
                         <td className="fw-semibold">{c.code}</td>
                         <td>{c.name}</td>
                         <td>{c.currencyCode || '—'}</td>
@@ -244,13 +294,44 @@ export default function AdminCountriesPage() {
                           </span>
                         </td>
                         <td>
-                          <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => setEditing(c)}>Edit</button>
+                          {c.controllerOrg ? (
+                            <span className="badge bg-primary">{c.controllerOrg.name}</span>
+                          ) : (
+                            <span className="text-muted small">No controller assigned</span>
+                          )}
+                        </td>
+                        <td>
+                          <div className="d-flex gap-1 flex-wrap">
+                            <a
+                              className="btn btn-sm btn-outline-secondary"
+                              href={`/admin/countries/${c.id}/features`}
+                            >
+                              Features
+                            </a>
+                            <a
+                              className="btn btn-sm btn-outline-secondary"
+                              href={`/admin/countries/${c.id}/policies`}
+                            >
+                              Policies
+                            </a>
+                            <a
+                              className="btn btn-sm btn-outline-secondary"
+                              href={`/admin/countries/${c.id}/users`}
+                            >
+                              Users
+                            </a>
+                            <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => setEditing(c)}>Edit</button>
+                            <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setAssignModalCountry(c)}>Assign Controller</button>
+                            {c.controllerOrgId && (
+                              <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => setClearConfirmCountry(c)}>Clear</button>
+                            )}
+                          </div>
                         </td>
                       </tr>
                     ))}
                     {!items.length && !loading && (
                       <tr>
-                        <td colSpan={7} className="text-muted text-center py-4">No countries yet.</td>
+                        <td colSpan={7} className="text-muted text-center py-4">No countries yet. Create one using the form on the left.</td>
                       </tr>
                     )}
                   </tbody>
@@ -260,6 +341,45 @@ export default function AdminCountriesPage() {
           </Card>
         </Col>
       </Row>
+
+      <Modal show={!!assignModalCountry} onHide={() => !assignSubmitting && setAssignModalCountry(null)} centered>
+        <ModalHeader closeButton>
+          Assign Controller — {assignModalCountry?.name} ({assignModalCountry?.code})
+        </ModalHeader>
+        <ModalBody>
+          <p className="small text-muted mb-2">Select the organization that will act as the country controller (chapter).</p>
+          <select
+            className="form-select"
+            value={assignOrgId}
+            onChange={(e) => setAssignOrgId(e.target.value)}
+          >
+            <option value="">— No controller —</option>
+            {orgsList.map((o) => (
+              <option key={o.id} value={o.id}>{o.name} (ID {o.id})</option>
+            ))}
+          </select>
+          {assignModalCountry && !assignModalCountry.controllerOrg && !assignOrgId && (
+            <p className="small text-muted mt-2 mb-0">No controller assigned. Choose an org above to assign.</p>
+          )}
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="outline-secondary" onClick={() => setAssignModalCountry(null)} disabled={assignSubmitting}>Cancel</Button>
+          <Button variant="primary" onClick={onAssignController} disabled={assignSubmitting}>
+            {assignSubmitting ? 'Saving…' : 'Confirm'}
+          </Button>
+        </ModalFooter>
+      </Modal>
+
+      <Modal show={!!clearConfirmCountry} onHide={() => setClearConfirmCountry(null)} centered>
+        <ModalHeader closeButton>Clear controller</ModalHeader>
+        <ModalBody>
+          Remove the controller organization from <strong>{clearConfirmCountry?.name}</strong>? This will unassign &quot;{clearConfirmCountry?.controllerOrg?.name}&quot;.
+        </ModalBody>
+        <ModalFooter>
+          <Button variant="outline-secondary" onClick={() => setClearConfirmCountry(null)}>Cancel</Button>
+          <Button variant="danger" onClick={onClearController}>Clear controller</Button>
+        </ModalFooter>
+      </Modal>
     </>
   )
 }

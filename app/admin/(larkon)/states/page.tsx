@@ -241,7 +241,12 @@ export default function AdminStatesPage() {
                           </span>
                         </td>
                         <td>
-                          <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => setEditing(s)}>Edit</button>
+                          <div className="d-flex gap-1 flex-wrap">
+                            <a className="btn btn-sm btn-outline-secondary" href={`/admin/states/${s.id}/features`}>Features</a>
+                            <a className="btn btn-sm btn-outline-secondary" href={`/admin/states/${s.id}/policies`}>Policies</a>
+                            <a className="btn btn-sm btn-outline-secondary" href={`/admin/states/${s.id}/rules`}>Rules</a>
+                            <button type="button" className="btn btn-sm btn-outline-primary" onClick={() => setEditing(s)}>Edit</button>
+                          </div>
                         </td>
                       </tr>
                     ))}
