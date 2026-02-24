@@ -1,12 +1,29 @@
 "use client";
 
-export default function InviteStaffModal({ show, onClose, formData, setFormData, onSubmit, loading, roles }) {
+import { useState } from "react";
+
+export default function InviteStaffModal({ show, onClose, formData, setFormData, onSubmit, loading, roles, inviteResult, onClearInviteResult }) {
+  const [copied, setCopied] = useState(false);
   if (!show) return null;
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.email?.trim() && !formData.phone?.trim()) return;
     onSubmit();
+  };
+
+  const handleCopyLink = () => {
+    if (!inviteResult?.inviteLink) return;
+    if (typeof navigator !== "undefined" && navigator.clipboard) {
+      navigator.clipboard.writeText(inviteResult.inviteLink);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  };
+
+  const handleClose = () => {
+    onClearInviteResult?.();
+    onClose();
   };
 
   return (
@@ -17,10 +34,14 @@ export default function InviteStaffModal({ show, onClose, formData, setFormData,
             <form onSubmit={handleSubmit}>
               <div className="modal-header">
                 <h5 className="modal-title" id="inviteStaffTitle">Invite Staff Member</h5>
-                <button type="button" className="btn-close" onClick={onClose} aria-label="Close" />
+                <button type="button" className="btn-close" onClick={handleClose} aria-label="Close" />
               </div>
               <div className="modal-body">
-                <p className="text-secondary small mb-3">User must already be registered. Enter email or phone to add them as staff.</p>
+                {!inviteResult ? (
+                  <>
+                    <p className="text-secondary small mb-3">
+                      Enter email or phone. If they already have an account, they will receive an in-app invitation. If not, we&apos;ll send an invitation to register.
+                    </p>
                 <div className="mb-3">
                   <label className="form-label">Email</label>
                   <input
@@ -55,18 +76,52 @@ export default function InviteStaffModal({ show, onClose, formData, setFormData,
                     ))}
                   </select>
                 </div>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-success small mb-2">Invitation created successfully.</p>
+                    {inviteResult.inviteLink && (
+                      <div className="mb-0">
+                        <label className="form-label small">Share this link with the invitee</label>
+                        <div className="input-group input-group-sm">
+                          <input
+                            type="text"
+                            className="form-control font-monospace small"
+                            readOnly
+                            value={inviteResult.inviteLink}
+                          />
+                          <button
+                            type="button"
+                            className="btn btn-outline-secondary"
+                            onClick={handleCopyLink}
+                          >
+                            {copied ? "Copied!" : "Copy link"}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
               </div>
               <div className="modal-footer">
-                <button type="button" className="btn btn-outline-secondary" onClick={onClose}>
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="btn btn-primary"
-                  disabled={loading || (!(formData.email || "").trim() && !(formData.phone || "").trim())}
-                >
-                  {loading ? "Sending…" : "Send Invite"}
-                </button>
+                {inviteResult ? (
+                  <button type="button" className="btn btn-primary" onClick={handleClose}>
+                    Done
+                  </button>
+                ) : (
+                  <>
+                    <button type="button" className="btn btn-outline-secondary" onClick={handleClose}>
+                      Cancel
+                    </button>
+                    <button
+                      type="submit"
+                      className="btn btn-primary"
+                      disabled={loading || (!(formData.email || "").trim() && !(formData.phone || "").trim())}
+                    >
+                      {loading ? "Sending…" : "Send Invitation"}
+                    </button>
+                  </>
+                )}
               </div>
             </form>
           </div>

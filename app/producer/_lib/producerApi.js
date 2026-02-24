@@ -163,6 +163,52 @@ export async function producerStaffInvite(body) {
   );
 }
 
+/** New invite workflow: supports both registered (notification) and unregistered (invite link). Returns { mode, inviteId, inviteLink? }. */
+export async function producerStaffInviteCreate(body) {
+  const res = await apiFetch("/api/v1/producer/staff/invite", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body ?? {}),
+  });
+  if (res?.data) return res.data;
+  return res;
+}
+
+export async function producerStaffInvitesList(opts = {}) {
+  const q = new URLSearchParams();
+  if (opts.status) q.set("status", opts.status);
+  if (opts.search) q.set("search", opts.search);
+  const query = q.toString();
+  const url = query ? `/api/v1/producer/staff/invites?${query}` : "/api/v1/producer/staff/invites";
+  return unwrap(await apiFetch(url));
+}
+
+export async function producerStaffInviteCancel(inviteId) {
+  await apiFetch(`/api/v1/producer/staff/invites/${inviteId}/cancel`, { method: "POST" });
+}
+
+export async function producerStaffInvitesAccept(payload) {
+  return unwrap(
+    await apiFetch("/api/v1/producer/staff/invites/accept", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload ?? {}),
+    })
+  );
+}
+
+export async function producerStaffInvitesDecline(payload) {
+  await apiFetch("/api/v1/producer/staff/invites/decline", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload ?? {}),
+  });
+}
+
+export async function producerPendingInvites() {
+  return unwrap(await apiFetch("/api/v1/producer/me/pending-invites"));
+}
+
 export async function producerStaffUpdateRole(staffId, body) {
   return unwrap(
     await apiFetch(`/api/v1/producer/staff/${staffId}/role`, {

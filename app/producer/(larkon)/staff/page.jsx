@@ -3,12 +3,17 @@
 import { useState, useEffect, useMemo } from "react";
 import { useToast } from "@/src/hooks/useToast";
 import {
-  producerStaffInvite,
+  producerStaffInviteCreate,
   producerStaffList,
+  producerStaffInvitesList,
+  producerStaffInviteCancel,
   producerStaffRemove,
   producerStaffUpdateRole,
   producerStaffUpdateStatus,
   producerMe,
+  producerPendingInvites,
+  producerStaffInvitesAccept,
+  producerStaffInvitesDecline,
 } from "../../_lib/producerApi";
 import InviteStaffModal from "./components/InviteStaffModal";
 import ConfirmRoleModal from "./components/ConfirmRoleModal";
@@ -72,6 +77,12 @@ export default function ProducerStaffPage() {
   const [permissionsTarget, setPermissionsTarget] = useState(null);
   const [actionLoading, setActionLoading] = useState(false);
   const [activeTab, setActiveTab] = useState("list");
+  const [inviteResult, setInviteResult] = useState(null);
+  const [invites, setInvites] = useState([]);
+  const [invitesLoading, setInvitesLoading] = useState(false);
+  const [pendingInvites, setPendingInvites] = useState([]);
+  const [pendingAccepting, setPendingAccepting] = useState(null);
+  const [pendingDeclining, setPendingDeclining] = useState(null);
 
   useEffect(() => {
     loadStaff();
@@ -80,6 +91,16 @@ export default function ProducerStaffPage() {
       else if (me?.id) setCurrentUserId(me.id);
     }).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (activeTab === "invitations") loadInvites();
+  }, [activeTab]);
+
+  useEffect(() => {
+    producerPendingInvites()
+      .then((list) => setPendingInvites(Array.isArray(list) ? list : []))
+      .catch(() => setPendingInvites([]));
+  }, [staff]);
 
   function handleAuthError(err) {
     if (typeof window !== "undefined" && err?.status === 401) {
@@ -102,6 +123,20 @@ export default function ProducerStaffPage() {
       setStaff([]);
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function loadInvites() {
+    try {
+      setInvitesLoading(true);
+      const res = await producerStaffInvitesList();
+      setInvites(Array.isArray(res) ? res : []);
+    } catch (err) {
+      if (handleAuthError(err)) return;
+      toast.error(err?.message || "Failed to load invitations");
+      setInvites([]);
+    } finally {
+      setInvitesLoading(false);
     }
   }
 
@@ -145,16 +180,66 @@ export default function ProducerStaffPage() {
     }
     try {
       setInviteLoading(true);
-      await producerStaffInvite(formData);
-      toast.success("Invite sent");
-      setShowInviteModal(false);
-      setFormData({ email: "", phone: "", roleKey: "PRODUCER_VIEWER" });
+      setInviteResult(null);
+      const data = await producerStaffInviteCreate(formData);
+      if (data?.mode === "REGISTERED") {
+        toast.success("Invitation sent to their notifications.");
+        setShowInviteModal(false);
+        setFormData({ email: "", phone: "", roleKey: "PRODUCER_VIEWER" });
+      } else {
+        setInviteResult(data || {});
+        toast.success("Invitation created. Share the link with the invitee if they don't have an account yet.");
+      }
       await loadStaff();
+      if (activeTab === "invitations") loadInvites();
     } catch (err) {
       if (handleAuthError(err)) return;
       toast.error(err?.message || "Failed to invite staff");
     } finally {
       setInviteLoading(false);
+    }
+  }
+
+  async function handleCancelInvite(inviteId) {
+    try {
+      setActionLoading(true);
+      await producerStaffInviteCancel(inviteId);
+      toast.success("Invitation cancelled");
+      loadInvites();
+    } catch (err) {
+      if (handleAuthError(err)) return;
+      toast.error(err?.message || "Failed to cancel invitation");
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function handleAcceptPending(invite) {
+    try {
+      setPendingAccepting(invite.id);
+      await producerStaffInvitesAccept({ inviteId: invite.id });
+      toast.success(`You joined ${invite.producerOrg?.name || "the producer"} as staff.`);
+      setPendingInvites((prev) => prev.filter((i) => i.id !== invite.id));
+      await loadStaff();
+    } catch (err) {
+      if (handleAuthError(err)) return;
+      toast.error(err?.message || "Failed to accept");
+    } finally {
+      setPendingAccepting(null);
+    }
+  }
+
+  async function handleDeclinePending(invite) {
+    try {
+      setPendingDeclining(invite.id);
+      await producerStaffInvitesDecline({ inviteId: invite.id });
+      toast.success("Invitation declined.");
+      setPendingInvites((prev) => prev.filter((i) => i.id !== invite.id));
+    } catch (err) {
+      if (handleAuthError(err)) return;
+      toast.error(err?.message || "Failed to decline");
+    } finally {
+      setPendingDeclining(null);
     }
   }
 
@@ -294,7 +379,37 @@ export default function ProducerStaffPage() {
         </div>
       </div>
 
-      {/* Tabs: List | Activity */}
+      {/* Pending invites banner (invitee view) */}
+      {pendingInvites.length > 0 && (
+        <div className="alert alert-info mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <span>You have been invited as staff to {pendingInvites.length === 1 ? pendingInvites[0].producerOrg?.name : "producer organizations"}.</span>
+          <div className="d-flex flex-wrap gap-2">
+            {pendingInvites.map((inv) => (
+              <span key={inv.id} className="d-inline-flex align-items-center gap-2">
+                <strong>{inv.producerOrg?.name}</strong> ({inv.role?.label})
+                <button
+                  type="button"
+                  className="btn btn-sm btn-success"
+                  disabled={pendingAccepting !== null}
+                  onClick={() => handleAcceptPending(inv)}
+                >
+                  {pendingAccepting === inv.id ? "Accepting…" : "Accept"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-secondary"
+                  disabled={pendingDeclining !== null}
+                  onClick={() => handleDeclinePending(inv)}
+                >
+                  {pendingDeclining === inv.id ? "Declining…" : "Decline"}
+                </button>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Tabs: List | Invitations | Activity */}
       <ul className="nav nav-tabs mb-3">
         <li className="nav-item">
           <button
@@ -308,6 +423,15 @@ export default function ProducerStaffPage() {
         <li className="nav-item">
           <button
             type="button"
+            className={`nav-link ${activeTab === "invitations" ? "active" : ""}`}
+            onClick={() => setActiveTab("invitations")}
+          >
+            Invitations
+          </button>
+        </li>
+        <li className="nav-item">
+          <button
+            type="button"
             className={`nav-link ${activeTab === "activity" ? "active" : ""}`}
             onClick={() => setActiveTab("activity")}
           >
@@ -315,6 +439,65 @@ export default function ProducerStaffPage() {
           </button>
         </li>
       </ul>
+
+      {activeTab === "invitations" && (
+        <div className="card mb-4">
+          <div className="card-body">
+            {invitesLoading ? (
+              <div className="text-center py-4"><span className="spinner-border spinner-border-sm" /> Loading…</div>
+            ) : invites.length === 0 ? (
+              <p className="text-secondary mb-0">No invitations yet. Use &quot;Invite Staff&quot; to send invitations.</p>
+            ) : (
+              <div className="table-responsive">
+                <table className="table table-bordered table-sm align-middle">
+                  <thead>
+                    <tr>
+                      <th>Invitee</th>
+                      <th>Role</th>
+                      <th>Status</th>
+                      <th>Sent</th>
+                      <th>Expires</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invites.map((inv) => (
+                      <tr key={inv.id}>
+                        <td>{inv.email || inv.phone || "—"}</td>
+                        <td>{inv.role?.label || inv.role?.key || "—"}</td>
+                        <td>
+                          <span className={`badge ${
+                            inv.status === "PENDING" || inv.status === "SENT" ? "bg-info" :
+                            inv.status === "ACCEPTED" ? "bg-success" :
+                            inv.status === "DECLINED" || inv.status === "CANCELLED" ? "bg-secondary" :
+                            inv.status === "EXPIRED" ? "bg-warning text-dark" : "bg-secondary"
+                          }`}>
+                            {inv.status}
+                          </span>
+                        </td>
+                        <td className="small text-nowrap">{inv.createdAt ? new Date(inv.createdAt).toLocaleDateString() : "—"}</td>
+                        <td className="small text-nowrap">{inv.expiresAt ? new Date(inv.expiresAt).toLocaleDateString() : "—"}</td>
+                        <td>
+                          {(inv.status === "PENDING" || inv.status === "SENT") && (
+                            <button
+                              type="button"
+                              className="btn btn-sm btn-outline-danger"
+                              disabled={actionLoading}
+                              onClick={() => handleCancelInvite(inv.id)}
+                            >
+                              Cancel
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {activeTab === "activity" && (
         <div className="card mb-4">
@@ -475,6 +658,8 @@ export default function ProducerStaffPage() {
         onSubmit={handleInvite}
         loading={inviteLoading}
         roles={ROLES}
+        inviteResult={inviteResult}
+        onClearInviteResult={() => setInviteResult(null)}
       />
       <ConfirmRoleModal
         show={!!roleTarget}
