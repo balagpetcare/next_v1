@@ -744,6 +744,7 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
     { id: "producer.kyc", label: "KYC / Verification", href: "/producer/kyc", icon: "solar:shield-check-outline", required: [] },
     { id: "producer.products", label: "Products", href: "/producer/products", icon: "solar:box-outline", required: [] },
     { id: "producer.batches", label: "Batches", href: "/producer/batches", icon: "solar:archive-outline", required: [] },
+    { id: "producer.approvals", label: "Approvals", href: "/producer/approvals", icon: "solar:checklist-minimalistic-outline", required: ["producer.org.read"] },
     { id: "producer.staff", label: "Staff", href: "/producer/staff", icon: "solar:users-group-two-rounded-bold-duotone", required: ["producer.org.read"] },
   ],
   staff: [

@@ -135,6 +135,16 @@ export async function producerBatchGet(id, { codesPage = 1, codesLimit = 50 } = 
   return unwrap(await apiFetch(`/api/v1/producer/batches/${id}?${qp.toString()}`));
 }
 
+export async function producerBatchSubmit(id, body) {
+  return unwrap(
+    await apiFetch(`/api/v1/producer/batches/${id}/submit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    })
+  );
+}
+
 export async function producerBatchGenerateCodes(id, body) {
   return unwrap(
     await apiFetch(`/api/v1/producer/batches/${id}/codes/generate`, {
@@ -147,6 +157,37 @@ export async function producerBatchGenerateCodes(id, body) {
 
 export async function producerBatchExportCodes(id) {
   return unwrap(await apiFetch(`/api/v1/producer/batches/${id}/codes/export`));
+}
+
+export async function producerApprovalsList(opts = {}) {
+  const q = new URLSearchParams();
+  if (opts.status) q.set("status", String(opts.status));
+  if (opts.type) q.set("type", String(opts.type));
+  if (opts.page) q.set("page", String(opts.page));
+  if (opts.limit) q.set("limit", String(opts.limit));
+  const query = q.toString();
+  const url = query ? `/api/v1/producer/approvals?${query}` : "/api/v1/producer/approvals";
+  return unwrap(await apiFetch(url));
+}
+
+export async function producerApprovalApprove(id, body) {
+  return unwrap(
+    await apiFetch(`/api/v1/producer/approvals/${id}/approve`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    })
+  );
+}
+
+export async function producerApprovalReject(id, body) {
+  return unwrap(
+    await apiFetch(`/api/v1/producer/approvals/${id}/reject`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    })
+  );
 }
 
 export async function producerStaffList() {

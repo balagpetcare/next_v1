@@ -20,6 +20,7 @@ export default function ProducerBatchDetailPage() {
   const [generatedCount, setGeneratedCount] = useState(0);
   const [filterText, setFilterText] = useState("");
   const [filterStatus, setFilterStatus] = useState("ALL");
+  const [submitting, setSubmitting] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -81,6 +82,19 @@ export default function ProducerBatchDetailPage() {
     }
   };
 
+  const submitForApproval = async () => {
+    setSubmitting(true);
+    try {
+      await apiPost(`/api/v1/producer/batches/${id}/submit`, {});
+      await load();
+      alert("Submitted for approval");
+    } catch (e) {
+      alert(e?.message || "Failed to submit batch");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   const filteredCodes = codes.items.filter((c) => {
     const byStatus = filterStatus === "ALL" ? true : c.status === filterStatus;
     const term = filterText.trim().toUpperCase();
@@ -97,6 +111,11 @@ export default function ProducerBatchDetailPage() {
         <p className="text-secondary">Batch not found.</p>
       ) : (
         <>
+          {(() => {
+            const canGenerate = batch.status === "APPROVED" || batch.status === "GENERATED";
+            const canSubmit = batch.status === "DRAFT" || batch.status === "REJECTED";
+            return (
+              <>
           <div className="card mb-4">
             <div className="card-body">
               <div className="mb-2"><strong>ID:</strong> {batch.id}</div>
@@ -107,12 +126,25 @@ export default function ProducerBatchDetailPage() {
             </div>
           </div>
           <div className="d-flex gap-2">
-            <Link className="btn btn-sm btn-primary" href={`/producer/batches/${batch.id}/generate-codes`}>
-              Generate Codes
-            </Link>
-            <Link className="btn btn-sm btn-outline-secondary" href={`/producer/batches/${batch.id}/exports`}>
-              Export Codes
-            </Link>
+            {canGenerate ? (
+              <Link className="btn btn-sm btn-primary" href={`/producer/batches/${batch.id}/generate-codes`}>
+                Generate Codes
+              </Link>
+            ) : (
+              <span className="btn btn-sm btn-primary disabled">Generate Codes</span>
+            )}
+            {canGenerate ? (
+              <Link className="btn btn-sm btn-outline-secondary" href={`/producer/batches/${batch.id}/exports`}>
+                Export Codes
+              </Link>
+            ) : (
+              <span className="btn btn-sm btn-outline-secondary disabled">Export Codes</span>
+            )}
+            {canSubmit ? (
+              <button className="btn btn-sm btn-outline-primary" type="button" onClick={submitForApproval} disabled={submitting}>
+                {submitting ? "Submitting..." : "Submit for approval"}
+              </button>
+            ) : null}
           </div>
           <div className="card mt-4">
             <div className="card-body">
@@ -146,7 +178,7 @@ export default function ProducerBatchDetailPage() {
                   onChange={(e) => setSuffix(normalizePart(e.target.value, 2))}
                   style={{ width: 160 }}
                 />
-                <button className="btn btn-primary" onClick={generate} disabled={generating}>
+                <button className="btn btn-primary" onClick={generate} disabled={generating || !canGenerate}>
                   {generating ? "Generating..." : "Generate"}
                 </button>
               </div>
@@ -158,6 +190,9 @@ export default function ProducerBatchDetailPage() {
               ) : null}
             </div>
           </div>
+              </>
+            );
+          })()}
           <div className="card mt-4">
             <div className="card-body">
               <div className="d-flex justify-content-between align-items-center mb-2">
