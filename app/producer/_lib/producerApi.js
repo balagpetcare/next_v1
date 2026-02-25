@@ -197,6 +197,16 @@ export async function producerStaffInvitesAccept(payload) {
   );
 }
 
+export async function producerStaffInvitesAcceptPublic(payload) {
+  return unwrap(
+    await apiFetch("/api/v1/producer/staff/invites/accept-public", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload ?? {}),
+    })
+  );
+}
+
 export async function producerStaffInvitesDecline(payload) {
   await apiFetch("/api/v1/producer/staff/invites/decline", {
     method: "POST",
