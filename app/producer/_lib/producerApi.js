@@ -219,6 +219,19 @@ export async function producerPendingInvites() {
   return unwrap(await apiFetch("/api/v1/producer/me/pending-invites"));
 }
 
+export async function producerAuditLogsList(opts = {}) {
+  const q = new URLSearchParams();
+  if (opts.actorId) q.set("actorId", String(opts.actorId));
+  if (opts.action) q.set("action", String(opts.action));
+  if (opts.from) q.set("from", String(opts.from));
+  if (opts.to) q.set("to", String(opts.to));
+  if (opts.page) q.set("page", String(opts.page));
+  if (opts.limit) q.set("limit", String(opts.limit));
+  const query = q.toString();
+  const url = query ? `/api/v1/producer/audit-logs?${query}` : "/api/v1/producer/audit-logs";
+  return unwrap(await apiFetch(url));
+}
+
 export async function producerStaffUpdateRole(staffId, body) {
   return unwrap(
     await apiFetch(`/api/v1/producer/staff/${staffId}/role`, {

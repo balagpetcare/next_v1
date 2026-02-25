@@ -14,6 +14,7 @@ import {
   producerPendingInvites,
   producerStaffInvitesAccept,
   producerStaffInvitesDecline,
+  producerAuditLogsList,
 } from "../../_lib/producerApi";
 import InviteStaffModal from "./components/InviteStaffModal";
 import ConfirmRoleModal from "./components/ConfirmRoleModal";
@@ -37,6 +38,8 @@ function getStatusBadgeClass(status) {
       return "bg-success text-white";
     case "SUSPENDED":
       return "bg-warning text-dark";
+    case "DISABLED":
+      return "bg-danger text-white";
     case "INVITED":
       return "bg-info text-white";
     case "REMOVED":
@@ -83,6 +86,9 @@ export default function ProducerStaffPage() {
   const [pendingInvites, setPendingInvites] = useState([]);
   const [pendingAccepting, setPendingAccepting] = useState(null);
   const [pendingDeclining, setPendingDeclining] = useState(null);
+  const [auditLogs, setAuditLogs] = useState([]);
+  const [auditLoading, setAuditLoading] = useState(false);
+  const [auditFilters, setAuditFilters] = useState({ actorId: "", action: "", from: "", to: "" });
 
   useEffect(() => {
     loadStaff();
@@ -95,6 +101,10 @@ export default function ProducerStaffPage() {
   useEffect(() => {
     if (activeTab === "invitations") loadInvites();
   }, [activeTab]);
+
+  useEffect(() => {
+    if (activeTab === "activity") loadAuditLogs();
+  }, [activeTab, auditFilters.actorId, auditFilters.action, auditFilters.from, auditFilters.to]);
 
   useEffect(() => {
     producerPendingInvites()
@@ -137,6 +147,26 @@ export default function ProducerStaffPage() {
       setInvites([]);
     } finally {
       setInvitesLoading(false);
+    }
+  }
+
+  async function loadAuditLogs() {
+    try {
+      setAuditLoading(true);
+      const res = await producerAuditLogsList({
+        actorId: auditFilters.actorId || undefined,
+        action: auditFilters.action || undefined,
+        from: auditFilters.from || undefined,
+        to: auditFilters.to || undefined,
+        limit: 100,
+      });
+      setAuditLogs(Array.isArray(res) ? res : []);
+    } catch (err) {
+      if (handleAuthError(err)) return;
+      toast.error(err?.message || "Failed to load activity log");
+      setAuditLogs([]);
+    } finally {
+      setAuditLoading(false);
     }
   }
 
@@ -502,7 +532,92 @@ export default function ProducerStaffPage() {
       {activeTab === "activity" && (
         <div className="card mb-4">
           <div className="card-body">
-            <p className="text-secondary mb-0">Activity log is not available yet. Audit events are recorded on the backend.</p>
+            <div className="d-flex flex-wrap gap-2 align-items-end mb-3">
+              <div>
+                <label className="form-label mb-1">Staff</label>
+                <select
+                  className="form-select form-select-sm"
+                  style={{ width: "auto", minWidth: 180 }}
+                  value={auditFilters.actorId}
+                  onChange={(e) => setAuditFilters((p) => ({ ...p, actorId: e.target.value }))}
+                >
+                  <option value="">All</option>
+                  {staff.map((m) => (
+                    <option key={m.userId} value={m.userId}>
+                      {m.user?.profile?.displayName || m.user?.auth?.email || `User ${m.userId}`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="form-label mb-1">Action</label>
+                <input
+                  type="text"
+                  className="form-control form-control-sm"
+                  style={{ width: 200 }}
+                  placeholder="e.g. PRODUCT_CREATED"
+                  value={auditFilters.action}
+                  onChange={(e) => setAuditFilters((p) => ({ ...p, action: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="form-label mb-1">From</label>
+                <input
+                  type="date"
+                  className="form-control form-control-sm"
+                  value={auditFilters.from}
+                  onChange={(e) => setAuditFilters((p) => ({ ...p, from: e.target.value }))}
+                />
+              </div>
+              <div>
+                <label className="form-label mb-1">To</label>
+                <input
+                  type="date"
+                  className="form-control form-control-sm"
+                  value={auditFilters.to}
+                  onChange={(e) => setAuditFilters((p) => ({ ...p, to: e.target.value }))}
+                />
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-secondary"
+                disabled={auditLoading}
+                onClick={loadAuditLogs}
+              >
+                Refresh
+              </button>
+            </div>
+
+            {auditLoading ? (
+              <div className="text-center py-4"><span className="spinner-border spinner-border-sm" /> Loading…</div>
+            ) : auditLogs.length === 0 ? (
+              <p className="text-secondary mb-0">No activity yet.</p>
+            ) : (
+              <div className="table-responsive">
+                <table className="table table-bordered table-sm align-middle">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Actor</th>
+                      <th>Action</th>
+                      <th>Entity</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {auditLogs.map((l) => (
+                      <tr key={l.id}>
+                        <td className="small text-nowrap">{l.createdAt ? new Date(l.createdAt).toLocaleString() : "—"}</td>
+                        <td className="small">
+                          {l.actor?.displayName || l.actor?.email || l.actor?.phone || (l.actorId ? `User ${l.actorId}` : "—")}
+                        </td>
+                        <td className="small text-nowrap">{l.action}</td>
+                        <td className="small text-nowrap">{l.entityType}{l.entityId ? ` #${l.entityId}` : ""}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </div>
         </div>
       )}
