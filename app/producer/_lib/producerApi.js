@@ -252,34 +252,12 @@ export async function producerBatchesList(opts = {}) {
 // Uses proxy /api/proxy/producer-print so requests hit backend via Next.js when rewrite is used.
 const PRINT_API = "/api/proxy/producer-print";
 
-/** GET print batches list — (id, productName, batchNo, totalCodes, allocatedCount, remainingCount, etc.). Returns array of items. Falls back to regular batches list when print API is empty or fails. */
+/** GET print batches list — (id, productName, batchNo, totalCodes, allocatedCount, remainingCount, nextAvailableSerial). Server is single source of truth; no fallback — on failure throw so UI shows error. */
 export async function producerPrintBatchesList() {
-  try {
-    const res = unwrap(await apiFetch(`${PRINT_API}/batches`));
-    const list = Array.isArray(res) ? res : (res?.items ?? []);
-    if (list.length > 0) return list;
-  } catch {
-    // fallback below
-  }
-  try {
-    const batchesRes = await producerBatchesList({ limit: 100, page: 1 });
-    const batches = batchesRes?.items ?? [];
-    if (!batches.length) return [];
-    const productsRes = await producerProductsList({ limit: 500 }).catch(() => []);
-    const productList = Array.isArray(productsRes) ? productsRes : (productsRes?.items ?? []);
-    const productMap = new Map(productList.map((p) => [p.id, p.productName ?? p.name]));
-    return batches.map((b) => ({
-      id: b.id,
-      productName: productMap.get(b.authProductId) ?? null,
-      batchNo: b.batchNo,
-      totalCodes: b.qtyGenerated ?? 0,
-      allocatedCount: 0,
-      remainingCount: b.qtyGenerated ?? 0,
-      nextAvailableSerial: b.qtyGenerated > 0 ? 1 : null,
-    }));
-  } catch {
-    return [];
-  }
+  const raw = await apiFetch(`${PRINT_API}/batches`);
+  const res = unwrap(raw);
+  const list = Array.isArray(res) ? res : (res?.items ?? []);
+  return list;
 }
 
 /** GET print batch detail (totals, serial state, allocation logs). Falls back to regular batch when print API returns 404. */
@@ -365,6 +343,31 @@ export async function producerPrintAllocationRevoke(batchId, allocationId, paylo
       body: JSON.stringify(payload ?? {}),
     }
   );
+  return unwrap(res);
+}
+
+/** GET print email recipients — returns [{ id, email, label }] for the producer org.
+ * Safely handles { success, data: [...] } or { success, data: { recipients: [...] } }.
+ * On unexpected shape returns [] (does not throw). */
+export async function producerPrintEmailRecipientsList() {
+  const res = await apiFetch(`${PRINT_API}/email-recipients`);
+  try {
+    const data = unwrap(res);
+    if (Array.isArray(data)) return data;
+    if (data && typeof data === "object" && Array.isArray(data.recipients)) return data.recipients;
+    return [];
+  } catch (_) {
+    return [];
+  }
+}
+
+/** POST print email recipient — body: { email, label? }. Returns { id, email, label }. Upserts; returns existing if (org, email) exists. */
+export async function producerPrintEmailRecipientCreate(payload) {
+  const res = await apiFetch(`${PRINT_API}/email-recipients`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(payload ?? {}),
+  });
   return unwrap(res);
 }
 
