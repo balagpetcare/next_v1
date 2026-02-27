@@ -38,6 +38,18 @@ export const producerMenuItems = [
     ],
   },
   {
+    title: "Print",
+    icon: "solar:printer-bold-duotone",
+    permission: "producer.batches.read",
+    subMenu: [
+      {
+        title: "Batches",
+        path: "/producer/print/batches",
+        permission: "producer.batches.read",
+      },
+    ],
+  },
+  {
     title: "Staff Management",
     path: "/producer/staff",
     icon: "solar:users-group-two-rounded-bold-duotone",
