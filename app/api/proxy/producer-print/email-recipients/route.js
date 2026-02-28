@@ -1,18 +1,11 @@
 /**
- * Proxy /api/proxy/producer-print/* -> backend API /api/v1/producer/print/*
- * (NOT /api/v1/producer-print — backend mount is /api/v1 + /producer, then /print/* on producer router.)
- * Single catch-all: GET and POST for paths like batches, batches/4, batches/4/allocate.
- * Issuance download is handled by dedicated route: producer-print/issuances/[id]/download.
+ * Proxy /api/proxy/producer-print/email-recipients -> backend GET/POST /api/v1/producer/print/email-recipients.
+ * Dedicated route so this path is always matched (avoids catch-all 404 on some setups).
  */
 import { NextResponse } from "next/server";
 
 const API_TARGET = process.env.API_BASE_URL || "http://localhost:3000";
-const PREFIX = "/api/v1/producer/print";
-
-function getBackendUrl(pathSegments) {
-  const path = Array.isArray(pathSegments) && pathSegments.length > 0 ? pathSegments.join("/") : "";
-  return `${API_TARGET}${PREFIX}${path ? `/${path}` : ""}`;
-}
+const BACKEND_URL = `${API_TARGET}/api/v1/producer/print/email-recipients`;
 
 function forwardHeaders(request) {
   const headers = new Headers();
@@ -29,27 +22,15 @@ function forwardHeaders(request) {
   return headers;
 }
 
-export async function GET(request, context) {
-  const params = await (context.params ?? Promise.resolve({}));
-  const pathSegments = params.path ?? [];
+export async function GET(request) {
   const url = new URL(request.url);
-  const backendUrl = getBackendUrl(pathSegments) + (url.search || "");
+  const backendUrl = BACKEND_URL + (url.search || "");
   try {
     const res = await fetch(backendUrl, {
       method: "GET",
       headers: forwardHeaders(request),
       cache: "no-store",
     });
-    const contentType = res.headers.get("content-type") || "";
-    const contentDisposition = res.headers.get("content-disposition");
-    const isCsvDownload = contentType.includes("text/csv") || contentDisposition?.includes("attachment");
-    if (isCsvDownload && res.ok) {
-      const blob = await res.arrayBuffer();
-      const responseHeaders = new Headers();
-      responseHeaders.set("content-type", contentType);
-      if (contentDisposition) responseHeaders.set("content-disposition", contentDisposition);
-      return new NextResponse(blob, { status: res.status, headers: responseHeaders });
-    }
     const body = await res.text();
     let data = body;
     try {
@@ -59,7 +40,7 @@ export async function GET(request, context) {
     }
     return NextResponse.json(data, { status: res.status });
   } catch (e) {
-    console.error("[proxy producer-print GET]", e?.message || e);
+    console.error("[proxy producer-print GET email-recipients]", e?.message || e);
     return NextResponse.json(
       { success: false, message: "Print API unavailable. Ensure the backend is running (npm run dev:api in backend-api)." },
       { status: 503 }
@@ -67,14 +48,11 @@ export async function GET(request, context) {
   }
 }
 
-export async function POST(request, context) {
-  const params = await (context.params ?? Promise.resolve({}));
-  const pathSegments = params.path ?? [];
-  const backendUrl = getBackendUrl(pathSegments);
+export async function POST(request) {
   try {
     const headers = forwardHeaders(request);
     const body = await request.text();
-    const res = await fetch(backendUrl, {
+    const res = await fetch(BACKEND_URL, {
       method: "POST",
       headers,
       body: body || undefined,
@@ -97,7 +75,7 @@ export async function POST(request, context) {
     if (contentDisposition) responseHeaders.set("content-disposition", contentDisposition);
     return new NextResponse(resBody, { status: res.status, headers: responseHeaders });
   } catch (e) {
-    console.error("[proxy producer-print POST]", e?.message || e);
+    console.error("[proxy producer-print POST email-recipients]", e?.message || e);
     return NextResponse.json(
       { success: false, message: "Print API unavailable. Ensure the backend is running (npm run dev:api in backend-api)." },
       { status: 503 }

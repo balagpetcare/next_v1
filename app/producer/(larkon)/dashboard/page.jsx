@@ -1,23 +1,45 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/app/(public)/_lib/LanguageContext";
 import { apiGet } from "@/lib/api";
 import LkInput from "@larkon-ui/components/LkInput";
 import LkButton from "@larkon-ui/components/LkButton";
+import { useNotifications } from "@/lib/useNotifications";
+import { formatDistanceToNow } from "date-fns";
+import { getProducerViewHref, getProducerNotificationPriority, getPriorityBadgeClass } from "../../_lib/producerNotificationHelpers";
+import { normalizeApiError, useApiErrorPopup } from "../../_lib/apiErrorPopup";
 
 export default function ProducerDashboardPage() {
   const { t } = useLanguage();
+  const { showApiErrorPopup, ApiErrorModal } = useApiErrorPopup();
   const [stats, setStats] = useState({ products: 0, batches: 0, codes: 0 });
   const [loading, setLoading] = useState(true);
   const [kyc, setKyc] = useState(null);
   const [gateMessage, setGateMessage] = useState("");
-  const [error, setError] = useState("");
   const [searchCode, setSearchCode] = useState("");
   const [searchResult, setSearchResult] = useState(null);
   const [searchLoading, setSearchLoading] = useState(false);
-  const [searchError, setSearchError] = useState("");
+
+  const { count: unreadCount, items: notificationItems, fetchList } = useNotifications({
+    enabled: true,
+    panel: "producer",
+  });
+  const latestNotifications = useMemo(() => {
+    const list = [...(notificationItems || [])];
+    list.sort((a, b) => {
+      const aUnread = !a.readAt ? 1 : 0;
+      const bUnread = !b.readAt ? 1 : 0;
+      if (aUnread !== bUnread) return bUnread - aUnread;
+      return new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime();
+    });
+    return list.slice(0, 5);
+  }, [notificationItems]);
+
+  useEffect(() => {
+    fetchList(5, undefined, "dropdown");
+  }, [fetchList]);
 
   const getGateMeta = (status) => {
     if (!status) {
@@ -39,7 +61,6 @@ export default function ProducerDashboardPage() {
     let cancelled = false;
     async function load() {
       setLoading(true);
-      setError("");
       try {
         const kycRes = await apiGet("/api/v1/producer/kyc/status");
         const org = kycRes?.data || null;
@@ -62,10 +83,10 @@ export default function ProducerDashboardPage() {
         const productsTotal = productsRes?.data?.length || 0;
         const batchesTotal = batchesRes?.data?.pagination?.total || 0;
         if (!cancelled) setStats({ products: productsTotal, batches: batchesTotal, codes: 0 });
-      } catch (_) {
+      } catch (e) {
         if (!cancelled) {
           setStats({ products: 0, batches: 0, codes: 0 });
-          setError(t("common.failedToLoad"));
+          showApiErrorPopup(normalizeApiError(e));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -78,9 +99,10 @@ export default function ProducerDashboardPage() {
   }, []);
 
   return (
-    <div className="p-4">
-      <h2 className="h4 mb-3">{t("producer.dashboardTitle")}</h2>
-      {error ? <div className="alert alert-danger">{error}</div> : null}
+    <>
+      <ApiErrorModal />
+      <div className="p-4">
+        <h2 className="h4 mb-3">{t("producer.dashboardTitle")}</h2>
       {gateMessage ? (
         <div className={`alert alert-${getGateMeta(kyc?.status)?.tone || "warning"} d-flex flex-wrap gap-3 align-items-center justify-content-between`}>
           <div>
@@ -109,13 +131,12 @@ export default function ProducerDashboardPage() {
               disabled={searchLoading || !searchCode.trim()}
               onClick={async () => {
                 setSearchLoading(true);
-                setSearchError("");
                 setSearchResult(null);
                 try {
                   const res = await apiGet(`/api/v1/producer/codes/search?code=${encodeURIComponent(searchCode.trim())}`);
                   setSearchResult(res?.data || null);
                 } catch (e) {
-                  setSearchError(e?.message || "Code not found");
+                  showApiErrorPopup(normalizeApiError(e));
                 } finally {
                   setSearchLoading(false);
                 }
@@ -125,7 +146,6 @@ export default function ProducerDashboardPage() {
             </LkButton>
           </div>
           <div className="text-secondary small mt-2">Length 8-15, uppercase alphanumeric only.</div>
-          {searchError ? <div className="text-danger small mt-2">{searchError}</div> : null}
           {searchResult ? (
             <div className="mt-3 border rounded p-3">
               <div className="fw-semibold">Code: {searchResult.code}</div>
@@ -143,6 +163,49 @@ export default function ProducerDashboardPage() {
           ) : null}
         </div>
       </div>
+      <div className="card mb-4">
+        <div className="card-body">
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-2">
+            <h6 className="mb-0">Notifications</h6>
+            <Link href="/producer/notifications" className="btn btn-sm btn-outline-primary">
+              View all
+            </Link>
+          </div>
+          {unreadCount > 0 && (
+            <p className="text-muted small mb-2">
+              <strong>{unreadCount}</strong> unread
+            </p>
+          )}
+          {latestNotifications.length === 0 ? (
+            <p className="text-muted small mb-0">No recent notifications</p>
+          ) : (
+            <ul className="list-unstyled mb-0 small">
+              {latestNotifications.map((item) => {
+                const href = getProducerViewHref(item, { pathname: "/producer" }) || "/producer/notifications";
+                const isUnread = !item.readAt;
+                const priority = item.displayPriority ?? getProducerNotificationPriority(item.type);
+                const badgeClass = getPriorityBadgeClass(priority);
+                return (
+                  <li key={item.id} className="py-2 border-bottom border-light">
+                    <div className="d-flex align-items-center gap-2 flex-wrap">
+                      <Link href={href} className={`text-decoration-none flex-grow-1 ${isUnread ? "fw-semibold text-dark" : "text-body"}`}>
+                        <span className="d-block">{item.title || "Notification"}</span>
+                        <span className="text-muted" style={{ fontSize: "0.75rem" }}>
+                          {item.createdAt ? formatDistanceToNow(new Date(item.createdAt), { addSuffix: true }) : ""}
+                        </span>
+                      </Link>
+                      <span className={`badge ${badgeClass} rounded-pill`} style={{ fontSize: 9 }}>
+                        {priority}
+                      </span>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      </div>
+
       {loading ? (
         <p className="text-secondary">Loading…</p>
       ) : (
@@ -173,6 +236,7 @@ export default function ProducerDashboardPage() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }

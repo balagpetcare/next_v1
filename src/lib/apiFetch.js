@@ -5,7 +5,13 @@
  */
 import { getCountryCode } from "@/lib/countryContext";
 
-const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+// In browser with no explicit base: use same-origin so Next.js rewrites /api/* to backend (avoids CORS, sends cookies).
+export function getApiBase() {
+  if (typeof window !== "undefined" && !process.env.NEXT_PUBLIC_API_BASE_URL) return "";
+  return String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+}
+
+const API_BASE = getApiBase();
 
 function getWorkspaceHeaders() {
   if (typeof window === "undefined") return {};
@@ -43,6 +49,9 @@ export async function apiFetch(path, init = {}) {
   }
 
   if (!res.ok) {
+    if (process.env.NODE_ENV === "development" && typeof console !== "undefined") {
+      console.warn("[apiFetch] non-2xx response:", res.status, path, { code: json?.code, message: json?.message, data: json });
+    }
     const msg = json?.message || json?.error || res.statusText || "Request failed";
     const err = new Error(msg);
     err.status = res.status;

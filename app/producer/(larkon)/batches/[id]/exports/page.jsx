@@ -3,10 +3,12 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { apiGet } from "@/lib/api";
+import { normalizeApiError, useApiErrorPopup } from "../../../_lib/apiErrorPopup";
 
 export default function ProducerExportCodesPage() {
   const params = useParams();
   const id = params?.id;
+  const { showApiErrorPopup, ApiErrorModal } = useApiErrorPopup();
   const [codes, setCodes] = useState([]);
   const [loading, setLoading] = useState(false);
 
@@ -31,15 +33,17 @@ export default function ProducerExportCodesPage() {
       setCodes(list);
       downloadCsv(list);
     } catch (e) {
-      alert(e?.message || "Failed to export codes");
+      showApiErrorPopup(normalizeApiError(e));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="p-4">
-      <h2 className="h4 mb-3">Export Codes</h2>
+    <>
+      <ApiErrorModal />
+      <div className="p-4">
+        <h2 className="h4 mb-3">Export Codes</h2>
       <button className="btn btn-primary" onClick={exportCodes} disabled={loading}>
         Export CSV
       </button>
@@ -51,6 +55,7 @@ export default function ProducerExportCodesPage() {
           </pre>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

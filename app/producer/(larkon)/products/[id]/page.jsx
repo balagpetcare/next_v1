@@ -6,10 +6,10 @@ import { useParams, useRouter } from "next/navigation";
 import { Icon } from "@iconify/react";
 import { useToast } from "@/src/hooks/useToast";
 import { producerProductCreateBatch, producerProductGet } from "../../../_lib/producerApi";
+import { normalizeApiError, useApiErrorPopup } from "../../../_lib/apiErrorPopup";
 import ProducerPageShell from "../../../_components/ProducerPageShell";
 import ProducerSectionCard from "../../../_components/ProducerSectionCard";
 import { PROOF_TYPE_LABELS } from "../../../_components/ProducerProofUpload";
-import { getErrorMessage } from "../../../_lib/errors";
 
 function StatusBadge({ status }) {
   const s = status || "DRAFT";
@@ -42,6 +42,7 @@ export default function ProducerProductDetailPage() {
   const params = useParams();
   const router = useRouter();
   const toast = useToast();
+  const { showApiErrorPopup, ApiErrorModal } = useApiErrorPopup();
   const id = params?.id;
   const [product, setProduct] = useState(null);
   const [batchForm, setBatchForm] = useState({ batchNo: "", mfgDate: "", expDate: "", qtyPlanned: "" });
@@ -57,18 +58,8 @@ export default function ProducerProductDetailPage() {
         router.replace(`/producer/login?from=/producer/products/${id}`);
         return;
       }
-      if (e?.status === 403) {
-        toast.error("You don't have access to this product.");
-        setProduct(null);
-        return;
-      }
-      if (e?.status === 404) {
-        setProduct(null);
-        toast.error("Product not found.");
-        return;
-      }
       setProduct(null);
-      toast.error(getErrorMessage(e, "Failed to load product"));
+      showApiErrorPopup(normalizeApiError(e));
     } finally {
       setLoading(false);
     }
@@ -100,7 +91,7 @@ export default function ProducerProductDetailPage() {
       router.push(`/producer/batches/${batchId}`);
       router.refresh();
     } catch (e) {
-      toast.error(getErrorMessage(e, "Failed to create batch"));
+      showApiErrorPopup(normalizeApiError(e));
     } finally {
       setLoading(false);
     }
@@ -134,11 +125,13 @@ export default function ProducerProductDetailPage() {
   }, [product, status]);
 
   return (
-    <ProducerPageShell
-      title={product ? productName : "Product"}
-      breadcrumbs={[
-        { label: "Products", href: "/producer/products" },
-        { label: product ? productName : "…" },
+    <>
+      <ApiErrorModal />
+      <ProducerPageShell
+        title={product ? productName : "Product"}
+        breadcrumbs={[
+          { label: "Products", href: "/producer/products" },
+          { label: product ? productName : "…" },
       ]}
       actions={
         <div className="d-flex gap-2 flex-wrap">
@@ -400,5 +393,6 @@ export default function ProducerProductDetailPage() {
         </>
       )}
     </ProducerPageShell>
+    </>
   );
 }

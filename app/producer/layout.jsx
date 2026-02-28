@@ -47,12 +47,13 @@ export default function ProducerLayout({ children }) {
     pathname?.startsWith("/producer/login") || pathname?.startsWith("/producer/register");
   const isLandingRoute = pathname === "/producer";
   const isInviteAcceptRoute = pathname?.startsWith("/producer/invites/accept");
+  const isInviteRedirectRoute = pathname === "/producer/invite";
 
   const shouldGuard = useMemo(() => {
     if (!pathname) return false;
-    if (isAuthRoute || isLandingRoute || isInviteAcceptRoute) return false;
+    if (isAuthRoute || isLandingRoute || isInviteAcceptRoute || isInviteRedirectRoute) return false;
     return true;
-  }, [pathname, isAuthRoute, isLandingRoute, isInviteAcceptRoute]);
+  }, [pathname, isAuthRoute, isLandingRoute, isInviteAcceptRoute, isInviteRedirectRoute]);
 
   useEffect(() => {
     if (!shouldGuard) return;

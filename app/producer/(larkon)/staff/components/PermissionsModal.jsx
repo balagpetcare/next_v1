@@ -28,21 +28,9 @@ export default function PermissionsModal({ show, member, roles, onClose }) {
   const [search, setSearch] = useState("");
   const [openGroup, setOpenGroup] = useState(null);
 
-  if (!show || !member) return null;
-
-  const role = member.role ? roles.find((r) => r.key === member.role?.key) || member.role : null;
-  const permissionKeys = getPermissionsForRole(member.role);
+  const role = member?.role ? roles?.find((r) => r.key === member.role?.key) || member.role : null;
+  const permissionKeys = member?.role ? getPermissionsForRole(member.role) : [];
   const groups = groupPermissionsByLabel(permissionKeys);
-
-  const emailOrPhone =
-    member.user?.auth?.email ||
-    member.user?.auth?.phone ||
-    member.user?.email ||
-    member.user?.phone ||
-    "—";
-  const displayName =
-    member.user?.profile?.displayName || member.user?.displayName || "Staff";
-  const privilegedCount = permissionKeys.filter(isPrivilegedPermission).length;
 
   const searchLower = search.trim().toLowerCase();
   const filteredGroups = useMemo(() => {
@@ -60,6 +48,18 @@ export default function PermissionsModal({ show, member, roles, onClose }) {
     });
     return out;
   }, [groups, searchLower]);
+
+  if (!show || !member) return null;
+
+  const emailOrPhone =
+    member.user?.auth?.email ||
+    member.user?.auth?.phone ||
+    member.user?.email ||
+    member.user?.phone ||
+    "—";
+  const displayName =
+    member.user?.profile?.displayName || member.user?.displayName || "Staff";
+  const privilegedCount = permissionKeys.filter(isPrivilegedPermission).length;
 
   return (
     <>

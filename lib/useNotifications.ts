@@ -16,6 +16,8 @@ export type NotificationItem = {
   message: string;
   meta?: Record<string, unknown> | null;
   priority?: string;
+  /** Producer display priority from API (HIGH|MEDIUM|LOW) when panel=producer */
+  displayPriority?: "HIGH" | "MEDIUM" | "LOW";
   status?: string;
   actionUrl?: string | null;
   readAt?: string | null;
@@ -56,13 +58,15 @@ function playNotificationSound() {
   } catch (_) {}
 }
 
-export type NotificationPanel = "owner" | "admin" | "branch" | "staff";
+export type NotificationPanel = "owner" | "admin" | "branch" | "staff" | "producer";
 
 export type UseNotificationsOptions = {
   enabled?: boolean;
   soundEnabled?: boolean;
-  /** panel: scope so branch manager does not see owner notifications (owner|admin|branch|staff) */
+  /** panel: scope so each panel sees only its notifications (owner|admin|branch|staff|producer) */
   panel?: NotificationPanel | null;
+  /** optional filter e.g. "actionRequired" (producer: only HIGH-priority types) */
+  filter?: "actionRequired" | null;
   onNewNotification?: (item: NotificationItem) => void;
 };
 
@@ -70,6 +74,7 @@ export function useNotifications(opts?: UseNotificationsOptions) {
   const enabled = opts?.enabled !== false;
   const soundEnabled = opts?.soundEnabled ?? true;
   const panel = opts?.panel ?? null;
+  const filter = opts?.filter ?? null;
   const onNewNotification = opts?.onNewNotification;
   const [count, setCount] = useState(0);
   const [items, setItems] = useState<NotificationItem[]>([]);
@@ -96,13 +101,14 @@ export function useNotifications(opts?: UseNotificationsOptions) {
     try {
       const q = new URLSearchParams();
       if (panel) q.set("panel", panel);
+      if (filter === "actionRequired") q.set("filter", "actionRequired");
       const url = q.toString() ? `/api/v1/notifications/unread-count?${q.toString()}` : "/api/v1/notifications/unread-count";
       const res = await apiGet<{ success: boolean; data: { count: number } }>(url);
       if (res?.success && typeof res?.data?.count === "number") setCount(res.data.count);
     } catch {
       // ignore
     }
-  }, [enabled, panel]);
+  }, [enabled, panel, filter]);
 
   const fetchList = useCallback(async (limit = 20, cursor?: string, scope = "dropdown") => {
     if (!enabled) return;
@@ -111,6 +117,7 @@ export function useNotifications(opts?: UseNotificationsOptions) {
       const q = new URLSearchParams({ limit: String(limit), scope });
       if (cursor) q.set("cursor", cursor);
       if (panel) q.set("panel", panel);
+      if (filter === "actionRequired") q.set("filter", "actionRequired");
       const res = await apiGet<{ success: boolean; data: { items: NotificationItem[]; nextCursor?: string | null } }>(
         `/api/v1/notifications?${q.toString()}`
       );
@@ -120,7 +127,7 @@ export function useNotifications(opts?: UseNotificationsOptions) {
     } finally {
       setLoading(false);
     }
-  }, [enabled, panel]);
+  }, [enabled, panel, filter]);
 
   const markRead = useCallback(async (id: number) => {
     try {

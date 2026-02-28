@@ -6,13 +6,15 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useNotifications } from "@/lib/useNotifications";
 import { formatDistanceToNow } from "date-fns";
+import { getProducerTypeLabel, getProducerViewHref, getProducerNotificationPriority, getPriorityBadgeClass } from "@/app/producer/_lib/producerNotificationHelpers";
 
-/** Derive API panel from pathname so branch manager does not see owner notifications */
+/** Derive API panel from pathname so each panel sees only its notifications */
 function getPanelFromPathname(pathname) {
   if (!pathname) return "owner";
   if (pathname.startsWith("/admin")) return "admin";
   if (pathname.startsWith("/owner")) return "owner";
   if (pathname.startsWith("/staff")) return "staff";
+  if (pathname.startsWith("/producer")) return "producer";
   return "owner";
 }
 
@@ -23,6 +25,12 @@ const TYPE_LABELS = {
   STAFF_BRANCH_ACCESS_REQUEST: "Branch Access",
   STAFF_BRANCH_ACCESS_APPROVED: "Branch Access",
   STAFF_BRANCH_ACCESS_REVOKED: "Branch Access",
+  STAFF_INVITE: "Staff Invite",
+  STAFF_INVITE_ACCEPTED: "Staff Accepted",
+  VERIFICATION_CASE_SUBMITTED: "Verification",
+  VERIFICATION_CASE_APPROVED: "Approved",
+  VERIFICATION_CASE_REJECTED: "Rejected",
+  BATCH_SUSPICIOUS_ACTIVITY: "Batch Alert",
   FINANCE_PAYMENT: "Finance",
   FINANCE_PAYOUT: "Finance",
   CLINIC_APPOINTMENT: "Clinic",
@@ -30,11 +38,16 @@ const TYPE_LABELS = {
   SYSTEM: "System",
 };
 
-function getTypeLabel(type) {
+function getTypeLabel(type, pathname) {
+  if (pathname?.startsWith("/producer")) return getProducerTypeLabel(type);
   return TYPE_LABELS[type] || type?.replace(/_/g, " ") || "Notification";
 }
 
-function getViewHref(item) {
+function getViewHref(item, pathname) {
+  if (pathname?.startsWith("/producer")) {
+    const href = getProducerViewHref(item, { pathname });
+    if (href) return href;
+  }
   if (item?.actionUrl) return item.actionUrl;
   const type = String(item?.type || "").toUpperCase();
   const meta = item?.meta || {};
@@ -45,12 +58,20 @@ function getViewHref(item) {
   return null;
 }
 
+function getPriorityBadge(item, pathname) {
+  if (!pathname?.startsWith("/producer")) return null;
+  const priority = item.displayPriority ?? getProducerNotificationPriority(item.type);
+  const cls = getPriorityBadgeClass(priority);
+  return { priority, cls };
+}
+
 function getViewAllHref(pathname) {
   if (!pathname) return "/owner/notifications";
   if (pathname.startsWith("/admin")) return "/admin/notifications";
   if (pathname.startsWith("/owner")) return "/owner/notifications";
   if (pathname.startsWith("/staff")) return "/staff/branch";
-  if (pathname.startsWith("/shop") || pathname.startsWith("/clinic") || pathname.startsWith("/producer")) {
+  if (pathname.startsWith("/producer")) return "/producer/notifications";
+  if (pathname.startsWith("/shop") || pathname.startsWith("/clinic")) {
     return pathname.split("/").slice(0, 2).join("/") + "/notifications";
   }
   if (pathname.startsWith("/mother")) return "/mother/notifications";
@@ -186,8 +207,9 @@ export default function NotificationBell({ enabled = true }) {
                 <ul className="list-unstyled mb-0 py-2">
                   {items.map((item) => {
                     const isUnread = !item.readAt;
-                    const viewHref = getViewHref(item);
-                    const typeLabel = getTypeLabel(item.type);
+                    const viewHref = getViewHref(item, pathname);
+                    const typeLabel = getTypeLabel(item.type, pathname);
+                    const priorityBadge = getPriorityBadge(item, pathname);
                     return (
                       <li
                         key={item.id}
@@ -224,13 +246,22 @@ export default function NotificationBell({ enabled = true }) {
                               <Icon icon="solar:check-circle-outline" style={{ fontSize: 20 }} />
                             </button>
                           </div>
-                          <div className="mt-1">
+                          <div className="mt-1 d-flex align-items-center gap-1 flex-wrap">
                             <span
                               className="badge bg-secondary bg-opacity-75 text-white rounded-pill"
                               style={{ fontSize: 10 }}
                             >
                               {typeLabel}
                             </span>
+                            {priorityBadge && (
+                              <span
+                                className={`badge ${priorityBadge.cls} rounded-pill`}
+                                style={{ fontSize: 10 }}
+                                title={`Priority: ${priorityBadge.priority}`}
+                              >
+                                {priorityBadge.priority}
+                              </span>
+                            )}
                           </div>
                           <p className="text-muted small mb-1 mt-1" style={{ fontSize: 13 }}>
                             {item.message || ""}

@@ -4,10 +4,16 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { apiGet, apiPost } from "@/lib/api";
+import { useToast } from "@/src/hooks/useToast";
+import { normalizeApiError, useApiErrorPopup } from "../../../_lib/apiErrorPopup";
+import { producerBatchMarkPrinted } from "../../../_lib/producerApi";
+import { Modal, Button } from "react-bootstrap";
 
 export default function ProducerBatchDetailPage() {
   const params = useParams();
   const id = params?.id;
+  const toast = useToast();
+  const { showApiErrorPopup, ApiErrorModal } = useApiErrorPopup();
   const [batch, setBatch] = useState(null);
   const [codes, setCodes] = useState({ items: [], pagination: { page: 1, limit: 50, total: 0 } });
   const [codesPage, setCodesPage] = useState(1);
@@ -21,6 +27,8 @@ export default function ProducerBatchDetailPage() {
   const [filterText, setFilterText] = useState("");
   const [filterStatus, setFilterStatus] = useState("ALL");
   const [submitting, setSubmitting] = useState(false);
+  const [showPrintConfirm, setShowPrintConfirm] = useState(false);
+  const [printing, setPrinting] = useState(false);
 
   const load = async () => {
     setLoading(true);
@@ -62,7 +70,10 @@ export default function ProducerBatchDetailPage() {
 
   const generate = async () => {
     const err = validate();
-    if (err) return alert(err);
+    if (err) {
+      toast.error(err);
+      return;
+    }
     setGenerating(true);
     setGeneratedCount(0);
     try {
@@ -76,7 +87,7 @@ export default function ProducerBatchDetailPage() {
       setGeneratedCount(count);
       await load();
     } catch (e) {
-      alert(e?.message || "Failed to generate codes");
+      showApiErrorPopup(normalizeApiError(e));
     } finally {
       setGenerating(false);
     }
@@ -85,13 +96,30 @@ export default function ProducerBatchDetailPage() {
   const submitForApproval = async () => {
     setSubmitting(true);
     try {
-      await apiPost(`/api/v1/producer/batches/${id}/submit`, {});
+      const res = await apiPost(`/api/v1/producer/batches/${id}/submit`, {});
+      const autoApproved =
+        res?.data?.autoApproved === true ||
+        res?.data?.approval?.status === "APPROVED";
       await load();
-      alert("Submitted for approval");
+      toast.success(autoApproved ? "Approved." : "Submitted for approval");
     } catch (e) {
-      alert(e?.message || "Failed to submit batch");
+      showApiErrorPopup(normalizeApiError(e));
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const confirmMarkPrinted = async () => {
+    setPrinting(true);
+    try {
+      await producerBatchMarkPrinted(id);
+      setShowPrintConfirm(false);
+      await load();
+      toast.success("Batch marked as printed.");
+    } catch (e) {
+      showApiErrorPopup(normalizeApiError(e));
+    } finally {
+      setPrinting(false);
     }
   };
 
@@ -103,8 +131,10 @@ export default function ProducerBatchDetailPage() {
   });
 
   return (
-    <div className="p-4">
-      <h2 className="h4 mb-3">Batch Detail</h2>
+    <>
+      <ApiErrorModal />
+      <div className="p-4">
+        <h2 className="h4 mb-3">Batch Detail</h2>
       {loading ? (
         <p className="text-secondary">Loading…</p>
       ) : !batch ? (
@@ -123,6 +153,13 @@ export default function ProducerBatchDetailPage() {
               <div className="mb-2"><strong>Status:</strong> {batch.status}</div>
               <div className="mb-2"><strong>Qty Planned:</strong> {batch.qtyPlanned}</div>
               <div className="mb-2"><strong>Qty Generated:</strong> {batch.qtyGenerated || 0}</div>
+              <div className="mt-3 pt-2 border-top">
+                <strong>Print status</strong>
+                <div className="mb-1">Printed: {batch.printedAt ? "Yes" : "No"}</div>
+                <div className="mb-1">Print count: {batch.printCount ?? 0}</div>
+                <div className="mb-1">Last printed at: {batch.printedAt ? new Date(batch.printedAt).toLocaleString() : "—"}</div>
+                <div className="mb-1">Last printed by: {batch.printedByUserId ? `User #${batch.printedByUserId}` : "—"}</div>
+              </div>
             </div>
           </div>
           <div className="d-flex gap-2">
@@ -140,12 +177,31 @@ export default function ProducerBatchDetailPage() {
             ) : (
               <span className="btn btn-sm btn-outline-secondary disabled">Export Codes</span>
             )}
+            {canGenerate ? (
+              <button className="btn btn-sm btn-outline-secondary" type="button" onClick={() => setShowPrintConfirm(true)}>
+                Mark as printed
+              </button>
+            ) : (
+              <span className="btn btn-sm btn-outline-secondary disabled">Mark as printed</span>
+            )}
             {canSubmit ? (
               <button className="btn btn-sm btn-outline-primary" type="button" onClick={submitForApproval} disabled={submitting}>
                 {submitting ? "Submitting..." : "Submit for approval"}
               </button>
             ) : null}
           </div>
+          <Modal show={showPrintConfirm} onHide={() => !printing && setShowPrintConfirm(false)}>
+            <Modal.Header closeButton>
+              <Modal.Title>Mark batch as printed?</Modal.Title>
+            </Modal.Header>
+            <Modal.Body>
+              This will record a print event and increase print count.
+            </Modal.Body>
+            <Modal.Footer>
+              <Button variant="secondary" onClick={() => setShowPrintConfirm(false)} disabled={printing}>Cancel</Button>
+              <Button variant="primary" onClick={confirmMarkPrinted} disabled={printing}>{printing ? "Saving..." : "Confirm"}</Button>
+            </Modal.Footer>
+          </Modal>
           <div className="card mt-4">
             <div className="card-body">
               <h6 className="mb-2">Generate Codes</h6>
@@ -266,6 +322,7 @@ export default function ProducerBatchDetailPage() {
           </div>
         </>
       )}
-    </div>
+      </div>
+    </>
   );
 }

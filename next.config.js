@@ -14,12 +14,15 @@ const nextConfig = {
     },
   },
 
-  // Proxy /api/* to backend (port 3000) so same-origin requests avoid CORS and cookies work
+  // Proxy /api/v1/* to backend (port 3000). beforeFiles so API hits backend first.
+  // Exclude /api/proxy/* so Next.js API routes (e.g. producer-print proxy) run.
   async rewrites() {
     const apiTarget = process.env.API_BASE_URL || "http://localhost:3000";
-    return [
-      { source: "/api/:path*", destination: `${apiTarget}/api/:path*` },
-    ];
+    return {
+      beforeFiles: [
+        { source: "/api/v1/:path*", destination: `${apiTarget}/api/v1/:path*` },
+      ],
+    };
   },
 
   images: {

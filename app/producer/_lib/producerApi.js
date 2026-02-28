@@ -333,6 +333,47 @@ export async function producerPrintBatchAllocate(batchId, payload) {
   return data?.data ?? data;
 }
 
+/**
+ * GET issuance serial re-download. Triggers browser file download.
+ * Permission: producer.batches.read. Audit: ISSUANCE_SERIAL_REDOWNLOADED.
+ * @param {string|number} issuanceId - BatchSerialAllocationLog id
+ */
+export async function producerPrintIssuanceDownload(issuanceId) {
+  const url = `${typeof window !== "undefined" ? "" : getApiBase()}${PRINT_API}/issuances/${encodeURIComponent(issuanceId)}/download`;
+  const res = await fetch(url, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: "text/csv, application/json", "X-Country-Code": getCountryCode() },
+    cache: "no-store",
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let data;
+    try {
+      data = text ? JSON.parse(text) : null;
+    } catch {
+      data = { message: res.statusText };
+    }
+    const err = new Error(data?.message || res.statusText);
+    err.status = res.status;
+    err.data = data;
+    throw err;
+  }
+  const blob = await res.blob();
+  let filename = `issuance-${issuanceId}-serials.csv`;
+  const disp = res.headers.get("Content-Disposition");
+  if (disp) {
+    const m = disp.match(/filename="([^"]+)"/);
+    if (m) filename = m[1];
+  }
+  const objectUrl = URL.createObjectURL(new Blob([blob], { type: "text/csv; charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = objectUrl;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(objectUrl);
+}
+
 /** POST revoke an ISSUED allocation (owner + producer.codes.revoke). */
 export async function producerPrintAllocationRevoke(batchId, allocationId, payload = {}) {
   const res = await apiFetch(

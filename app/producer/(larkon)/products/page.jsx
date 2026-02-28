@@ -1,16 +1,17 @@
 "use client";
 
-import { useEffect, useState, useMemo, useCallback, useRef } from "react";
+import React, { useEffect, useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Icon } from "@iconify/react";
 import { useToast } from "@/src/hooks/useToast";
-import { producerProductsList, producerFactoriesList } from "../../_lib/producerApi";
+import { producerProductsList, producerMe, producerFactoriesList } from "../../_lib/producerApi";
+import { normalizeApiError, useApiErrorPopup } from "../../_lib/apiErrorPopup";
+import { Dropdown } from "react-bootstrap";
 import ProducerTableSkeleton from "../../_components/ProducerTableSkeleton";
 import ProducerPageShell from "../../_components/ProducerPageShell";
 import ProducerSectionCard from "../../_components/ProducerSectionCard";
 import ProducerEmptyState from "../../_components/ProducerEmptyState";
-import { getErrorMessage } from "../../_lib/errors";
 
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
@@ -28,13 +29,12 @@ const SORT_OPTIONS = [
   { value: "oldest", label: "Oldest first" },
   { value: "name_asc", label: "Name A–Z" },
   { value: "name_desc", label: "Name Z–A" },
-  { value: "status", label: "Status" },
+  { value: "updated", label: "Last updated" },
 ];
 
-const SAVED_VIEWS_KEY = "producer_products_saved_views";
 const DEFAULT_PAGE_SIZE = 20;
 
-function StatusBadge({ status }) {
+function StatusPill({ status }) {
   const s = status || "DRAFT";
   const cls =
     s === "APPROVED" || s === "ACTIVE"
@@ -46,7 +46,11 @@ function StatusBadge({ status }) {
           : s === "DRAFT"
             ? "bg-secondary"
             : "bg-secondary";
-  return <span className={`badge ${cls}`}>{s.replace(/_/g, " ")}</span>;
+  return (
+    <span className={`badge ${cls} radius-12 text-uppercase`}>
+      {s.replace(/_/g, " ")}
+    </span>
+  );
 }
 
 function useDebounce(value, delay) {
@@ -58,45 +62,65 @@ function useDebounce(value, delay) {
   return debouncedValue;
 }
 
+function formatDate(d) {
+  if (!d) return "—";
+  const date = new Date(d);
+  return date.toLocaleDateString(undefined, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
 export default function ProducerProductsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const toast = useToast();
+  const { showApiErrorPopup, ApiErrorModal } = useApiErrorPopup();
+  const [org, setOrg] = useState(null);
   const [items, setItems] = useState([]);
   const [factories, setFactories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState(null);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [viewMode, setViewMode] = useState(() => searchParams?.get("view") || "table"); // grid | table
+  const [selectedIds, setSelectedIds] = useState(new Set());
 
-  // URL-driven state (initial from URL)
   const [q, setQ] = useState(() => searchParams?.get("q") ?? "");
-  const [statusFilter, setStatusFilter] = useState(() => searchParams?.get("status") ?? "");
-  const [categoryFilter, setCategoryFilter] = useState(() => searchParams?.get("category") ?? "");
-  const [brandFilter, setBrandFilter] = useState(() => searchParams?.get("brand") ?? "");
-  const [factoryFilter, setFactoryFilter] = useState(() => searchParams?.get("factoryId") ?? "");
-  const [dateFrom, setDateFrom] = useState(() => searchParams?.get("dateFrom") ?? "");
+  const [statusFilter, setStatusFilter] = useState(
+    () => searchParams?.get("status") ?? ""
+  );
+  const [categoryFilter, setCategoryFilter] = useState(
+    () => searchParams?.get("category") ?? ""
+  );
+  const [brandFilter, setBrandFilter] = useState(
+    () => searchParams?.get("brand") ?? ""
+  );
+  const [factoryFilter, setFactoryFilter] = useState(
+    () => searchParams?.get("factoryId") ?? ""
+  );
+  const [dateFrom, setDateFrom] = useState(
+    () => searchParams?.get("dateFrom") ?? ""
+  );
   const [dateTo, setDateTo] = useState(() => searchParams?.get("dateTo") ?? "");
-  const [needsAction, setNeedsAction] = useState(() => searchParams?.get("needsAction") === "1");
   const [sort, setSort] = useState(() => searchParams?.get("sort") || "newest");
-  const [page, setPage] = useState(() => Math.max(1, parseInt(searchParams?.get("page") || "1", 10)));
-  const [savedViews, setSavedViews] = useState([]);
+  const [page, setPage] = useState(() =>
+    Math.max(1, parseInt(searchParams?.get("page") || "1", 10))
+  );
 
   const debouncedQ = useDebounce(q, 400);
-  const cacheKeyRef = useRef(null);
-  const lastDataRef = useRef(null);
 
-  // Sync URL when filters/page/sort change
   const updateUrl = useCallback(
     (updates = {}) => {
       const params = new URLSearchParams(searchParams?.toString() || "");
       const qq = updates.q !== undefined ? updates.q : q;
       const st = updates.status !== undefined ? updates.status : statusFilter;
-      const cat = updates.category !== undefined ? updates.category : categoryFilter;
+      const cat =
+        updates.category !== undefined ? updates.category : categoryFilter;
       const br = updates.brand !== undefined ? updates.brand : brandFilter;
-      const fac = updates.factoryId !== undefined ? updates.factoryId : factoryFilter;
+      const fac =
+        updates.factoryId !== undefined ? updates.factoryId : factoryFilter;
       const df = updates.dateFrom !== undefined ? updates.dateFrom : dateFrom;
       const dt = updates.dateTo !== undefined ? updates.dateTo : dateTo;
-      const na = updates.needsAction !== undefined ? updates.needsAction : needsAction;
       const so = updates.sort !== undefined ? updates.sort : sort;
       const p = updates.page !== undefined ? updates.page : page;
 
@@ -114,14 +138,13 @@ export default function ProducerProductsPage() {
       else params.delete("dateFrom");
       if (dt) params.set("dateTo", dt);
       else params.delete("dateTo");
-      if (na) params.set("needsAction", "1");
-      else params.delete("needsAction");
       if (so && so !== "newest") params.set("sort", so);
       else params.delete("sort");
       if (p > 1) params.set("page", String(p));
       else params.delete("page");
-      if (viewMode) params.set("view", viewMode);
-      router.replace(`/producer/products?${params.toString()}`, { scroll: false });
+      router.replace(`/producer/products?${params.toString()}`, {
+        scroll: false,
+      });
     },
     [
       q,
@@ -131,42 +154,42 @@ export default function ProducerProductsPage() {
       factoryFilter,
       dateFrom,
       dateTo,
-      needsAction,
       sort,
       page,
-      viewMode,
       router,
       searchParams,
     ]
   );
 
   const load = useCallback(async () => {
+    setLoadError(null);
     setLoading(true);
     try {
       const res = await producerProductsList({});
       const list = Array.isArray(res) ? res : [];
-      lastDataRef.current = list;
       setItems(list);
     } catch (e) {
       if (e?.status === 401) {
         router.replace("/producer/login?from=/producer/products");
         return;
       }
-      if (e?.status === 403) {
-        setItems([]);
-        toast.error("You don't have access to products.");
-        return;
-      }
       setItems([]);
-      toast.error(getErrorMessage(e, "Failed to load products"));
+      setLoadError(true);
+      showApiErrorPopup(normalizeApiError(e));
     } finally {
       setLoading(false);
     }
-  }, [router, toast]);
+  }, [router, showApiErrorPopup]);
 
   useEffect(() => {
     load();
   }, [load]);
+
+  useEffect(() => {
+    producerMe(true).then((me) => {
+      if (me?.org) setOrg(me.org);
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     producerFactoriesList()
@@ -174,16 +197,17 @@ export default function ProducerProductsPage() {
       .catch(() => setFactories([]));
   }, []);
 
-  // Load saved views from localStorage
   useEffect(() => {
-    try {
-      const raw = window.localStorage?.getItem(SAVED_VIEWS_KEY);
-      const parsed = raw ? JSON.parse(raw) : [];
-      setSavedViews(Array.isArray(parsed) ? parsed : []);
-    } catch {
-      setSavedViews([]);
-    }
-  }, []);
+    setQ(searchParams?.get("q") ?? "");
+    setStatusFilter(searchParams?.get("status") ?? "");
+    setCategoryFilter(searchParams?.get("category") ?? "");
+    setBrandFilter(searchParams?.get("brand") ?? "");
+    setFactoryFilter(searchParams?.get("factoryId") ?? "");
+    setDateFrom(searchParams?.get("dateFrom") ?? "");
+    setDateTo(searchParams?.get("dateTo") ?? "");
+    setSort(searchParams?.get("sort") || "newest");
+    setPage(Math.max(1, parseInt(searchParams?.get("page") || "1", 10)));
+  }, [searchParams]);
 
   const hasActiveFilters =
     debouncedQ ||
@@ -192,8 +216,7 @@ export default function ProducerProductsPage() {
     brandFilter ||
     factoryFilter ||
     dateFrom ||
-    dateTo ||
-    needsAction;
+    dateTo;
 
   const filtered = useMemo(() => {
     let list = [...items];
@@ -204,8 +227,7 @@ export default function ProducerProductsPage() {
           (p.productName || "").toLowerCase().includes(term) ||
           (p.brandName || "").toLowerCase().includes(term) ||
           (p.sku || "").toLowerCase().includes(term) ||
-          String(p.id).includes(term) ||
-          (p.barcode || "").toLowerCase().includes(term)
+          String(p.id).includes(term)
       );
     }
     if (statusFilter) {
@@ -220,12 +242,16 @@ export default function ProducerProductsPage() {
       );
     }
     if (factoryFilter) {
-      list = list.filter((p) => Number(p.factoryId) === Number(factoryFilter));
+      list = list.filter(
+        (p) => Number(p.factoryId) === Number(factoryFilter)
+      );
     }
     if (dateFrom) {
       const from = new Date(dateFrom);
       list = list.filter((p) => {
-        const d = p.submittedAt ? new Date(p.submittedAt) : new Date(p.createdAt);
+        const d = p.updatedAt
+          ? new Date(p.updatedAt)
+          : new Date(p.createdAt);
         return d >= from;
       });
     }
@@ -233,24 +259,30 @@ export default function ProducerProductsPage() {
       const to = new Date(dateTo);
       to.setHours(23, 59, 59, 999);
       list = list.filter((p) => {
-        const d = p.submittedAt ? new Date(p.submittedAt) : new Date(p.createdAt);
+        const d = p.updatedAt
+          ? new Date(p.updatedAt)
+          : new Date(p.createdAt);
         return d <= to;
       });
     }
-    if (needsAction) {
-      list = list.filter((p) => p.status === "REJECTED" || p.status === "DRAFT");
-    }
-    // Sort
     if (sort === "oldest") {
       list.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     } else if (sort === "newest") {
       list.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
     } else if (sort === "name_asc") {
-      list.sort((a, b) => (a.productName || "").localeCompare(b.productName || ""));
+      list.sort((a, b) =>
+        (a.productName || "").localeCompare(b.productName || "")
+      );
     } else if (sort === "name_desc") {
-      list.sort((a, b) => (b.productName || "").localeCompare(a.productName || ""));
-    } else if (sort === "status") {
-      list.sort((a, b) => (a.status || "").localeCompare(b.status || ""));
+      list.sort((a, b) =>
+        (b.productName || "").localeCompare(a.productName || "")
+      );
+    } else if (sort === "updated") {
+      list.sort(
+        (a, b) =>
+          new Date(b.updatedAt || b.createdAt) -
+          new Date(a.updatedAt || a.createdAt)
+      );
     }
     return list;
   }, [
@@ -262,18 +294,31 @@ export default function ProducerProductsPage() {
     factoryFilter,
     dateFrom,
     dateTo,
-    needsAction,
     sort,
   ]);
 
   const totalFiltered = filtered.length;
-  const pageSize = DEFAULT_PAGE_SIZE;
-  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+  const totalPages = Math.max(
+    1,
+    Math.ceil(totalFiltered / DEFAULT_PAGE_SIZE)
+  );
   const currentPage = Math.min(Math.max(1, page), totalPages);
   const paginated = useMemo(() => {
-    const start = (currentPage - 1) * pageSize;
-    return filtered.slice(start, start + pageSize);
-  }, [filtered, currentPage, pageSize]);
+    const start = (currentPage - 1) * DEFAULT_PAGE_SIZE;
+    return filtered.slice(start, start + DEFAULT_PAGE_SIZE);
+  }, [filtered, currentPage]);
+
+  const kpiTotal = items.length;
+  const kpiActive = items.filter(
+    (p) => p.status === "ACTIVE" || p.status === "APPROVED"
+  ).length;
+  const kpiDraft = items.filter((p) => p.status === "DRAFT").length;
+  const kpiPending = items.filter(
+    (p) =>
+      p.status === "SUBMITTED" ||
+      p.status === "UNDER_REVIEW"
+  ).length;
+  const kpiRejected = items.filter((p) => p.status === "REJECTED").length;
 
   const categoriesFromData = useMemo(() => {
     const set = new Set();
@@ -291,7 +336,7 @@ export default function ProducerProductsPage() {
     return Array.from(set).sort();
   }, [items]);
 
-  const clearFilters = () => {
+  const clearFilters = useCallback(() => {
     setQ("");
     setStatusFilter("");
     setCategoryFilter("");
@@ -299,7 +344,6 @@ export default function ProducerProductsPage() {
     setFactoryFilter("");
     setDateFrom("");
     setDateTo("");
-    setNeedsAction(false);
     setPage(1);
     updateUrl({
       q: "",
@@ -309,10 +353,9 @@ export default function ProducerProductsPage() {
       factoryId: "",
       dateFrom: "",
       dateTo: "",
-      needsAction: false,
       page: 1,
     });
-  };
+  }, [updateUrl]);
 
   const removeChip = (key) => {
     if (key === "q") setQ("");
@@ -322,58 +365,8 @@ export default function ProducerProductsPage() {
     if (key === "factoryId") setFactoryFilter("");
     if (key === "dateFrom") setDateFrom("");
     if (key === "dateTo") setDateTo("");
-    if (key === "needsAction") setNeedsAction(false);
     setPage(1);
     setTimeout(() => updateUrl(), 0);
-  };
-
-  const saveCurrentView = () => {
-    const name = window.prompt("Name this view (e.g. My Drafts, Rejected Fixes)");
-    if (!name?.trim()) return;
-    const view = {
-      id: Date.now().toString(),
-      name: name.trim(),
-      q,
-      status: statusFilter,
-      category: categoryFilter,
-      brand: brandFilter,
-      factoryId: factoryFilter,
-      dateFrom,
-      dateTo,
-      needsAction,
-      sort,
-    };
-    const next = [...savedViews, view];
-    setSavedViews(next);
-    try {
-      window.localStorage?.setItem(SAVED_VIEWS_KEY, JSON.stringify(next));
-    } catch {}
-    toast.success("View saved");
-  };
-
-  const applySavedView = (view) => {
-    setQ(view.q || "");
-    setStatusFilter(view.status || "");
-    setCategoryFilter(view.category || "");
-    setBrandFilter(view.brand || "");
-    setFactoryFilter(view.factoryId || "");
-    setDateFrom(view.dateFrom || "");
-    setDateTo(view.dateTo || "");
-    setNeedsAction(!!view.needsAction);
-    setSort(view.sort || "newest");
-    setPage(1);
-    updateUrl({
-      q: view.q || "",
-      status: view.status || "",
-      category: view.category || "",
-      brand: view.brand || "",
-      factoryId: view.factoryId || "",
-      dateFrom: view.dateFrom || "",
-      dateTo: view.dateTo || "",
-      needsAction: view.needsAction,
-      sort: view.sort || "newest",
-      page: 1,
-    });
   };
 
   const setPageAndUrl = (p) => {
@@ -382,49 +375,398 @@ export default function ProducerProductsPage() {
     updateUrl({ page: next });
   };
 
-  // Sync URL with filter state so refresh preserves state
-  useEffect(() => {
-    const params = new URLSearchParams();
-    if (q) params.set("q", q);
-    if (statusFilter) params.set("status", statusFilter);
-    if (categoryFilter) params.set("category", categoryFilter);
-    if (brandFilter) params.set("brand", brandFilter);
-    if (factoryFilter) params.set("factoryId", factoryFilter);
-    if (dateFrom) params.set("dateFrom", dateFrom);
-    if (dateTo) params.set("dateTo", dateTo);
-    if (needsAction) params.set("needsAction", "1");
-    if (sort && sort !== "newest") params.set("sort", sort);
-    if (page > 1) params.set("page", String(page));
-    if (viewMode) params.set("view", viewMode);
-    router.replace(`/producer/products?${params.toString()}`, { scroll: false });
-  }, [q, statusFilter, categoryFilter, brandFilter, factoryFilter, dateFrom, dateTo, needsAction, sort, page, viewMode, router]);
+  const toggleSelect = (id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === paginated.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(paginated.map((p) => p.id)));
+    }
+  };
+
+  const clearSelection = () => setSelectedIds(new Set());
+
+  const exportSelected = () => {
+    const ids = Array.from(selectedIds);
+    const toExport = items.filter((p) => ids.includes(p.id));
+    if (toExport.length === 0) {
+      toast.error("No rows selected");
+      return;
+    }
+    const headers = [
+      "id",
+      "productName",
+      "brandName",
+      "sku",
+      "productType",
+      "status",
+      "createdAt",
+      "updatedAt",
+    ];
+    const rows = toExport.map((p) =>
+      headers.map((h) => (p[h] != null ? String(p[h]) : ""))
+    );
+    const csv =
+      headers.join(",") +
+      "\n" +
+      rows.map((r) => r.map((c) => `"${c.replace(/"/g, '""')}"`).join(",")).join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `producer-products-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success("Exported");
+  };
+
+  const proofLabel = (p) => {
+    if (p.proofs != null && Array.isArray(p.proofs)) {
+      const n = p.proofs.length;
+      return n === 0 ? "Missing" : `${n} doc${n !== 1 ? "s" : ""}`;
+    }
+    return "—";
+  };
 
   return (
-    <ProducerPageShell
-      title="Products"
-      breadcrumbs={[{ label: "Products" }]}
+    <>
+      <ApiErrorModal />
+      <ProducerPageShell
+        title="Products"
+        breadcrumbs={[{ label: "Products", href: "/producer/products" }]}
       actions={
-        <Link href="/producer/products/new" className="btn btn-primary btn-sm radius-12">
-          <Icon icon="solar:add-circle-outline" className="me-1" aria-hidden />
-          New Product
-        </Link>
+        <div className="d-flex align-items-center gap-2 flex-wrap">
+          {org && (
+            <span
+              className="badge bg-light text-dark border radius-12 px-2 py-1"
+              title="Current producer org"
+            >
+              {org.name || "Producer"}
+              {org.status === "VERIFIED" ? (
+                <Icon icon="solar:verified-check-bold" className="ms-1 text-success" />
+              ) : (
+                <span className="text-warning small ms-1">(Pending)</span>
+              )}
+            </span>
+          )}
+          <Link
+            href="/producer/products/new"
+            className="btn btn-primary btn-sm radius-12"
+          >
+            <Icon icon="solar:add-circle-outline" className="me-1" aria-hidden />
+            New Product
+          </Link>
+        </div>
       }
     >
+      <p className="text-muted small mb-3">
+        Manage authenticity products, proofs, and batches. Submit for owner
+        approval, then platform admin approval to activate.
+      </p>
+
+      {/* KPI cards */}
+      <div className="row g-2 mb-4">
+        <div className="col-6 col-md-3">
+          <button
+            type="button"
+            className="card radius-12 w-100 border text-start text-decoration-none text-dark h-100"
+            onClick={() => {
+              setStatusFilter("");
+              setPage(1);
+              updateUrl({ status: "", page: 1 });
+            }}
+          >
+            <div className="card-body py-3">
+              <div className="small text-muted">Total</div>
+              <div className="h4 mb-0">{kpiTotal}</div>
+            </div>
+          </button>
+        </div>
+        <div className="col-6 col-md-3">
+          <button
+            type="button"
+            className="card radius-12 w-100 border text-start text-decoration-none text-dark h-100"
+            onClick={() => {
+              setStatusFilter("ACTIVE");
+              setPage(1);
+              updateUrl({ status: "ACTIVE", page: 1 });
+            }}
+          >
+            <div className="card-body py-3">
+              <div className="small text-muted">Active</div>
+              <div className="h4 mb-0 text-success">{kpiActive}</div>
+            </div>
+          </button>
+        </div>
+        <div className="col-6 col-md-3">
+          <button
+            type="button"
+            className="card radius-12 w-100 border text-start text-decoration-none text-dark h-100"
+            onClick={() => {
+              setStatusFilter("DRAFT");
+              setPage(1);
+              updateUrl({ status: "DRAFT", page: 1 });
+            }}
+          >
+            <div className="card-body py-3">
+              <div className="small text-muted">Draft</div>
+              <div className="h4 mb-0 text-secondary">{kpiDraft}</div>
+            </div>
+          </button>
+        </div>
+        <div className="col-6 col-md-3">
+          <button
+            type="button"
+            className="card radius-12 w-100 border text-start text-decoration-none text-dark h-100"
+            onClick={() => {
+              setStatusFilter("REJECTED");
+              setPage(1);
+              updateUrl({ status: "REJECTED", page: 1 });
+            }}
+          >
+            <div className="card-body py-3">
+              <div className="small text-muted">Pending / Rejected</div>
+              <div className="h4 mb-0 text-info">
+                {kpiPending} / {kpiRejected}
+              </div>
+            </div>
+          </button>
+        </div>
+      </div>
+
+      {loadError && (
+        <div className="alert alert-danger radius-12 d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+          <span>Unable to load products.</span>
+          <button
+            type="button"
+            className="btn btn-outline-danger btn-sm radius-12"
+            onClick={() => { setLoadError(null); load(); }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
+
       <ProducerSectionCard
-        title="All products"
+        title="Filters"
+        className="mb-3 position-sticky top-0 bg-white z-1 shadow-sm"
+        right={
+          <button
+            type="button"
+            className="btn btn-outline-secondary btn-sm radius-12"
+            onClick={() => setFilterOpen((o) => !o)}
+            aria-expanded={filterOpen}
+          >
+            <Icon
+              icon={
+                filterOpen
+                  ? "solar:alt-arrow-up-outline"
+                  : "solar:filter-outline"
+              }
+              className="me-1"
+            />
+            {filterOpen ? "Hide" : "Show"}
+          </button>
+        }
+      >
+        {filterOpen && (
+          <div className="row g-2 mb-3">
+            <div className="col-md-2">
+              <label className="form-label small mb-0">Search (name / SKU)</label>
+              <input
+                type="search"
+                className="form-control form-control-sm radius-12"
+                placeholder="Search…"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                aria-label="Search"
+              />
+            </div>
+            <div className="col-md-2">
+              <label className="form-label small mb-0">Status</label>
+              <select
+                className="form-select form-select-sm radius-12"
+                value={statusFilter}
+                onChange={(e) => setStatusFilter(e.target.value)}
+                aria-label="Status"
+              >
+                {STATUS_OPTIONS.map((opt) => (
+                  <option key={opt.value || "all"} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {categoriesFromData.length > 0 && (
+              <div className="col-md-2">
+                <label className="form-label small mb-0">Category</label>
+                <select
+                  className="form-select form-select-sm radius-12"
+                  value={categoryFilter}
+                  onChange={(e) => setCategoryFilter(e.target.value)}
+                  aria-label="Category"
+                >
+                  <option value="">All</option>
+                  {categoriesFromData.map((c) => (
+                    <option key={c} value={c}>
+                      {c.replace(/_/g, " ")}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {brandsFromData.length > 0 && (
+              <div className="col-md-2">
+                <label className="form-label small mb-0">Brand</label>
+                <select
+                  className="form-select form-select-sm radius-12"
+                  value={brandFilter}
+                  onChange={(e) => setBrandFilter(e.target.value)}
+                  aria-label="Brand"
+                >
+                  <option value="">All</option>
+                  {brandsFromData.map((b) => (
+                    <option key={b} value={b}>
+                      {b}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            {factories.length > 0 && (
+              <div className="col-md-2">
+                <label className="form-label small mb-0">Factory</label>
+                <select
+                  className="form-select form-select-sm radius-12"
+                  value={factoryFilter}
+                  onChange={(e) => setFactoryFilter(e.target.value)}
+                  aria-label="Factory"
+                >
+                  <option value="">All</option>
+                  {factories.map((f) => (
+                    <option key={f.id} value={f.id}>
+                      {f.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+            <div className="col-md-2">
+              <label className="form-label small mb-0">Created from</label>
+              <input
+                type="date"
+                className="form-control form-control-sm radius-12"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                aria-label="Date from"
+              />
+            </div>
+            <div className="col-md-2">
+              <label className="form-label small mb-0">Created to</label>
+              <input
+                type="date"
+                className="form-control form-control-sm radius-12"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                aria-label="Date to"
+              />
+            </div>
+          </div>
+        )}
+
+        {hasActiveFilters && (
+          <div className="d-flex flex-wrap gap-2 align-items-center">
+            {debouncedQ && (
+              <span className="badge bg-light text-dark border radius-12 d-inline-flex align-items-center gap-1">
+                Search: {debouncedQ}
+                <button
+                  type="button"
+                  className="btn btn-link btn-sm p-0 ms-1"
+                  onClick={() => removeChip("q")}
+                  aria-label="Remove search"
+                >
+                  <Icon icon="solar:close-circle-outline" />
+                </button>
+              </span>
+            )}
+            {statusFilter && (
+              <span className="badge bg-light text-dark border radius-12 d-inline-flex align-items-center gap-1">
+                Status: {statusFilter}
+                <button
+                  type="button"
+                  className="btn btn-link btn-sm p-0 ms-1"
+                  onClick={() => removeChip("status")}
+                  aria-label="Remove status"
+                >
+                  <Icon icon="solar:close-circle-outline" />
+                </button>
+              </span>
+            )}
+            {categoryFilter && (
+              <span className="badge bg-light text-dark border radius-12 d-inline-flex align-items-center gap-1">
+                Category
+                <button
+                  type="button"
+                  className="btn btn-link btn-sm p-0 ms-1"
+                  onClick={() => removeChip("category")}
+                >
+                  <Icon icon="solar:close-circle-outline" />
+                </button>
+              </span>
+            )}
+            {brandFilter && (
+              <span className="badge bg-light text-dark border radius-12 d-inline-flex align-items-center gap-1">
+                Brand
+                <button
+                  type="button"
+                  className="btn btn-link btn-sm p-0 ms-1"
+                  onClick={() => removeChip("brand")}
+                >
+                  <Icon icon="solar:close-circle-outline" />
+                </button>
+              </span>
+            )}
+            {(dateFrom || dateTo) && (
+              <span className="badge bg-light text-dark border radius-12 d-inline-flex align-items-center gap-1">
+                Date range
+                <button
+                  type="button"
+                  className="btn btn-link btn-sm p-0 ms-1"
+                  onClick={() => {
+                    removeChip("dateFrom");
+                    removeChip("dateTo");
+                  }}
+                >
+                  <Icon icon="solar:close-circle-outline" />
+                </button>
+              </span>
+            )}
+            <button
+              type="button"
+              className="btn btn-link btn-sm p-0"
+              onClick={clearFilters}
+            >
+              Clear all
+            </button>
+          </div>
+        )}
+      </ProducerSectionCard>
+
+      <ProducerSectionCard
+        title="Products"
+        className="mb-3"
         right={
           <div className="d-flex gap-2 flex-wrap align-items-center">
-            <input
-              type="search"
-              className="form-control form-control-sm"
-              placeholder="Search name, brand, SKU, ID"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              style={{ maxWidth: 220 }}
-              aria-label="Search products"
-            />
             <select
-              className="form-select form-select-sm"
+              className="form-select form-select-sm radius-12"
               value={sort}
               onChange={(e) => {
                 setSort(e.target.value);
@@ -439,256 +781,33 @@ export default function ProducerProductsPage() {
                 </option>
               ))}
             </select>
-            <div className="btn-group btn-group-sm">
-              <button
-                type="button"
-                className={`btn ${viewMode === "table" ? "btn-primary" : "btn-outline-secondary"}`}
-                onClick={() => setViewMode("table")}
-                aria-label="Table view"
-              >
-                <Icon icon="solar:list-outline" />
-              </button>
-              <button
-                type="button"
-                className={`btn ${viewMode === "grid" ? "btn-primary" : "btn-outline-secondary"}`}
-                onClick={() => setViewMode("grid")}
-                aria-label="Grid view"
-              >
-                <Icon icon="solar:widget-4-outline" />
-              </button>
-            </div>
           </div>
         }
       >
-        {/* Filter panel */}
-        <div className="mb-3">
-          <button
-            type="button"
-            className="btn btn-outline-secondary btn-sm radius-12 me-2"
-            onClick={() => setFilterOpen((o) => !o)}
-            aria-expanded={filterOpen}
-          >
-            <Icon icon={filterOpen ? "solar:alt-arrow-up-outline" : "solar:filter-outline"} className="me-1" />
-            Filters
-          </button>
-          {savedViews.length > 0 && (
-            <div className="d-inline-block dropdown">
-              <button
-                type="button"
-                className="btn btn-outline-secondary btn-sm radius-12 dropdown-toggle"
-                data-bs-toggle="dropdown"
-                aria-haspopup="true"
-                aria-expanded="false"
-              >
-                Saved views
-              </button>
-              <ul className="dropdown-menu dropdown-menu-end">
-                {savedViews.map((v) => (
-                  <li key={v.id}>
-                    <button type="button" className="dropdown-item" onClick={() => applySavedView(v)}>
-                      {v.name}
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <button
-            type="button"
-            className="btn btn-outline-secondary btn-sm radius-12 ms-2"
-            onClick={saveCurrentView}
-          >
-            Save current view
-          </button>
-        </div>
-
-        {filterOpen && (
-          <div className="card card-body mb-3 radius-12 bg-light">
-            <div className="row g-2">
-              <div className="col-md-2">
-                <label className="form-label small mb-0">Status</label>
-                <select
-                  className="form-select form-select-sm"
-                  value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value)}
-                  aria-label="Status"
-                >
-                  {STATUS_OPTIONS.map((opt) => (
-                    <option key={opt.value || "all"} value={opt.value}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              {categoriesFromData.length > 0 && (
-                <div className="col-md-2">
-                  <label className="form-label small mb-0">Category</label>
-                  <select
-                    className="form-select form-select-sm"
-                    value={categoryFilter}
-                    onChange={(e) => setCategoryFilter(e.target.value)}
-                    aria-label="Category"
-                  >
-                    <option value="">All</option>
-                    {categoriesFromData.map((c) => (
-                      <option key={c} value={c}>
-                        {c.replace(/_/g, " ")}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {brandsFromData.length > 0 && (
-                <div className="col-md-2">
-                  <label className="form-label small mb-0">Brand</label>
-                  <select
-                    className="form-select form-select-sm"
-                    value={brandFilter}
-                    onChange={(e) => setBrandFilter(e.target.value)}
-                    aria-label="Brand"
-                  >
-                    <option value="">All</option>
-                    {brandsFromData.map((b) => (
-                      <option key={b} value={b}>
-                        {b}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              {factories.length > 0 && (
-                <div className="col-md-2">
-                  <label className="form-label small mb-0">Factory</label>
-                  <select
-                    className="form-select form-select-sm"
-                    value={factoryFilter}
-                    onChange={(e) => setFactoryFilter(e.target.value)}
-                    aria-label="Factory"
-                  >
-                    <option value="">All</option>
-                    {factories.map((f) => (
-                      <option key={f.id} value={f.id}>
-                        {f.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
-              <div className="col-md-2">
-                <label className="form-label small mb-0">Date from</label>
-                <input
-                  type="date"
-                  className="form-control form-control-sm"
-                  value={dateFrom}
-                  onChange={(e) => setDateFrom(e.target.value)}
-                  aria-label="Date from"
-                />
-              </div>
-              <div className="col-md-2">
-                <label className="form-label small mb-0">Date to</label>
-                <input
-                  type="date"
-                  className="form-control form-control-sm"
-                  value={dateTo}
-                  onChange={(e) => setDateTo(e.target.value)}
-                  aria-label="Date to"
-                />
-              </div>
-              <div className="col-md-2 d-flex align-items-end">
-                <div className="form-check">
-                  <input
-                    id="needsAction"
-                    type="checkbox"
-                    className="form-check-input"
-                    checked={needsAction}
-                    onChange={(e) => setNeedsAction(e.target.checked)}
-                  />
-                  <label className="form-check-label small" htmlFor="needsAction">
-                    Needs action
-                  </label>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Active filter chips */}
-        {hasActiveFilters && (
-          <div className="d-flex flex-wrap gap-2 align-items-center mb-3">
-            {debouncedQ && (
-              <span className="badge bg-light text-dark border d-inline-flex align-items-center gap-1">
-                Search: {debouncedQ}
-                <button
-                  type="button"
-                  className="btn btn-link btn-sm p-0 ms-1"
-                  onClick={() => removeChip("q")}
-                  aria-label="Remove search"
-                >
-                  <Icon icon="solar:close-circle-outline" />
-                </button>
-              </span>
-            )}
-            {statusFilter && (
-              <span className="badge bg-light text-dark border d-inline-flex align-items-center gap-1">
-                Status: {statusFilter}
-                <button
-                  type="button"
-                  className="btn btn-link btn-sm p-0 ms-1"
-                  onClick={() => removeChip("status")}
-                  aria-label="Remove status"
-                >
-                  <Icon icon="solar:close-circle-outline" />
-                </button>
-              </span>
-            )}
-            {categoryFilter && (
-              <span className="badge bg-light text-dark border d-inline-flex align-items-center gap-1">
-                Category: {categoryFilter}
-                <button type="button" className="btn btn-link btn-sm p-0 ms-1" onClick={() => removeChip("category")}>
-                  <Icon icon="solar:close-circle-outline" />
-                </button>
-              </span>
-            )}
-            {brandFilter && (
-              <span className="badge bg-light text-dark border d-inline-flex align-items-center gap-1">
-                Brand: {brandFilter}
-                <button type="button" className="btn btn-link btn-sm p-0 ms-1" onClick={() => removeChip("brand")}>
-                  <Icon icon="solar:close-circle-outline" />
-                </button>
-              </span>
-            )}
-            {factoryFilter && (
-              <span className="badge bg-light text-dark border d-inline-flex align-items-center gap-1">
-                Factory
-                <button type="button" className="btn btn-link btn-sm p-0 ms-1" onClick={() => removeChip("factoryId")}>
-                  <Icon icon="solar:close-circle-outline" />
-                </button>
-              </span>
-            )}
-            {(dateFrom || dateTo) && (
-              <span className="badge bg-light text-dark border d-inline-flex align-items-center gap-1">
-                Date range
-                <button type="button" className="btn btn-link btn-sm p-0 ms-1" onClick={() => { removeChip("dateFrom"); removeChip("dateTo"); }}>
-                  <Icon icon="solar:close-circle-outline" />
-                </button>
-              </span>
-            )}
-            {needsAction && (
-              <span className="badge bg-light text-dark border d-inline-flex align-items-center gap-1">
-                Needs action
-                <button type="button" className="btn btn-link btn-sm p-0 ms-1" onClick={() => removeChip("needsAction")}>
-                  <Icon icon="solar:close-circle-outline" />
-                </button>
-              </span>
-            )}
-            <button type="button" className="btn btn-link btn-sm p-0" onClick={clearFilters}>
-              Clear all
+        {selectedIds.size > 0 && (
+          <div className="d-flex align-items-center gap-2 flex-wrap mb-3 p-2 bg-light radius-12">
+            <span className="small">
+              {selectedIds.size} selected
+            </span>
+            <button
+              type="button"
+              className="btn btn-outline-primary btn-sm radius-12"
+              onClick={exportSelected}
+            >
+              Export selected
+            </button>
+            <button
+              type="button"
+              className="btn btn-outline-secondary btn-sm radius-12"
+              onClick={clearSelection}
+            >
+              Clear selection
             </button>
           </div>
         )}
 
         {loading ? (
-          <ProducerTableSkeleton rows={6} cols={6} />
+          <ProducerTableSkeleton rows={8} cols={9} />
         ) : filtered.length === 0 ? (
           <ProducerEmptyState
             title={items.length === 0 ? "No products yet" : "No products match filters"}
@@ -697,86 +816,157 @@ export default function ProducerProductsPage() {
                 ? "Create your first product to start managing batches and codes."
                 : "Try changing search or filters."
             }
-            icon={<Icon icon="solar:box-outline" className="display-4 text-muted" aria-hidden />}
+            icon={
+              <Icon
+                icon="solar:box-outline"
+                className="display-4 text-muted"
+                aria-hidden
+              />
+            }
             primaryLabel="New Product"
             primaryHref="/producer/products/new"
-            {...(items.length > 0 && { secondaryLabel: "Clear filters", secondaryHref: "/producer/products" })}
+            secondaryLabel={items.length > 0 ? "Clear filters" : undefined}
+            secondaryHref={items.length > 0 ? "/producer/products" : undefined}
           />
-        ) : viewMode === "table" ? (
+        ) : (
           <>
             <div className="table-responsive">
-              <table className="table table-bordered table-hover align-middle mb-0">
+              <table className="table table-hover align-middle mb-0">
                 <thead className="table-light">
                   <tr>
-                    <th>ID</th>
+                    <th style={{ width: 40 }}>
+                      <input
+                        type="checkbox"
+                        className="form-check-input"
+                        checked={
+                          paginated.length > 0 &&
+                          selectedIds.size === paginated.length
+                        }
+                        onChange={toggleSelectAll}
+                        aria-label="Select all on page"
+                      />
+                    </th>
+                    <th>Product</th>
+                    <th>Category</th>
                     <th>Brand</th>
-                    <th>Name</th>
-                    <th>SKU</th>
+                    <th>Price</th>
+                    <th>Stock</th>
+                    <th>Proofs</th>
                     <th>Status</th>
-                    <th>Actions</th>
+                    <th>Updated</th>
+                    <th style={{ width: 60 }}>Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {paginated.map((p) => (
                     <tr key={p.id}>
                       <td>
-                        <Link
-                          href={`/producer/products/${p.id}`}
-                          className="text-primary text-decoration-none fw-medium"
-                        >
-                          {p.id}
-                        </Link>
+                        <input
+                          type="checkbox"
+                          className="form-check-input"
+                          checked={selectedIds.has(p.id)}
+                          onChange={() => toggleSelect(p.id)}
+                          aria-label={`Select ${p.productName}`}
+                        />
                       </td>
-                      <td>{p.brandName || "—"}</td>
-                      <td>{p.productName}</td>
-                      <td>{p.sku || "—"}</td>
-                      <td><StatusBadge status={p.status} /></td>
                       <td>
-                        <div className="d-flex gap-2 flex-wrap">
-                          <Link
-                            className="btn btn-sm btn-outline-primary radius-12"
-                            href={`/producer/products/${p.id}`}
+                        <div className="d-flex align-items-center gap-2">
+                          <div
+                            className="rounded bg-light d-flex align-items-center justify-content-center flex-shrink-0"
+                            style={{ width: 40, height: 40 }}
                           >
-                            View
-                          </Link>
-                          {(p.status === "DRAFT" || p.status === "REJECTED") && (
+                            <Icon
+                              icon="solar:box-outline"
+                              className="text-muted"
+                              style={{ fontSize: "1.25rem" }}
+                            />
+                          </div>
+                          <div>
                             <Link
-                              className="btn btn-sm btn-outline-secondary radius-12"
-                              href={`/producer/products/${p.id}/edit`}
+                              href={`/producer/products/${p.id}`}
+                              className="fw-medium text-primary text-decoration-none"
                             >
-                              Edit
+                              {p.productName || "—"}
                             </Link>
-                          )}
-                          {p.status !== "DRAFT" && p.status !== "REJECTED" && (
-                            <Link
-                              className="btn btn-sm btn-outline-secondary radius-12"
-                              href={`/producer/products/${p.id}/edit`}
-                              title="Edit is only allowed for Draft or Rejected (backend may restrict Rejected)"
-                            >
-                              Edit
-                            </Link>
-                          )}
-                          <Link
-                            className="btn btn-sm btn-outline-secondary radius-12"
-                            href={`/producer/batches`}
-                          >
-                            Batches
-                          </Link>
+                            <div className="small text-muted">
+                              {p.sku || "—"}
+                            </div>
+                          </div>
                         </div>
+                      </td>
+                      <td className="small">
+                        {p.productType
+                          ? p.productType.replace(/_/g, " ")
+                          : "—"}
+                      </td>
+                      <td className="small">{p.brandName || "—"}</td>
+                      <td className="small text-muted">—</td>
+                      <td className="small text-muted">—</td>
+                      <td className="small text-muted">
+                        {proofLabel(p)}
+                      </td>
+                      <td>
+                        <StatusPill status={p.status} />
+                      </td>
+                      <td className="small text-muted">
+                        {formatDate(p.updatedAt || p.createdAt)}
+                      </td>
+                      <td>
+                        <Dropdown align="end">
+                          <Dropdown.Toggle
+                            variant="outline-secondary"
+                            size="sm"
+                            className="radius-12"
+                            id={`product-actions-${p.id}`}
+                            aria-label="Actions"
+                          >
+                            <Icon icon="solar:menu-dots-outline" />
+                          </Dropdown.Toggle>
+                          <Dropdown.Menu align="end">
+                            <Dropdown.Item as={Link} href={`/producer/products/${p.id}`}>
+                              View
+                            </Dropdown.Item>
+                            <Dropdown.Item as={Link} href={`/producer/products/${p.id}/edit`}>
+                              Edit
+                            </Dropdown.Item>
+                            <Dropdown.Item as={Link} href={`/producer/products/new?duplicate=${p.id}`}>
+                              Duplicate
+                            </Dropdown.Item>
+                            <Dropdown.Item as={Link} href={`/producer/products/${p.id}/edit`}>
+                              Manage Proofs
+                            </Dropdown.Item>
+                            {p.status === "DRAFT" && (
+                              <Dropdown.Item disabled className="text-muted" title="Delete is not implemented in API">
+                                Delete (draft)
+                              </Dropdown.Item>
+                            )}
+                          </Dropdown.Menu>
+                        </Dropdown>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-            {/* Pagination — table view */}
+
             {totalPages > 1 && (
-              <nav className="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2" aria-label="Products pagination">
+              <nav
+                className="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2"
+                aria-label="Products pagination"
+              >
                 <span className="small text-muted">
-                  Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalFiltered)} of {totalFiltered}
+                  Showing{" "}
+                  {(currentPage - 1) * DEFAULT_PAGE_SIZE + 1}–
+                  {Math.min(
+                    currentPage * DEFAULT_PAGE_SIZE,
+                    totalFiltered
+                  )}{" "}
+                  of {totalFiltered}
                 </span>
                 <ul className="pagination pagination-sm mb-0">
-                  <li className={`page-item ${currentPage <= 1 ? "disabled" : ""}`}>
+                  <li
+                    className={`page-item ${currentPage <= 1 ? "disabled" : ""}`}
+                  >
                     <button
                       type="button"
                       className="page-link"
@@ -788,94 +978,35 @@ export default function ProducerProductsPage() {
                     </button>
                   </li>
                   {Array.from({ length: totalPages }, (_, i) => i + 1)
-                    .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
+                    .filter(
+                      (p) =>
+                        p === 1 ||
+                        p === totalPages ||
+                        Math.abs(p - currentPage) <= 2
+                    )
                     .map((p, idx, arr) => (
                       <React.Fragment key={p}>
                         {idx > 0 && arr[idx - 1] !== p - 1 && (
-                          <li className="page-item disabled"><span className="page-link">…</span></li>
+                          <li className="page-item disabled">
+                            <span className="page-link">…</span>
+                          </li>
                         )}
-                        <li className={`page-item ${p === currentPage ? "active" : ""}`}>
-                          <button type="button" className="page-link" onClick={() => setPageAndUrl(p)}>
+                        <li
+                          className={`page-item ${p === currentPage ? "active" : ""}`}
+                        >
+                          <button
+                            type="button"
+                            className="page-link"
+                            onClick={() => setPageAndUrl(p)}
+                          >
                             {p}
                           </button>
                         </li>
                       </React.Fragment>
                     ))}
-                  <li className={`page-item ${currentPage >= totalPages ? "disabled" : ""}`}>
-                    <button
-                      type="button"
-                      className="page-link"
-                      onClick={() => setPageAndUrl(currentPage + 1)}
-                      disabled={currentPage >= totalPages}
-                      aria-label="Next page"
-                    >
-                      Next
-                    </button>
-                  </li>
-                </ul>
-              </nav>
-            )}
-          </>
-        ) : (
-          <>
-            <div className="row g-3">
-              {paginated.map((p) => (
-                <div key={p.id} className="col-sm-6 col-md-4 col-lg-3">
-                  <div className="card radius-12 h-100">
-                    <div className="card-body">
-                      <div className="d-flex justify-content-between align-items-start mb-2">
-                        <Link href={`/producer/products/${p.id}`} className="fw-medium text-primary text-decoration-none">
-                          {p.productName}
-                        </Link>
-                        <StatusBadge status={p.status} />
-                      </div>
-                      <p className="small text-muted mb-1">{p.brandName || "—"} · {p.sku || "—"}</p>
-                      <div className="d-flex gap-2 flex-wrap mt-2">
-                        <Link className="btn btn-sm btn-outline-primary radius-12" href={`/producer/products/${p.id}`}>
-                          View
-                        </Link>
-                        <Link className="btn btn-sm btn-outline-secondary radius-12" href={`/producer/products/${p.id}/edit`}>
-                          Edit
-                        </Link>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-            {/* Pagination — grid view */}
-            {totalPages > 1 && (
-              <nav className="d-flex justify-content-between align-items-center mt-3 flex-wrap gap-2" aria-label="Products pagination">
-                <span className="small text-muted">
-                  Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, totalFiltered)} of {totalFiltered}
-                </span>
-                <ul className="pagination pagination-sm mb-0">
-                  <li className={`page-item ${currentPage <= 1 ? "disabled" : ""}`}>
-                    <button
-                      type="button"
-                      className="page-link"
-                      onClick={() => setPageAndUrl(currentPage - 1)}
-                      disabled={currentPage <= 1}
-                      aria-label="Previous page"
-                    >
-                      Previous
-                    </button>
-                  </li>
-                  {Array.from({ length: totalPages }, (_, i) => i + 1)
-                    .filter((p) => p === 1 || p === totalPages || Math.abs(p - currentPage) <= 2)
-                    .map((p, idx, arr) => (
-                      <React.Fragment key={p}>
-                        {idx > 0 && arr[idx - 1] !== p - 1 && (
-                          <li className="page-item disabled"><span className="page-link">…</span></li>
-                        )}
-                        <li className={`page-item ${p === currentPage ? "active" : ""}`}>
-                          <button type="button" className="page-link" onClick={() => setPageAndUrl(p)}>
-                            {p}
-                          </button>
-                        </li>
-                      </React.Fragment>
-                    ))}
-                  <li className={`page-item ${currentPage >= totalPages ? "disabled" : ""}`}>
+                  <li
+                    className={`page-item ${currentPage >= totalPages ? "disabled" : ""}`}
+                  >
                     <button
                       type="button"
                       className="page-link"
@@ -893,5 +1024,6 @@ export default function ProducerProductsPage() {
         )}
       </ProducerSectionCard>
     </ProducerPageShell>
+    </>
   );
 }

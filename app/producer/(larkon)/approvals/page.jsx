@@ -6,11 +6,12 @@ import { useToast } from "@/src/hooks/useToast";
 import ProducerPageShell from "../../_components/ProducerPageShell";
 import ProducerSectionCard from "../../_components/ProducerSectionCard";
 import { producerApprovalsList, producerApprovalApprove, producerApprovalReject } from "../../_lib/producerApi";
-import { getErrorMessage } from "../../_lib/errors";
+import { normalizeApiError, useApiErrorPopup } from "../../_lib/apiErrorPopup";
 
 export default function ProducerApprovalsPage() {
   const router = useRouter();
   const toast = useToast();
+  const { showApiErrorPopup, ApiErrorModal } = useApiErrorPopup();
   const [tab, setTab] = useState("PRODUCT");
   const [loading, setLoading] = useState(false);
   const [items, setItems] = useState([]);
@@ -26,8 +27,8 @@ export default function ProducerApprovalsPage() {
         router.replace("/producer/login?from=/producer/approvals");
         return;
       }
-      toast.error(getErrorMessage(e, "Failed to load approvals"));
       setItems([]);
+      showApiErrorPopup(normalizeApiError(e));
     } finally {
       setLoading(false);
     }
@@ -59,14 +60,16 @@ export default function ProducerApprovalsPage() {
       closeModal();
       await load();
     } catch (e) {
-      toast.error(getErrorMessage(e, "Action failed"));
+      showApiErrorPopup(normalizeApiError(e));
     }
   };
 
   const rows = useMemo(() => items || [], [items]);
 
   return (
-    <ProducerPageShell
+    <>
+      <ApiErrorModal />
+      <ProducerPageShell
       title="Approvals"
       breadcrumbs={[{ label: "Dashboard", href: "/producer/dashboard" }, { label: "Approvals" }]}
       actions={
@@ -179,6 +182,7 @@ export default function ProducerApprovalsPage() {
       ) : null}
       {modal.open ? <div className="modal-backdrop fade show" /> : null}
     </ProducerPageShell>
+    </>
   );
 }
 

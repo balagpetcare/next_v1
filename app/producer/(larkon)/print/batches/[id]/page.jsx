@@ -8,11 +8,16 @@ import { useToast } from "@/src/hooks/useToast";
 import { Icon } from "@iconify/react";
 import ProducerPageShell from "../../../../_components/ProducerPageShell";
 import ProducerSectionCard from "../../../../_components/ProducerSectionCard";
+import PrettyRadio from "../../../../_components/PrettyRadio";
 import {
   producerPrintBatchDetail,
   producerPrintBatchAllocate,
   producerPrintAllocationRevoke,
+  producerPrintIssuanceDownload,
+  producerPrintEmailRecipientsList,
+  producerPrintEmailRecipientCreate,
   producerMe,
+  getProducerErrorMessage,
 } from "../../../../_lib/producerApi";
 import { normalizeApiError, useApiErrorPopup } from "../../../../_lib/apiErrorPopup";
 
@@ -44,6 +49,11 @@ function formatDate(iso) {
   return d.toLocaleDateString(undefined, { dateStyle: "short" }) + " " + d.toLocaleTimeString(undefined, { timeStyle: "short" });
 }
 
+function isValidEmail(s) {
+  if (typeof s !== "string" || !s.trim()) return false;
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
+}
+
 export default function ProducerPrintBatchDetailPage() {
   const params = useParams();
   const searchParams = useSearchParams();
@@ -59,6 +69,7 @@ export default function ProducerPrintBatchDetailPage() {
   const [allocStatusFilter, setAllocStatusFilter] = useState("");
   const [allocMethodFilter, setAllocMethodFilter] = useState("");
   const [revokingId, setRevokingId] = useState(null);
+  const [downloadingIssuanceId, setDownloadingIssuanceId] = useState(null);
 
   // Export form state
   const [mode, setMode] = useState("AUTO");
@@ -68,6 +79,69 @@ export default function ProducerPrintBatchDetailPage() {
   const [actionType, setActionType] = useState("PRINT");
   const [targetEmail, setTargetEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  // Saved email recipients (for Email CSV)
+  const [recipients, setRecipients] = useState([]);
+  const [selectedRecipientId, setSelectedRecipientId] = useState("");
+  const [recipientsLoading, setRecipientsLoading] = useState(false);
+  const [recipientsUnavailable, setRecipientsUnavailable] = useState(false);
+  const [addRecipientOpen, setAddRecipientOpen] = useState(false);
+  const [newRecipientEmail, setNewRecipientEmail] = useState("");
+  const [newRecipientLabel, setNewRecipientLabel] = useState("");
+  const [savingRecipient, setSavingRecipient] = useState(false);
+
+  const loadRecipients = useCallback(async () => {
+    setRecipientsLoading(true);
+    setRecipientsUnavailable(false);
+    try {
+      const list = await producerPrintEmailRecipientsList();
+      setRecipients(Array.isArray(list) ? list : []);
+    } catch (e) {
+      setRecipients([]);
+      setRecipientsUnavailable(true);
+      const message = getProducerErrorMessage(e);
+      toast.error(message || "Could not load recipients. Download CSV still works.");
+    } finally {
+      setRecipientsLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    if (activeTab === "export") loadRecipients();
+  }, [activeTab, loadRecipients]);
+
+  const handleSelectRecipient = (e) => {
+    const val = e.target.value;
+    setSelectedRecipientId(val);
+    if (val) {
+      const r = recipients.find((x) => String(x.id) === val);
+      if (r) setTargetEmail(r.email || "");
+    }
+  };
+
+  const handleAddRecipientSubmit = async (e) => {
+    e.preventDefault();
+    const email = newRecipientEmail?.trim();
+    if (!email) {
+      toast.error("Email is required.");
+      return;
+    }
+    setSavingRecipient(true);
+    try {
+      const created = await producerPrintEmailRecipientCreate({ email, label: newRecipientLabel?.trim() || undefined });
+      await loadRecipients();
+      setSelectedRecipientId(String(created?.id ?? ""));
+      setTargetEmail(created?.email ?? email);
+      setAddRecipientOpen(false);
+      setNewRecipientEmail("");
+      setNewRecipientLabel("");
+      toast.success("Recipient saved.");
+    } catch (err) {
+      showApiErrorPopup(normalizeApiError(err));
+    } finally {
+      setSavingRecipient(false);
+    }
+  };
 
   const load = useCallback(async () => {
     if (!id) return;
@@ -125,9 +199,16 @@ export default function ProducerPrintBatchDetailPage() {
     if (!id) return;
 
     const isExport = actionType === "DOWNLOAD_EXPORT" || actionType === "EMAIL_EXPORT";
-    if (actionType === "EMAIL_EXPORT" && !targetEmail?.trim()) {
-      toast.error("Email address is required for email export.");
-      return;
+    if (actionType === "EMAIL_EXPORT") {
+      const email = targetEmail?.trim();
+      if (!email) {
+        toast.error("Email address is required for email export.");
+        return;
+      }
+      if (!isValidEmail(email)) {
+        toast.error("Please enter a valid email address.");
+        return;
+      }
     }
     if (mode === "AUTO") {
       const q = Math.max(1, parseInt(quantity, 10) || 1);
@@ -168,9 +249,15 @@ export default function ProducerPrintBatchDetailPage() {
       fileType: "CSV",
       targetEmail: action === "EMAIL_EXPORT" ? email : undefined,
     };
-    if (action === "EMAIL_EXPORT" && !email?.trim()) {
-      toast.error("Enter an email address first.");
-      return;
+    if (action === "EMAIL_EXPORT") {
+      if (!email?.trim()) {
+        toast.error("Enter an email address first.");
+        return;
+      }
+      if (!isValidEmail(email)) {
+        toast.error("Please enter a valid email address.");
+        return;
+      }
     }
     runAllocate(payload);
   };
@@ -190,6 +277,21 @@ export default function ProducerPrintBatchDetailPage() {
       }
     },
     [id, load, showApiErrorPopup, toast]
+  );
+
+  const handleDownloadSerials = useCallback(
+    async (issuanceId) => {
+      setDownloadingIssuanceId(issuanceId);
+      try {
+        await producerPrintIssuanceDownload(issuanceId);
+        toast.success("Download started.");
+      } catch (e) {
+        showApiErrorPopup(normalizeApiError(e));
+      } finally {
+        setDownloadingIssuanceId(null);
+      }
+    },
+    [showApiErrorPopup, toast]
   );
 
   const batch = detail?.batch;
@@ -254,35 +356,39 @@ export default function ProducerPrintBatchDetailPage() {
           </ProducerSectionCard>
         ) : (
           <>
-            <ul className="nav nav-tabs mb-3">
-              <li className="nav-item">
-                <button
-                  type="button"
-                  className={`nav-link ${activeTab === "overview" ? "active" : ""}`}
-                  onClick={() => setActiveTab("overview")}
-                >
-                  Overview
-                </button>
-              </li>
-              <li className="nav-item">
-                <button
-                  type="button"
-                  className={`nav-link ${activeTab === "allocations" ? "active" : ""}`}
-                  onClick={() => setActiveTab("allocations")}
-                >
-                  Allocations
-                </button>
-              </li>
-              <li className="nav-item">
-                <button
-                  type="button"
-                  className={`nav-link ${activeTab === "export" ? "active" : ""}`}
-                  onClick={() => setActiveTab("export")}
-                >
-                  Export / Email
-                </button>
-              </li>
-            </ul>
+            <div className="mb-3">
+              <h6 className="mb-1 fw-semibold">Batch details</h6>
+              <p className="text-muted small mb-2">Overview, issuance history, and export options.</p>
+              <ul className="nav nav-pills gap-2 mb-0">
+                <li className="nav-item">
+                  <button
+                    type="button"
+                    className={`nav-link radius-12 ${activeTab === "overview" ? "active bg-primary" : ""}`}
+                    onClick={() => setActiveTab("overview")}
+                  >
+                    Overview
+                  </button>
+                </li>
+                <li className="nav-item">
+                  <button
+                    type="button"
+                    className={`nav-link radius-12 ${activeTab === "allocations" ? "active bg-primary" : ""}`}
+                    onClick={() => setActiveTab("allocations")}
+                  >
+                    Allocations
+                  </button>
+                </li>
+                <li className="nav-item">
+                  <button
+                    type="button"
+                    className={`nav-link radius-12 ${activeTab === "export" ? "active bg-primary" : ""}`}
+                    onClick={() => setActiveTab("export")}
+                  >
+                    Export / Email
+                  </button>
+                </li>
+              </ul>
+            </div>
 
             {activeTab === "overview" && (
               <ProducerSectionCard title="Overview" className="mb-4">
@@ -379,7 +485,7 @@ export default function ProducerPrintBatchDetailPage() {
                           <th>Qty</th>
                           <th>Email</th>
                           <th>Date</th>
-                          {canShowRevoke ? <th className="text-end">Action</th> : null}
+                          <th className="text-end">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -399,26 +505,41 @@ export default function ProducerPrintBatchDetailPage() {
                             <td>{log.quantity}</td>
                             <td>{log.targetEmail ?? "—"}</td>
                             <td>{formatDate(log.createdAt)}</td>
-                            {canShowRevoke ? (
-                              <td className="text-end">
-                                {log.status === "ISSUED" ? (
+                            <td className="text-end">
+                              {log.status === "ISSUED" ? (
+                                <div className="d-flex flex-wrap gap-1 justify-content-end">
                                   <button
                                     type="button"
-                                    className="btn btn-outline-danger btn-sm radius-12"
-                                    disabled={revokingId !== null}
-                                    onClick={() => handleRevoke(log.id, log.startSerial, log.endSerial)}
+                                    className="btn btn-outline-primary btn-sm radius-12"
+                                    disabled={downloadingIssuanceId !== null}
+                                    onClick={() => handleDownloadSerials(log.id)}
+                                    title="Download serials CSV for this issuance"
                                   >
-                                    {revokingId === log.id ? (
+                                    {downloadingIssuanceId === log.id ? (
                                       <span className="spinner-border spinner-border-sm" aria-hidden />
                                     ) : (
-                                      "Revoke"
+                                      "Download Serials"
                                     )}
                                   </button>
-                                ) : (
-                                  "—"
-                                )}
-                              </td>
-                            ) : null}
+                                  {canShowRevoke ? (
+                                    <button
+                                      type="button"
+                                      className="btn btn-outline-danger btn-sm radius-12"
+                                      disabled={revokingId !== null}
+                                      onClick={() => handleRevoke(log.id, log.startSerial, log.endSerial)}
+                                    >
+                                      {revokingId === log.id ? (
+                                        <span className="spinner-border spinner-border-sm" aria-hidden />
+                                      ) : (
+                                        "Revoke"
+                                      )}
+                                    </button>
+                                  ) : null}
+                                </div>
+                              ) : (
+                                "—"
+                              )}
+                            </td>
                           </tr>
                         ))}
                       </tbody>
@@ -470,31 +591,15 @@ export default function ProducerPrintBatchDetailPage() {
                   </div>
                 )}
                 <form onSubmit={handleAllocate}>
-                  <div className="mb-3">
-                    <label className="form-label">Mode</label>
-                    <div className="d-flex gap-3">
-                      <label className="form-check">
-                        <input
-                          type="radio"
-                          name="mode"
-                          className="form-check-input"
-                          checked={mode === "AUTO"}
-                          onChange={() => setMode("AUTO")}
-                        />
-                        <span className="form-check-label">Auto (quantity)</span>
-                      </label>
-                      <label className="form-check">
-                        <input
-                          type="radio"
-                          name="mode"
-                          className="form-check-input"
-                          checked={mode === "RANGE"}
-                          onChange={() => setMode("RANGE")}
-                        />
-                        <span className="form-check-label">Range (start–end)</span>
-                      </label>
-                    </div>
-                  </div>
+                  <div className="row g-4">
+                    <div className="col-12 col-lg-6">
+                      <div className="mb-3">
+                        <label className="form-label">Mode</label>
+                        <div className="d-flex gap-3 flex-wrap">
+                          <PrettyRadio name="mode" value="AUTO" checked={mode === "AUTO"} onChange={() => setMode("AUTO")} label="Auto (quantity)" />
+                          <PrettyRadio name="mode" value="RANGE" checked={mode === "RANGE"} onChange={() => setMode("RANGE")} label="Range (start–end)" />
+                        </div>
+                      </div>
                   {mode === "AUTO" ? (
                     <div className="mb-3">
                       <label className="form-label">Quantity</label>
@@ -543,11 +648,13 @@ export default function ProducerPrintBatchDetailPage() {
                       </div>
                     </div>
                   )}
+                    </div>
+                    <div className="col-12 col-lg-6">
                   <div className="mb-3">
                     <label className="form-label">Action</label>
                     <select
                       className="form-select form-select-sm radius-12"
-                      style={{ maxWidth: "220px" }}
+                      style={{ maxWidth: "100%" }}
                       value={actionType}
                       onChange={(e) => setActionType(e.target.value)}
                     >
@@ -560,21 +667,68 @@ export default function ProducerPrintBatchDetailPage() {
                   </div>
                   {actionType === "EMAIL_EXPORT" && (
                     <div className="mb-3">
-                      <label className="form-label">Email address</label>
+                      <label className="form-label">Recipient</label>
+                      {recipientsUnavailable && (
+                        <div className="alert alert-warning py-2 px-3 radius-12 small mb-2 d-flex flex-wrap align-items-center gap-2" role="alert">
+                          <span>Recipients unavailable. Use Download CSV or try again later.</span>
+                          <button
+                            type="button"
+                            className="btn btn-outline-secondary btn-sm"
+                            onClick={() => loadRecipients()}
+                            disabled={recipientsLoading}
+                          >
+                            {recipientsLoading ? "Loading…" : "Retry"}
+                          </button>
+                        </div>
+                      )}
+                      <div className="d-flex flex-wrap gap-2 align-items-center">
+                        <select
+                          className="form-select form-select-sm radius-12"
+                          style={{ maxWidth: "280px" }}
+                          value={selectedRecipientId}
+                          onChange={handleSelectRecipient}
+                          disabled={recipientsLoading || recipientsUnavailable}
+                        >
+                          <option value="">No saved recipients yet</option>
+                          {recipients.map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.label ? `${r.label} — ${r.email}` : r.email}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn btn-outline-secondary btn-sm radius-12"
+                          onClick={() => setAddRecipientOpen(true)}
+                          disabled={recipientsUnavailable}
+                        >
+                          + Add new recipient
+                        </button>
+                      </div>
                       <input
                         type="email"
-                        className="form-control form-control-sm radius-12"
+                        className="form-control form-control-sm radius-12 mt-2"
                         style={{ maxWidth: "320px" }}
                         placeholder="recipient@example.com"
                         value={targetEmail}
-                        onChange={(e) => setTargetEmail(e.target.value)}
+                        onChange={(e) => {
+                          setTargetEmail(e.target.value);
+                          setSelectedRecipientId("");
+                        }}
                       />
+                      {targetEmail?.trim() && !recipients.some((r) => r.email === targetEmail.trim()) && !recipientsUnavailable && (
+                        <p className="small text-muted mt-1 mb-0">Save this recipient for next time using &quot;+ Add new recipient&quot;.</p>
+                      )}
                     </div>
                   )}
                   <button
                     type="submit"
                     className="btn btn-primary btn-sm radius-12"
-                    disabled={submitting || remainingCount <= 0}
+                    disabled={
+                      submitting ||
+                      remainingCount <= 0 ||
+                      (actionType === "EMAIL_EXPORT" && (!targetEmail?.trim() || !isValidEmail(targetEmail)))
+                    }
                   >
                     {submitting ? (
                       <>
@@ -585,12 +739,67 @@ export default function ProducerPrintBatchDetailPage() {
                       "Allocate"
                     )}
                   </button>
+                    </div>
+                  </div>
                 </form>
               </ProducerSectionCard>
             )}
           </>
         )}
       </ProducerPageShell>
+
+      {addRecipientOpen && (
+        <div className="modal d-block" style={{ backgroundColor: "rgba(0,0,0,0.5)" }} aria-modal="true">
+          <div className="modal-dialog modal-dialog-centered">
+            <div className="modal-content radius-12">
+              <div className="modal-header">
+                <h5 className="modal-title">Add email recipient</h5>
+                <button type="button" className="btn-close" aria-label="Close" onClick={() => setAddRecipientOpen(false)} />
+              </div>
+              <form onSubmit={handleAddRecipientSubmit}>
+                <div className="modal-body">
+                  <div className="mb-3">
+                    <label className="form-label">Email (required)</label>
+                    <input
+                      type="email"
+                      className="form-control radius-12"
+                      placeholder="recipient@example.com"
+                      value={newRecipientEmail}
+                      onChange={(e) => setNewRecipientEmail(e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div className="mb-3">
+                    <label className="form-label">Label (optional)</label>
+                    <input
+                      type="text"
+                      className="form-control radius-12"
+                      placeholder="e.g. Factory A, Dhaka Print House"
+                      value={newRecipientLabel}
+                      onChange={(e) => setNewRecipientLabel(e.target.value)}
+                    />
+                  </div>
+                </div>
+                <div className="modal-footer">
+                  <button type="button" className="btn btn-outline-secondary radius-12" onClick={() => setAddRecipientOpen(false)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="btn btn-primary radius-12" disabled={savingRecipient || !newRecipientEmail?.trim()}>
+                    {savingRecipient ? (
+                      <>
+                        <span className="spinner-border spinner-border-sm me-1" aria-hidden />
+                        Saving…
+                      </>
+                    ) : (
+                      "Save"
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
     </>
   );
 }

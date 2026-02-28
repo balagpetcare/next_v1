@@ -3,10 +3,14 @@
 import { useState } from "react";
 import { useParams } from "next/navigation";
 import { apiPost } from "@/lib/api";
+import { useToast } from "@/src/hooks/useToast";
+import { normalizeApiError, useApiErrorPopup } from "../../../_lib/apiErrorPopup";
 
 export default function ProducerGenerateCodesPage() {
   const params = useParams();
   const id = params?.id;
+  const toast = useToast();
+  const { showApiErrorPopup, ApiErrorModal } = useApiErrorPopup();
   const [quantity, setQuantity] = useState("100");
   const [length, setLength] = useState("12");
   const [prefix, setPrefix] = useState("");
@@ -49,7 +53,10 @@ export default function ProducerGenerateCodesPage() {
 
   const generate = async () => {
     const err = validate();
-    if (err) return alert(err);
+    if (err) {
+      toast.error(err);
+      return;
+    }
     setLoading(true);
     try {
       const res = await apiPost(`/api/v1/producer/batches/${id}/codes/generate`, {
@@ -60,15 +67,17 @@ export default function ProducerGenerateCodesPage() {
       });
       setCodes(res?.data?.codes || []);
     } catch (e) {
-      alert(e?.message || "Failed to generate codes");
+      showApiErrorPopup(normalizeApiError(e));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="p-4">
-      <h2 className="h4 mb-3">Generate Codes</h2>
+    <>
+      <ApiErrorModal />
+      <div className="p-4">
+        <h2 className="h4 mb-3">Generate Codes</h2>
       <div className="card mb-3">
         <div className="card-body">
           <div className="d-flex gap-2 flex-wrap">
@@ -120,6 +129,7 @@ export default function ProducerGenerateCodesPage() {
           </pre>
         </div>
       </div>
-    </div>
+      </div>
+    </>
   );
 }

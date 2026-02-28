@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { apiGet, apiPost } from "@/lib/api";
+import { useToast } from "@/src/hooks/useToast";
+import { normalizeApiError, useApiErrorPopup } from "../_lib/apiErrorPopup";
 
 const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
 const DOC_TYPES = [
@@ -14,22 +16,22 @@ const DOC_TYPES = [
 ];
 
 export default function ProducerKycPage() {
+  const toast = useToast();
+  const { showApiErrorPopup, ApiErrorModal } = useApiErrorPopup();
   const [statusData, setStatusData] = useState(null);
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [uploadDocType, setUploadDocType] = useState("TRADE_LICENSE");
   const [uploadFile, setUploadFile] = useState(null);
-  const [error, setError] = useState(null);
 
   const loadStatus = async () => {
     try {
-      setError(null);
       const res = await apiGet("/api/v1/producer/kyc/status");
       setStatusData(res?.data ?? null);
     } catch (e) {
-      setError(e?.message || "Failed to load status");
       setStatusData(null);
+      showApiErrorPopup(normalizeApiError(e));
     }
   };
 
@@ -40,11 +42,10 @@ export default function ProducerKycPage() {
   const handleUpload = async (e) => {
     e.preventDefault();
     if (!uploadFile) {
-      alert("Please select a file");
+      toast.error("Please select a file");
       return;
     }
     setUploading(true);
-    setError(null);
     try {
       const formData = new FormData();
       formData.append("file", uploadFile);
@@ -60,7 +61,7 @@ export default function ProducerKycPage() {
       setUploadFile(null);
       await loadStatus();
     } catch (e) {
-      setError(e?.message || "Upload failed");
+      showApiErrorPopup(normalizeApiError(e));
     } finally {
       setUploading(false);
     }
@@ -68,13 +69,12 @@ export default function ProducerKycPage() {
 
   const handleSubmit = async () => {
     setSubmitLoading(true);
-    setError(null);
     try {
       const res = await apiPost("/api/v1/producer/kyc/submit", {});
       setStatusData(res?.data ?? statusData);
       await loadStatus();
     } catch (e) {
-      setError(e?.message || "Submit failed");
+      showApiErrorPopup(normalizeApiError(e));
     } finally {
       setSubmitLoading(false);
     }
@@ -86,13 +86,10 @@ export default function ProducerKycPage() {
   const documents = statusData?.documents || [];
 
   return (
-    <div className="p-4">
-      <h2 className="h4 mb-3">Producer KYC</h2>
-      {error && (
-        <div className="alert alert-danger mb-3">
-          {error}
-        </div>
-      )}
+    <>
+      <ApiErrorModal />
+      <div className="p-4">
+        <h2 className="h4 mb-3">Producer KYC</h2>
       {statusData && (
         <div className={`alert mb-3 ${status === "APPROVED" ? "alert-success" : status === "REJECTED" ? "alert-warning" : "alert-info"}`}>
           <strong>Status:</strong> {status}
@@ -188,6 +185,7 @@ export default function ProducerKycPage() {
       {status === "APPROVED" && (
         <p className="text-success">Your producer KYC is verified. You can use the dashboard and product features.</p>
       )}
-    </div>
+      </div>
+    </>
   );
 }
