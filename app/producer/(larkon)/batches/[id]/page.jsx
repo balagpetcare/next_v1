@@ -8,6 +8,7 @@ import { useToast } from "@/src/hooks/useToast";
 import { normalizeApiError, useApiErrorPopup } from "../../../_lib/apiErrorPopup";
 import { producerBatchMarkPrinted } from "../../../_lib/producerApi";
 import { Modal, Button } from "react-bootstrap";
+import EnforcementHoldBanner from "../../../_components/EnforcementHoldBanner";
 
 export default function ProducerBatchDetailPage() {
   const params = useParams();
@@ -135,6 +136,7 @@ export default function ProducerBatchDetailPage() {
       <ApiErrorModal />
       <div className="p-4">
         <h2 className="h4 mb-3">Batch Detail</h2>
+        <EnforcementHoldBanner batchId={id} />
       {loading ? (
         <p className="text-secondary">Loading…</p>
       ) : !batch ? (

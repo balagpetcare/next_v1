@@ -73,14 +73,15 @@ export default function ProducerNotificationsPage() {
   const highlightId = rawHighlight && Number.isFinite(Number(rawHighlight)) ? Number(rawHighlight) : null;
   const openDrawerId = searchParams.get("open") && Number.isFinite(Number(searchParams.get("open"))) ? Number(searchParams.get("open")) : null;
 
+  const [filter, setFilter] = useState("all");
+  const [items, setItems] = useState([]);
+
   const { fetchCount, markRead, readAll } = useNotifications({
     enabled: true,
     soundEnabled: true,
     panel: "producer",
     filter: filter === "actionRequired" ? "actionRequired" : null,
   });
-  const [filter, setFilter] = useState("all");
-  const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [analytics, setAnalytics] = useState(null);
   const [expandedGroups, setExpandedGroups] = useState(new Set());

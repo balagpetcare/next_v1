@@ -16,8 +16,25 @@ export default function AdminPermissionsPage() {
     setLoading(true)
     setError('')
     try {
-      const res = await apiGet<{ data?: PermissionItem[] }>('/api/v1/admin/permissions')
-      setItems(res?.data ?? [])
+      const res = await apiGet<any>('/api/v1/admin/permissions')
+      const directList = Array.isArray(res?.data)
+        ? res.data
+        : Array.isArray(res?.data?.items)
+          ? res.data.items
+          : Array.isArray(res?.items)
+            ? res.items
+            : null
+
+      if (directList) {
+        setItems(directList)
+      } else if (Array.isArray(res?.data?.groups)) {
+        const flattened = res.data.groups.flatMap((g: any) =>
+          Array.isArray(g?.permissions) ? g.permissions : []
+        )
+        setItems(flattened)
+      } else {
+        setItems([])
+      }
     } catch (e) {
       setError((e as Error)?.message ?? 'Failed')
     } finally {

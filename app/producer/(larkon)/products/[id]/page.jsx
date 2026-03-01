@@ -5,22 +5,27 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Icon } from "@iconify/react";
 import { useToast } from "@/src/hooks/useToast";
-import { producerProductCreateBatch, producerProductGet } from "../../../_lib/producerApi";
+import { producerProductCreateBatch, producerProductGet, producerProductResubmit } from "../../../_lib/producerApi";
 import { normalizeApiError, useApiErrorPopup } from "../../../_lib/apiErrorPopup";
 import ProducerPageShell from "../../../_components/ProducerPageShell";
 import ProducerSectionCard from "../../../_components/ProducerSectionCard";
+import EnforcementHoldBanner from "../../../_components/EnforcementHoldBanner";
 import { PROOF_TYPE_LABELS } from "../../../_components/ProducerProofUpload";
 
 function StatusBadge({ status }) {
   const s = status || "DRAFT";
   const cls =
-    s === "APPROVED" || s === "ACTIVE"
+    s === "ACTIVE"
       ? "bg-success"
-      : s === "SUBMITTED" || s === "UNDER_REVIEW"
+      : s === "APPROVED"
         ? "bg-info"
-        : s === "REJECTED"
-          ? "bg-danger"
-          : "bg-secondary";
+        : s === "SUBMITTED" || s === "UNDER_REVIEW"
+          ? "bg-warning text-dark"
+          : s === "CHANGES_REQUESTED"
+            ? "bg-warning text-dark"
+            : s === "REJECTED" || s === "DECLINED"
+              ? "bg-danger"
+              : "bg-secondary";
   return <span className={`badge ${cls}`}>{s.replace(/_/g, " ")}</span>;
 }
 
@@ -28,6 +33,7 @@ const TIMELINE_STEPS = [
   { key: "DRAFT", label: "Draft" },
   { key: "SUBMITTED", label: "Submitted" },
   { key: "UNDER_REVIEW", label: "Under review" },
+  { key: "CHANGES_REQUESTED", label: "Changes requested" },
   { key: "APPROVED", label: "Approved" },
   { key: "REJECTED", label: "Rejected" },
 ];
@@ -115,8 +121,9 @@ export default function ProducerProductDetailPage() {
       const isReached =
         step.key === status ||
         (status === "APPROVED" && step.key === "APPROVED") ||
-        (status === "ACTIVE" && (step.key === "APPROVED" || step.key === "APPROVED")) ||
+        (status === "ACTIVE" && step.key === "APPROVED") ||
         (status === "REJECTED" && step.key === "REJECTED") ||
+        (status === "CHANGES_REQUESTED" && (step.key === "CHANGES_REQUESTED" || step.key === "UNDER_REVIEW" || step.key === "SUBMITTED" || step.key === "DRAFT")) ||
         (status === "UNDER_REVIEW" && (step.key === "UNDER_REVIEW" || step.key === "SUBMITTED" || step.key === "DRAFT")) ||
         (status === "SUBMITTED" && (step.key === "SUBMITTED" || step.key === "DRAFT")) ||
         (status === "DRAFT" && step.key === "DRAFT");
@@ -135,7 +142,7 @@ export default function ProducerProductDetailPage() {
       ]}
       actions={
         <div className="d-flex gap-2 flex-wrap">
-          {(status === "DRAFT" || status === "REJECTED") && (
+          {(status === "DRAFT" || status === "REJECTED" || status === "CHANGES_REQUESTED") && (
             <Link href={`/producer/products/${id}/edit`} className="btn btn-primary btn-sm radius-12">
               <Icon icon="solar:pen-outline" className="me-1" /> Edit
             </Link>
@@ -144,6 +151,27 @@ export default function ProducerProductDetailPage() {
             <Link href={`/producer/products/new?edit=${id}`} className="btn btn-outline-primary btn-sm radius-12">
               Complete and submit
             </Link>
+          )}
+          {(status === "CHANGES_REQUESTED" || status === "REJECTED") && (
+            <button
+              type="button"
+              className="btn btn-warning btn-sm radius-12"
+              disabled={loading}
+              onClick={async () => {
+                setLoading(true);
+                try {
+                  await producerProductResubmit(id);
+                  toast.success("Product resubmitted for approval.");
+                  await load();
+                } catch (e) {
+                  showApiErrorPopup(normalizeApiError(e));
+                } finally {
+                  setLoading(false);
+                }
+              }}
+            >
+              <Icon icon="solar:refresh-outline" className="me-1" /> Resubmit
+            </button>
           )}
           <Link href="/producer/products" className="btn btn-outline-secondary btn-sm radius-12">
             <Icon icon="solar:arrow-left-outline" className="me-1" /> Back to products
@@ -170,6 +198,7 @@ export default function ProducerProductDetailPage() {
         </ProducerSectionCard>
       ) : (
         <>
+          <EnforcementHoldBanner productId={id} />
           {/* Overview header */}
           <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-4">
             <div>
@@ -182,6 +211,18 @@ export default function ProducerProductDetailPage() {
               </div>
             </div>
           </div>
+
+          {/* Changes requested / rejection feedback */}
+          {(status === "CHANGES_REQUESTED" || status === "REJECTED") && product.reviewNotes && (
+            <div className={`alert mb-4 ${status === "CHANGES_REQUESTED" ? "alert-warning" : "alert-danger"} d-flex align-items-start gap-2`}>
+              <Icon icon="solar:info-circle-outline" className="flex-shrink-0 mt-1" style={{ fontSize: "1.25rem" }} />
+              <div className="flex-grow-1">
+                <strong>{status === "CHANGES_REQUESTED" ? "Changes requested" : "Rejection reason"}</strong>
+                <p className="mb-0 mt-1 small">{product.reviewNotes}</p>
+                <p className="mb-0 mt-2 small text-muted">Edit the product above and click Resubmit when ready.</p>
+              </div>
+            </div>
+          )}
 
           {/* Status timeline */}
           <ProducerSectionCard title="Status timeline" className="mb-4">

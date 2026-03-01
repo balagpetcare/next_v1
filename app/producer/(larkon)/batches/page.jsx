@@ -19,6 +19,7 @@ import {
   producerProductsList,
   producerFactoriesList,
 } from "../../_lib/producerApi";
+import ProductPicker from "../../_components/ProductPicker";
 import { normalizeApiError, useApiErrorPopup } from "../../_lib/apiErrorPopup";
 import ProducerPageShell from "../../_components/ProducerPageShell";
 import ProducerSectionCard from "../../_components/ProducerSectionCard";
@@ -108,6 +109,7 @@ export default function ProducerBatchesPage() {
   const [generateError, setGenerateError] = useState(null);
   const [newBatchModalOpen, setNewBatchModalOpen] = useState(false);
   const [newBatchProductId, setNewBatchProductId] = useState("");
+  const [newBatchSelectedProduct, setNewBatchSelectedProduct] = useState(null);
   const [newBatchForm, setNewBatchForm] = useState({
     batchNo: "",
     mfgDate: "",
@@ -582,14 +584,6 @@ export default function ProducerBatchesPage() {
     [toast, load, drawerBatchId, refreshDrawer, showApiErrorPopup]
   );
 
-  const approvedProducts = useMemo(
-    () =>
-      (products || []).filter(
-        (p) => p.status === "APPROVED" || p.status === "ACTIVE"
-      ),
-    [products]
-  );
-
   const createNewBatch = useCallback(async () => {
     const productId = Number(newBatchProductId);
     if (!productId || !newBatchForm.batchNo || !newBatchForm.qtyPlanned) {
@@ -675,7 +669,8 @@ export default function ProducerBatchesPage() {
               <Dropdown.Item
                 onClick={() => {
                   setNewBatchModalOpen(true);
-                  setNewBatchProductId(approvedProducts[0]?.id ? String(approvedProducts[0].id) : "");
+                  setNewBatchProductId("");
+                  setNewBatchSelectedProduct(null);
                 }}
               >
                 Create from product
@@ -1624,24 +1619,21 @@ export default function ProducerBatchesPage() {
           </p>
           <div className="mb-3">
             <label className="form-label small">Product</label>
-            <select
-              className="form-select form-select-sm radius-12"
+            <ProductPicker
+              producerOrgId={org?.id}
               value={newBatchProductId}
-              onChange={(e) => setNewBatchProductId(e.target.value)}
-              aria-label="Product"
-            >
-              <option value="">Select product</option>
-              {approvedProducts.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.productName || p.sku || `#${p.id}`}
-                </option>
-              ))}
-            </select>
-            {approvedProducts.length === 0 && (
-              <p className="small text-warning mt-1 mb-0">
-                No approved products. Approve a product first.
-              </p>
-            )}
+              selectedItem={newBatchSelectedProduct}
+              onChange={(id, item) => {
+                setNewBatchProductId(id);
+                setNewBatchSelectedProduct(item ?? null);
+              }}
+              placeholder="Select product"
+              onlyApproved
+              disabled={creatingBatch}
+            />
+            <p className="small text-muted mt-1 mb-0">
+              Search by name or SKU. Only approved/active products are shown.
+            </p>
           </div>
           <div className="mb-3">
             <label className="form-label small">Batch No</label>

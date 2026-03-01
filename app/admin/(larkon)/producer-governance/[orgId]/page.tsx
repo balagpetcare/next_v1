@@ -21,7 +21,7 @@ import DataTable from '@/src/bpa/admin/components/DataTable'
 import EmptyState from '@/src/bpa/admin/components/EmptyState'
 import { getGovernance, postGovernance, putGovernance } from '@/src/bpa/admin/lib/governanceApi'
 
-type TabKey = 'overview' | 'staff' | 'approvals' | 'limits' | 'audit' | 'printjobs'
+type TabKey = 'overview' | 'staff' | 'approvals' | 'limits' | 'audit' | 'incidents' | 'printjobs'
 
 type DetailData = {
   orgId: number
@@ -60,6 +60,7 @@ type MetricsData = {
   usage?: { key: string; limit: number; used: number }[]
 }
 type PrintJobRow = { id: number; action: string; entityType: string; entityId?: string; actorType: string; actorId: number; createdAt: string }
+type IncidentRow = { id: number; entityType: string; entityId: number; incidentType: string; severity: string; actionTaken: string; reason: string; ticketId?: string | null; resolvedAt?: string | null; createdAt: string }
 
 export default function ProducerGovernanceDetailPage() {
   const params = useParams<{ orgId: string }>()
@@ -71,6 +72,7 @@ export default function ProducerGovernanceDetailPage() {
   const [audit, setAudit] = useState<AuditRow[]>([])
   const [metrics, setMetrics] = useState<MetricsData | null>(null)
   const [printJobs, setPrintJobs] = useState<PrintJobRow[]>([])
+  const [incidents, setIncidents] = useState<IncidentRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [actionError, setActionError] = useState('')
@@ -78,7 +80,26 @@ export default function ProducerGovernanceDetailPage() {
   const [flagsEdit, setFlagsEdit] = useState<{ key: string; enabled: boolean }[]>([])
   const [quotasEdit, setQuotasEdit] = useState<{ key: string; limit: number; used: number; resetPeriod: string }[]>([])
   const [auditFilters, setAuditFilters] = useState({ fromDate: '', toDate: '', entityType: '', actionKey: '' })
+  const [hasIncidentsPermission, setHasIncidentsPermission] = useState(false)
   const showPrintJobsTab = typeof process !== 'undefined' && process.env.NEXT_PUBLIC_PRODUCER_GOVERNANCE_PRINT_JOBS_TAB !== 'false'
+
+  useEffect(() => {
+    let cancelled = false
+    fetch('/api/v1/admin/auth/me', { method: 'GET', credentials: 'include', headers: { Accept: 'application/json' } })
+      .then((r) => r.ok ? r.json() : null)
+      .then((body) => {
+        if (cancelled || !body?.permissions) return
+        const perms = Array.isArray(body.permissions) ? body.permissions : []
+        setHasIncidentsPermission(perms.includes('admin.governance.incidents.manage'))
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  // If user lacks incidents permission and had that tab selected, switch to overview
+  useEffect(() => {
+    if (!hasIncidentsPermission && tab === 'incidents') setTab('overview')
+  }, [hasIncidentsPermission, tab])
 
   const loadDetail = useCallback(async () => {
     if (!Number.isFinite(orgId) || orgId <= 0) {
@@ -153,6 +174,16 @@ export default function ProducerGovernanceDetailPage() {
     }
   }, [orgId])
 
+  const loadIncidents = useCallback(async () => {
+    if (!Number.isFinite(orgId) || orgId <= 0) return
+    try {
+      const res = await getGovernance<{ data: IncidentRow[]; total: number }>(`/admin/incidents?producerOrgId=${orgId}&limit=50`)
+      setIncidents(Array.isArray(res.data?.data) ? res.data.data : [])
+    } catch {
+      setIncidents([])
+    }
+  }, [orgId])
+
   useEffect(() => {
     loadDetail()
   }, [loadDetail])
@@ -161,8 +192,9 @@ export default function ProducerGovernanceDetailPage() {
     if (tab === 'staff') loadStaff()
     if (tab === 'audit') loadAudit()
     if (tab === 'overview') loadMetrics()
+    if (tab === 'incidents') loadIncidents()
     if (tab === 'printjobs' && showPrintJobsTab) loadPrintJobs()
-  }, [tab, loadStaff, loadAudit, loadMetrics, loadPrintJobs, showPrintJobsTab])
+  }, [tab, loadStaff, loadAudit, loadMetrics, loadIncidents, loadPrintJobs, showPrintJobsTab])
 
   const handleSuspend = async () => {
     if (!detail || !confirm('Suspend this producer organization? They will not be able to perform producer actions.')) return
@@ -238,6 +270,7 @@ export default function ProducerGovernanceDetailPage() {
     { key: 'approvals', label: 'Approvals' },
     { key: 'limits', label: 'Limits & Policies' },
     { key: 'audit', label: 'Audit Timeline' },
+    ...(hasIncidentsPermission ? [{ key: 'incidents' as TabKey, label: 'Incident History' }] : []),
     ...(showPrintJobsTab ? [{ key: 'printjobs' as TabKey, label: 'Print jobs' }] : []),
   ]
 
@@ -435,6 +468,32 @@ export default function ProducerGovernanceDetailPage() {
             </SectionCard>
           </div>
         </div>
+      )}
+
+      {tab === 'incidents' && (
+        <SectionCard
+          title="Incident History"
+          right={<Link href={`/admin/enforcement?producerOrgId=${orgId}`} className="btn btn-sm btn-primary">View all in Enforcement</Link>}
+        >
+          <p className="text-secondary small mb-2">
+            Incidents for this producer (hide/unhide, freeze/unfreeze, suspend/unsuspend). Open Enforcement to filter and resolve.
+          </p>
+          <DataTable<IncidentRow>
+            keyField="id"
+            rows={incidents}
+            columns={[
+              { key: 'id', label: 'ID', render: (r) => <Link href={`/admin/enforcement?producerOrgId=${orgId}`}>{r.id}</Link> },
+              { key: 'entityType', label: 'Entity', render: (r) => `${r.entityType} #${r.entityId}` },
+              { key: 'incidentType', label: 'Type', render: (r) => r.incidentType },
+              { key: 'severity', label: 'Severity', render: (r) => <span className={`badge ${r.severity === 'CRITICAL' ? 'bg-danger' : r.severity === 'HIGH' ? 'bg-warning text-dark' : 'bg-secondary'}`}>{r.severity}</span> },
+              { key: 'actionTaken', label: 'Action', render: (r) => r.actionTaken },
+              { key: 'reason', label: 'Reason', render: (r) => (r.reason?.slice(0, 40) ?? '') + (r.reason && r.reason.length > 40 ? '…' : '') },
+              { key: 'resolved', label: 'Resolved', render: (r) => r.resolvedAt ? 'Yes' : 'No' },
+              { key: 'createdAt', label: 'Created', render: (r) => r.createdAt ? new Date(r.createdAt).toLocaleString() : '—' },
+            ]}
+            emptyState={<EmptyState title="No incidents" description="Incidents from enforcement actions will appear here." />}
+          />
+        </SectionCard>
       )}
 
       {tab === 'audit' && (

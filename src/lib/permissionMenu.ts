@@ -443,6 +443,27 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
     },
 
     // ============================================
+    // SECTION 2.5: Producer Governance (Phase 2)
+    // ============================================
+    {
+      id: "admin.section.producerGovernance",
+      label: "Producer Governance",
+      icon: "solar:clipboard-list-outline",
+      required: [],
+      children: [
+        { id: "admin.producerGovernance.overview", label: "Producer Overview", href: "/admin/producer-overview", required: ["admin.governance.analytics.read"] },
+        { id: "admin.producerGovernance.list", label: "Producers", href: "/admin/producer-governance", required: [] },
+        { id: "admin.producerGovernance.approvals", label: "Approvals", href: "/admin/approvals", required: [] },
+        { id: "admin.producerGovernance.products", label: "Products", href: "/admin/producer-governance/products", required: ["admin.approvals.manage"] },
+        { id: "admin.producerGovernance.batchControl", label: "Batch Control", href: "/admin/batch-control", required: ["admin.governance.batches.review"] },
+        { id: "admin.producerGovernance.analytics", label: "Governance analytics", href: "/admin/governance-analytics", required: ["admin.governance.analytics.read"] },
+        { id: "admin.producerGovernance.enforcement", label: "Moderation / enforcement", href: "/admin/enforcement", required: ["admin.governance.incidents.manage"] },
+        { id: "admin.producerGovernance.enforcementCases", label: "Trust & Safety cases", href: "/admin/enforcement/cases", required: ["admin.governance.enforcement.cases"] },
+        { id: "admin.producerGovernance.codeLookup", label: "Code Lookup", href: "/admin/code-lookup", required: ["admin.governance.code.search"] },
+      ],
+    },
+
+    // ============================================
     // SECTION 3: Users & Access
     // ============================================
     {
@@ -755,6 +776,7 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
     },
     { id: "producer.approvals", label: "Approvals", href: "/producer/approvals", icon: "solar:checklist-minimalistic-outline", required: ["producer.org.read"] },
     { id: "producer.staff", label: "Staff", href: "/producer/staff", icon: "solar:users-group-two-rounded-bold-duotone", required: ["producer.org.read"] },
+    { id: "producer.support", label: "Support", href: "/producer/support/tickets", icon: "solar:chat-round-dots-outline", required: [] },
   ],
   staff: [
     { id: "staff.dashboard", label: "Branches", href: "/staff/branch", icon: "solar:home-smile-outline", required: [] },

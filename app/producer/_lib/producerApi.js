@@ -121,6 +121,19 @@ export function clearProducerMeCache() {
   _producerMeCache = null;
 }
 
+/**
+ * GET /api/v1/producer/enforcement-holds. Returns { orgHold, productHold, batchHold } (each null or { caseNo }).
+ * Optional productId/batchId to check holds for a specific product or batch.
+ */
+export async function getEnforcementHolds({ productId, batchId } = {}) {
+  const params = new URLSearchParams();
+  if (productId != null) params.set("productId", String(productId));
+  if (batchId != null) params.set("batchId", String(batchId));
+  const qs = params.toString();
+  const path = qs ? `/api/v1/producer/enforcement-holds?${qs}` : "/api/v1/producer/enforcement-holds";
+  return unwrap(await apiFetch(path));
+}
+
 export async function producerKycStatus() {
   return unwrap(await apiFetch("/api/v1/producer/kyc/status"));
 }
@@ -149,6 +162,34 @@ export async function producerKycSubmit() {
 }
 
 /**
+ * Producer dashboard analytics. Requires producer.analytics.read or producer.verification.read.
+ * dateFrom/dateTo: YYYY-MM-DD, max 180 days span.
+ */
+
+export async function producerDashboardSummary(dateFrom, dateTo) {
+  const q = new URLSearchParams({ dateFrom, dateTo });
+  return unwrap(await apiFetch(`/api/v1/producer/dashboard/summary?${q.toString()}`));
+}
+
+export async function producerDashboardTrends(dateFrom, dateTo) {
+  const q = new URLSearchParams({ dateFrom, dateTo });
+  const res = await apiFetch(`/api/v1/producer/dashboard/trends?${q.toString()}`);
+  return unwrap(res) ?? [];
+}
+
+export async function producerDashboardTopProducts(dateFrom, dateTo, limit = 10) {
+  const q = new URLSearchParams({ dateFrom, dateTo });
+  if (limit != null && limit !== 10) q.set("limit", String(Number(limit) || 10));
+  const res = await apiFetch(`/api/v1/producer/dashboard/top-products?${q.toString()}`);
+  return unwrap(res) ?? [];
+}
+
+export async function producerDashboardAlerts() {
+  const res = await apiFetch("/api/v1/producer/dashboard/alerts");
+  return res?.items ?? [];
+}
+
+/**
  * List producer products. Backend currently returns all for org (no query params).
  * Pass opts for future backend support (search, status, page, limit, sort, etc.).
  */
@@ -164,6 +205,21 @@ export async function producerProductsList(opts = {}) {
   if (opts.factoryId != null && opts.factoryId !== "") q.set("factoryId", opts.factoryId);
   const query = q.toString();
   const url = query ? `/api/v1/producer/products?${query}` : "/api/v1/producer/products";
+  return unwrap(await apiFetch(url));
+}
+
+/**
+ * GET /api/v1/producer/products/pick — search + pagination for product picker (batch creation).
+ * Returns { items: [{ id, name, sku, isActive, approvalStatus }], page, limit, total }.
+ */
+export async function producerProductsPick(opts = {}) {
+  const params = new URLSearchParams();
+  if (opts.q != null && String(opts.q).trim()) params.set("q", String(opts.q).trim());
+  if (opts.page != null) params.set("page", String(Number(opts.page) || 1));
+  if (opts.limit != null) params.set("limit", String(Math.min(50, Math.max(1, Number(opts.limit) || 20))));
+  if (opts.onlyApproved === false) params.set("onlyApproved", "false");
+  if (opts.onlyActive === true) params.set("onlyActive", "true");
+  const url = `/api/v1/producer/products/pick?${params.toString()}`;
   return unwrap(await apiFetch(url));
 }
 
@@ -203,6 +259,19 @@ export async function producerProductSubmit(id, body = {}) {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+    })
+  );
+}
+
+/**
+ * Resubmit product after changes requested or rejection (status CHANGES_REQUESTED or REJECTED).
+ */
+export async function producerProductResubmit(id) {
+  return unwrap(
+    await apiFetch(`/api/v1/producer/products/${id}/resubmit`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
     })
   );
 }
@@ -629,6 +698,64 @@ export async function producerAuditLogsList(opts = {}) {
   const query = q.toString();
   const url = query ? `/api/v1/producer/audit-logs?${query}` : "/api/v1/producer/audit-logs";
   return unwrap(await apiFetch(url));
+}
+
+// Support tickets
+export async function producerTicketsList(params = {}) {
+  const q = new URLSearchParams();
+  if (params.status != null && params.status !== "") q.set("status", String(params.status));
+  if (params.priority != null && params.priority !== "") q.set("priority", String(params.priority));
+  if (params.category != null && params.category !== "") q.set("category", String(params.category));
+  if (params.page != null) q.set("page", String(Number(params.page) || 1));
+  if (params.limit != null) q.set("limit", String(Number(params.limit) || 20));
+  if (params.pageSize != null) q.set("pageSize", String(Number(params.pageSize) || 20));
+  const query = q.toString();
+  const url = query ? `/api/v1/producer/tickets?${query}` : "/api/v1/producer/tickets";
+  return unwrap(await apiFetch(url));
+}
+
+export async function producerTicketGet(id) {
+  return unwrap(await apiFetch(`/api/v1/producer/tickets/${id}`));
+}
+
+export async function producerTicketCreate(body) {
+  return unwrap(
+    await apiFetch("/api/v1/producer/tickets", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    })
+  );
+}
+
+export async function producerTicketReply(id, body) {
+  return unwrap(
+    await apiFetch(`/api/v1/producer/tickets/${id}/messages`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    })
+  );
+}
+
+export async function producerTicketClose(id) {
+  return unwrap(
+    await apiFetch(`/api/v1/producer/tickets/${id}/close`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    })
+  );
+}
+
+export async function producerTicketReopen(id) {
+  return unwrap(
+    await apiFetch(`/api/v1/producer/tickets/${id}/reopen`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({}),
+    })
+  );
 }
 
 export async function producerStaffUpdateRole(staffId, body) {

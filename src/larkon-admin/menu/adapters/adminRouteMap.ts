@@ -23,7 +23,6 @@ export const STUB_ADMIN_HREFS: Set<string> = new Set([
   '/admin/delivery/riders',
   '/admin/delivery/hubs',
   '/admin/delivery/incidents',
-  '/admin/support/tickets',
   '/admin/support/reviews',
   '/admin/support/reports',
   '/admin/content/announcements',
@@ -46,6 +45,16 @@ export const IMPLEMENTED_ADMIN_HREFS: Set<string> = new Set([
   // Verification Center
   '/admin/verification-metrics',
   '/admin/verifications',
+  // Producer Governance
+  '/admin/producer-overview',
+  '/admin/producer-governance',
+  '/admin/approvals',
+  '/admin/producer-governance/products',
+  '/admin/batch-control',
+  '/admin/governance-analytics',
+  '/admin/enforcement',
+  '/admin/enforcement/cases',
+  '/admin/code-lookup',
   // Users & Access
   '/admin/users',
   '/admin/staff',

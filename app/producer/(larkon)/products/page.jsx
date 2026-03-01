@@ -37,14 +37,14 @@ const DEFAULT_PAGE_SIZE = 20;
 function StatusPill({ status }) {
   const s = status || "DRAFT";
   const cls =
-    s === "APPROVED" || s === "ACTIVE"
+    s === "ACTIVE"
       ? "bg-success"
-      : s === "SUBMITTED" || s === "UNDER_REVIEW"
+      : s === "APPROVED"
         ? "bg-info"
-        : s === "REJECTED"
-          ? "bg-danger"
-          : s === "DRAFT"
-            ? "bg-secondary"
+        : s === "SUBMITTED" || s === "UNDER_REVIEW"
+          ? "bg-warning text-dark"
+          : s === "REJECTED" || s === "DECLINED"
+            ? "bg-danger"
             : "bg-secondary";
   return (
     <span className={`badge ${cls} radius-12 text-uppercase`}>
