@@ -63,20 +63,28 @@ function LoginPageContent() {
         ? { email: detected.normalized, password }
         : { phone: detected.normalized, password };
 
-      // Use admin login API when destination is admin panel (validates whitelist, avoids 403 loop).
-      // When on admin app port (3103), default to admin flow so /login alone works for super admin.
+      // Use panel-specific login API when destination is that panel (validates access, sets cookie on same origin).
       const app = sp.get("app");
       const returnTo = sp.get("returnTo");
       const onAdminPort = typeof window !== "undefined" && String(window.location.port) === "3103";
+      const onDoctorPort = typeof window !== "undefined" && String(window.location.port) === "3107";
       const isAdminFlow = app === "admin" || (returnTo && returnTo.includes("/admin")) || onAdminPort;
-      const loginPath = isAdminFlow ? "/api/v1/admin/auth/login" : "/api/v1/auth/login";
+      const isDoctorFlow = app === "doctor" || (returnTo && returnTo.includes("/doctor")) || onDoctorPort;
+      const loginPath = isAdminFlow ? "/api/v1/admin/auth/login" : isDoctorFlow ? "/api/v1/doctor/auth/login" : "/api/v1/auth/login";
 
       const response = await apiPost(loginPath, payload);
 
       const origin = typeof window !== "undefined" ? window.location.origin : "";
 
-      // Post-auth-landing is the ONLY post-login landing for ALL users.
-      // Honor returnTo/next only when explicitly provided and allowed; otherwise always use post-auth-landing.
+      // Doctor panel: dedicated API returns redirectPath; go there directly (no post-auth-landing).
+      if (isDoctorFlow && response?.redirectPath) {
+        const path = response.redirectPath.startsWith("/") ? response.redirectPath : `/${response.redirectPath}`;
+        const url = path.startsWith("http") ? path : `${origin}${path}`;
+        window.location.href = url;
+        return;
+      }
+
+      // Post-auth-landing for non-doctor; honor returnTo/next when allowed.
       let targetPath = null;
       const nextPath = sp.get("next");
       const targetUrl = returnTo
@@ -87,8 +95,12 @@ function LoginPageContent() {
       const allowedTarget = targetUrl && isAllowedReturnTo(targetUrl, origin) ? targetUrl : null;
 
       if (allowedTarget) {
-        const path = allowedTarget.startsWith("/") ? allowedTarget : new URL(allowedTarget).pathname;
-        // Never land on /mother; route through post-auth-landing
+        const isFullUrl = allowedTarget.startsWith("http://") || allowedTarget.startsWith("https://");
+        if (isFullUrl) {
+          window.location.href = allowedTarget;
+          return;
+        }
+        const path = allowedTarget;
         targetPath = path === "/mother" || path === "/mother/" ? "/post-auth-landing" : path;
       }
       if (!targetPath) targetPath = isAdminFlow && onAdminPort ? "/admin" : "/post-auth-landing";

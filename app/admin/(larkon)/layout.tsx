@@ -1,5 +1,5 @@
 'use client'
-import '@larkon/assets/scss/app.scss'
+import '@larkon/assets/entry-with-choices'
 import '@larkon-ui/styles/dashboard-overrides.scss'
 import FallbackLoading from '@larkon/components/FallbackLoading'
 import Footer from '@larkon/components/layout/Footer'

@@ -98,23 +98,6 @@ a{
   text-decoration: none !important;
 }
 
-select,input {
-	display: block;
-	width: 100%;
-	padding: .375rem .75rem;
-	font-size: 1rem;
-	font-weight: 400;
-	line-height: 1.5;
-	color: var(--bs-body-color);
-	-webkit-appearance: none;
-	-moz-appearance: none;
-	appearance: none;
-	background-color: var(--bs-body-bg);
-	background-clip: padding-box;
-	border: var(--bs-border-width) solid var(--bs-border-color);
-	border-radius: var(--bs-border-radius);
-	transition: border-color .15s ease-in-out,box-shadow .15s ease-in-out;
-}
 
 /* Products list: sticky table header, clickable rows */
 .products-table-wrapper thead th {
@@ -142,6 +125,65 @@ select,input {
 	border-color: var(--bs-border-color-translucent, rgba(0, 0, 0, 0.12));
 }
 
-.form-check-input {
-	height: 1.45em !important;
+/* Owner clinic top sub-nav: scoped, professional pill style */
+.owner-clinic-subnav-card {
+  border: 1px solid var(--bs-border-color, #e9ecef);
+  box-shadow: 0 6px 18px rgba(17, 24, 39, 0.06);
+}
+
+.owner-clinic-subnav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding-left: 0;
+  margin-bottom: 0;
+}
+
+.owner-clinic-subnav .owner-clinic-subnav-item {
+  padding: 0;
+  list-style: none;
+}
+
+.owner-clinic-subnav .owner-clinic-subnav-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 38px;
+  padding: 8px 14px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--bs-secondary-color, #6b7280);
+  background: transparent;
+  transition: all 0.2s ease-in-out;
+}
+
+.owner-clinic-subnav .owner-clinic-subnav-link:hover,
+.owner-clinic-subnav .owner-clinic-subnav-link:focus-visible {
+  color: var(--bs-primary, #3b82f6);
+  border-color: rgba(59, 130, 246, 0.2);
+  background: rgba(59, 130, 246, 0.08);
+  box-shadow: 0 2px 10px rgba(59, 130, 246, 0.12);
+}
+
+.owner-clinic-subnav .owner-clinic-subnav-link.active {
+  color: #fff;
+  border-color: var(--bs-primary, #3b82f6);
+  background: var(--bs-primary, #3b82f6);
+  box-shadow: 0 6px 14px rgba(59, 130, 246, 0.3);
+}
+
+@media (max-width: 767.98px) {
+  .owner-clinic-subnav {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding-bottom: 4px;
+    scrollbar-width: thin;
   }
+
+  .owner-clinic-subnav .owner-clinic-subnav-link {
+    white-space: nowrap;
+  }
+}

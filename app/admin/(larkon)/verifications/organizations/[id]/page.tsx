@@ -1,16 +1,14 @@
-'use client'
+"use client";
 
-import { useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
+import { useParams } from "next/navigation";
+import VerificationDetailPage from "@/src/bpa/admin/components/verification-center/VerificationDetailPage";
 
-export default function VerificationsOrganizationDetailRedirect() {
-  const router = useRouter()
-  const params = useParams<{ id?: string }>()
-  useEffect(() => {
-    const id = Number(params?.id)
-    if (!id) return
-    router.replace(`/admin/verifications?tab=organizations&open=${id}`)
-  }, [params, router])
-  return null
+export default function VerificationsOrganizationDetailPage() {
+  const params = useParams<{ id?: string }>();
+  const id = Number(params?.id);
+  if (!Number.isFinite(id) || id <= 0) {
+    return <div className="alert alert-danger">Invalid verification ID.</div>;
+  }
+  return <VerificationDetailPage entityKey="organizations" id={id} />;
 }
 

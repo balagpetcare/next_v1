@@ -111,6 +111,14 @@ export default function OwnerLayout({ children }) {
         if (cancelled) return;
         if (isApproved(normalized)) return;
         if (shouldForceKycPage(normalized)) {
+          const doctorStatus = meJ?.doctorVerificationStatus;
+          const needsDoctorVerification =
+            doctorStatus != null &&
+            String(doctorStatus).toUpperCase() !== "VERIFIED";
+          if (needsDoctorVerification) {
+            router.replace("/doctor/verification");
+            return;
+          }
           if (typeof process !== "undefined" && process.env?.NODE_ENV === "development" && typeof sessionStorage !== "undefined") {
             sessionStorage.setItem("owner_redirect_reason", "kyc_required");
           }

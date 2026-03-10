@@ -251,6 +251,16 @@ export default function OwnerStaffDetailsPage() {
               Edit
             </Link>
           ),
+          row?.user?.id && (
+            <Link
+              key="manage-access"
+              href={`/owner/staff-access/staff/${row.user.id}`}
+              className="btn btn-outline-primary radius-12"
+            >
+              <i className="ri-lock-keyhole-line me-1" />
+              Manage access
+            </Link>
+          ),
           <button
             key="toggle"
             className={`btn radius-12 ${isActive ? "btn-warning" : "btn-success"}`}
@@ -437,7 +447,63 @@ export default function OwnerStaffDetailsPage() {
         </div>
       </div>
 
-      {/* Quick Actions */}
+      {/* Dashboard access */}
+      <div className="card radius-12 mb-24">
+        <div className="card-header">
+          <h6 className="mb-0">
+            <i className="ri-lock-keyhole-line me-2" />
+            Dashboard access
+          </h6>
+        </div>
+        <div className="card-body p-24">
+          {row?.branchAccess ? (
+            <div className="row g-3">
+              <div className="col-12 col-md-4">
+                <div className="text-muted small mb-1">Status</div>
+                <div className="fw-semibold">
+                  <span className="badge text-bg-secondary">{String(row.branchAccess.status || "—")}</span>
+                </div>
+              </div>
+              <div className="col-12 col-md-4">
+                <div className="text-muted small mb-1">Role</div>
+                <div className="fw-semibold">{String(row.branchAccess.role || "—").replace(/_/g, " ")}</div>
+              </div>
+              {row.branchAccess.expiresAt && (
+                <div className="col-12 col-md-4">
+                  <div className="text-muted small mb-1">Expires</div>
+                  <div className="fw-semibold">{formatDateShort(row.branchAccess.expiresAt)}</div>
+                </div>
+              )}
+              {row?.user?.id && (
+                <div className="col-12">
+                  <Link
+                    href={`/owner/staff-access/staff/${row.user.id}`}
+                    className="btn btn-outline-primary radius-12"
+                  >
+                    <i className="ri-lock-keyhole-line me-1" />
+                    Manage access
+                  </Link>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div>
+              <p className="text-muted mb-2">No dashboard access record for this branch.</p>
+              {row?.user?.id && (
+                <Link
+                  href={`/owner/staff-access/staff/${row.user.id}`}
+                  className="btn btn-outline-primary radius-12"
+                >
+                  <i className="ri-lock-keyhole-line me-1" />
+                  Manage access
+                </Link>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Quick Links */}
       <div className="card radius-12">
         <div className="card-header">
           <h6 className="mb-0">
@@ -463,6 +529,15 @@ export default function OwnerStaffDetailsPage() {
               >
                 <i className="ri-team-line me-1" />
                 Branch Team
+              </Link>
+            )}
+            {row?.user?.id && (
+              <Link
+                href={`/owner/staff-access/staff/${row.user.id}`}
+                className="btn btn-outline-primary radius-12"
+              >
+                <i className="ri-lock-keyhole-line me-1" />
+                Manage access
               </Link>
             )}
             {orgId && (

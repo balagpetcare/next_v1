@@ -20,7 +20,7 @@
  */
 
 /** Allowed localhost ports for BPA panels */
-export const ALLOWED_PORTS = [3100, 3101, 3102, 3103, 3104, 3105, 3106] as const;
+export const ALLOWED_PORTS = [3100, 3101, 3102, 3103, 3104, 3105, 3106, 3107] as const;
 
 /** Panel configuration mapping */
 export const PANEL_CONFIG: Record<string, { port: number; basePath: string; label: string }> = {
@@ -31,6 +31,7 @@ export const PANEL_CONFIG: Record<string, { port: number; basePath: string; labe
   owner: { port: 3104, basePath: '/owner', label: 'Owner' },
   producer: { port: 3105, basePath: '/producer', label: 'Producer' },
   country: { port: 3106, basePath: '/country', label: 'Country' },
+  doctor: { port: 3107, basePath: '/doctor', label: 'Doctor' },
   staff: { port: 3100, basePath: '/staff', label: 'Staff' }, // Staff uses mother port
 };
 
@@ -145,8 +146,8 @@ export function buildAuthUrl(
   params.set('app', appName);
   params.set('returnTo', returnTo);
 
-  // Admin: use same-origin /login so we can call /api/v1/admin/auth/login (validates whitelist at login)
-  if (useSameOriginForAdmin && appName === 'admin' && typeof window !== 'undefined') {
+  // Admin/Doctor: use same-origin /login so cookie is set on panel port (avoids cross-origin cookie loss)
+  if (useSameOriginForAdmin && (appName === 'admin' || appName === 'doctor') && typeof window !== 'undefined') {
     return `${window.location.origin}/login?${params.toString()}`;
   }
 
@@ -215,8 +216,8 @@ export function getAuthRedirectUrl(
   defaultLandingPath?: string
 ): string {
   const returnTo = parseReturnToFromQuery(searchParams ?? null, panelName, defaultLandingPath);
-  // Admin uses same-origin /login so admin login API validates whitelist (avoids 403 loop)
-  return buildAuthUrl(action, panelName, returnTo, panelName === 'admin');
+  // Admin and doctor use same-origin /login so cookie is set on panel port
+  return buildAuthUrl(action, panelName, returnTo, panelName === 'admin' || panelName === 'doctor');
 }
 
 /**
@@ -246,13 +247,14 @@ export const POST_AUTH_LANDING_PATH = "/post-auth-landing";
 /** Choose-activity route: shown when user has not selected a panel (e.g. new customer) */
 export const CHOOSE_ACTIVITY_PATH = "/choose-activity";
 
-/** Panels object from GET /api/v1/auth/me (panels: { admin?, owner?, staff?, country?, partner? }) */
+/** Panels object from GET /api/v1/auth/me (panels: { admin?, owner?, staff?, country?, partner?, doctor? }) */
 export type PanelsFromMe = {
   admin?: boolean;
   owner?: boolean;
   staff?: boolean;
   country?: boolean;
   partner?: boolean;
+  doctor?: boolean;
 };
 
 const COMMON_PORT = 3100;
@@ -260,6 +262,7 @@ const FALLBACK_ORDER: Array<{ key: keyof PanelsFromMe; port: number; path: strin
   { key: 'owner', port: 3104, path: '/owner' },
   { key: 'admin', port: 3103, path: '/admin' },
   { key: 'staff', port: 3100, path: '/staff' },
+  { key: 'doctor', port: 3107, path: '/doctor/dashboard' },
   { key: 'country', port: 3106, path: '/country/dashboard' },
   { key: 'partner', port: 3100, path: '/' },
 ];

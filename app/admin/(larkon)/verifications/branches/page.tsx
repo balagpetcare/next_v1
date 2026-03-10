@@ -1,13 +1,8 @@
-'use client'
+"use client";
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import VerificationListPage from "@/src/bpa/admin/components/verification-center/VerificationListPage";
 
-export default function VerificationsBranchesRedirect() {
-  const router = useRouter()
-  useEffect(() => {
-    router.replace('/admin/verifications?tab=branches')
-  }, [router])
-  return null
+export default function VerificationsBranchesPage() {
+  return <VerificationListPage entityKey="branches" />;
 }
 

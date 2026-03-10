@@ -446,17 +446,29 @@ function OwnerStaffsContent() {
                                 href: `/owner/staffs/${item.id}`,
                                 icon: "solar:eye-outline",
                               },
-                              {
-                                divider: true,
-                              },
+                              { divider: true },
                               {
                                 label: "Edit",
                                 href: `/owner/staffs/${item.id}/edit`,
                                 icon: "solar:pen-outline",
                               },
+                              ...(item?.user?.id
+                                ? [
+                                    { divider: true },
+                                    {
+                                      label: "Manage access",
+                                      href: `/owner/staff-access/staff/${item.user.id}`,
+                                      icon: "solar:lock-keyhole-outline",
+                                    },
+                                  ]
+                                : []),
+                              { divider: true },
                               {
-                                divider: true,
+                                label: "Change branch",
+                                href: `/owner/staffs/${item.id}/edit`,
+                                icon: "solar:buildings-2-outline",
                               },
+                              { divider: true },
                               {
                                 label: item?.status === "ACTIVE" ? "Suspend" : "Activate",
                                 onClick: (e) => {

@@ -1,6 +1,6 @@
 "use client";
 
-export type AppKey = "owner" | "admin" | "shop" | "clinic" | "mother" | "producer" | "country" | "staff";
+export type AppKey = "owner" | "admin" | "shop" | "clinic" | "mother" | "producer" | "country" | "staff" | "doctor";
 
 export type MenuItem = {
   id: string;
@@ -62,6 +62,7 @@ function filterTree(items: MenuItem[], perms: Set<string>): MenuItem[] {
 //     - Staffs
 const CORE_OWNER_FALLBACK: MenuItem[] = [
   { id: "owner.dashboard", label: "Dashboard", href: "/owner/dashboard", icon: "solar:home-smile-outline", required: [] },
+  { id: "owner.escalations", label: "Escalations", href: "/owner/escalations", icon: "ri:arrow-up-circle-line", required: [] },
   {
     id: "owner.operations",
     label: "Operations",
@@ -74,14 +75,18 @@ const CORE_OWNER_FALLBACK: MenuItem[] = [
     ],
   },
   {
-    id: "owner.medical",
-    label: "Medical",
+    id: "owner.clinic",
+    label: "Clinic",
     icon: "solar:medical-kit-outline",
     required: [],
     children: [
-      { id: "owner.medical.patients", label: "Patients", href: "/owner/dashboards/branch-manager", required: [] },
-      { id: "owner.medical.prescriptions", label: "Prescriptions", href: "/owner/dashboards/branch-manager", required: [] },
-      { id: "owner.medical.treatments", label: "Treatments", href: "/owner/dashboards/branch-manager", required: [] },
+      { id: "owner.clinic.overview", label: "Clinic Network", href: "/owner/clinic", required: [] },
+      { id: "owner.clinic.doctors", label: "Doctors", href: "/owner/clinic?view=doctors", required: [] },
+      { id: "owner.clinic.services", label: "Services", href: "/owner/clinic?view=services", required: [] },
+      { id: "owner.clinic.packages", label: "Packages", href: "/owner/clinic?view=packages", required: [] },
+      { id: "owner.clinic.schedule", label: "Schedule", href: "/owner/clinic?view=schedule", required: [] },
+      { id: "owner.clinic.reports", label: "Reports", href: "/owner/clinic?view=reports", required: [] },
+      { id: "owner.clinic.settings", label: "Settings", href: "/owner/clinic?view=settings", required: [] },
     ],
   },
   {
@@ -238,14 +243,18 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
       ],
     },
     {
-      id: "owner.medical",
-      label: "Medical",
+      id: "owner.clinic",
+      label: "Clinic",
       icon: "solar:medical-kit-outline",
-      required: [],
+      required: ["clinic.overview.read"],
       children: [
-        { id: "owner.medical.patients", label: "Patients", href: "/owner/dashboards/branch-manager", required: [] },
-        { id: "owner.medical.prescriptions", label: "Prescriptions", href: "/owner/dashboards/branch-manager", required: [] },
-        { id: "owner.medical.treatments", label: "Treatments", href: "/owner/dashboards/branch-manager", required: [] },
+        { id: "owner.clinic.overview", label: "Clinic Network", href: "/owner/clinic", required: ["clinic.overview.read"] },
+        { id: "owner.clinic.doctors", label: "Doctors", href: "/owner/clinic?view=doctors", required: ["clinic.staff.manage"] },
+        { id: "owner.clinic.services", label: "Services", href: "/owner/clinic?view=services", required: ["clinic.services.manage"] },
+        { id: "owner.clinic.packages", label: "Packages", href: "/owner/clinic?view=packages", required: ["clinic.services.manage"] },
+        { id: "owner.clinic.schedule", label: "Schedule", href: "/owner/clinic?view=schedule", required: ["clinic.schedule.manage"] },
+        { id: "owner.clinic.reports", label: "Reports", href: "/owner/clinic?view=reports", required: ["clinic.settings.read"] },
+        { id: "owner.clinic.settings", label: "Settings", href: "/owner/clinic?view=settings", required: ["clinic.settings.read"] },
       ],
     },
     {
@@ -410,8 +419,19 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
     { id: "clinic.services", label: "Services", href: "/clinic/services", icon: "solar:medical-kit-outline", required: ["service.read"] },
     { id: "clinic.staffDash", label: "Clinic Staff Dashboard", href: "/clinic/dashboards/staff", icon: "solar:chart-2-outline", required: ["clinic.appointments.read"] },
     { id: "clinic.appt", label: "Appointments", href: "/clinic/appointments", icon: "solar:calendar-outline", required: ["clinic.appointments.read"] },
+    { id: "clinic.queue", label: "Queue Console", href: "/clinic/queue", icon: "solar:list-outline", required: ["clinic.queue.manage"] },
+    { id: "clinic.checkin", label: "Check-in Desk", href: "/clinic/checkin", icon: "solar:user-check-outline", required: ["clinic.appointments.manage", "clinic.queue.manage"] },
+    { id: "clinic.screen", label: "Waiting Screen", href: "/clinic/screen", icon: "solar:tv-outline", required: ["clinic.queue.screen", "clinic.queue.manage"] },
     { id: "clinic.patients", label: "Patients", href: "/clinic/patients", icon: "solar:shield-check-outline", required: ["clinic.patients.read"] },
     { id: "clinic.staff", label: "Staff", href: "/clinic/staff", icon: "solar:user-id-outline", required: ["staff.read"] },
+    { id: "clinic.medicineControl", label: "Medicine Control", href: "/clinic/medicine-control", icon: "ri:medicine-bottle-line", required: ["medicine.policy.read"], children: [
+      { id: "clinic.medicineControl.dashboard", label: "Dashboard", href: "/clinic/medicine-control", required: ["medicine.policy.read"] },
+      { id: "clinic.medicineControl.dispense", label: "Dispense Requests", href: "/clinic/medicine-control/dispense-requests", required: ["medicine.dispense.request"] },
+      { id: "clinic.medicineControl.vials", label: "Active Vials", href: "/clinic/medicine-control/active-vials", required: ["medicine.vial.open"] },
+      { id: "clinic.medicineControl.returns", label: "Vial Returns", href: "/clinic/medicine-control/returns", required: ["medicine.return.submit"] },
+      { id: "clinic.medicineControl.bins", label: "Audit Bins", href: "/clinic/medicine-control/audit-bins", required: ["medicine.audit.bin.view"] },
+      { id: "clinic.medicineControl.policies", label: "Policies", href: "/clinic/medicine-control/policies", required: ["medicine.policy.read"] },
+    ] },
   ],
   admin: [
     // ============================================
@@ -437,7 +457,13 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
       icon: "solar:shield-check-outline",
       required: [],
       children: [
-        { id: "admin.verifications", label: "Verifications", href: "/admin/verifications", required: [] },
+        { id: "admin.verifications.overview", label: "Overview Dashboard", href: "/admin/verifications", required: [] },
+        { id: "admin.verifications.owners", label: "Owners", href: "/admin/verifications/owners", required: [] },
+        { id: "admin.verifications.organizations", label: "Organizations", href: "/admin/verifications/organizations", required: [] },
+        { id: "admin.verifications.branches", label: "Branches", href: "/admin/verifications/branches", required: [] },
+        { id: "admin.verifications.staff", label: "Staff", href: "/admin/verifications/staff", required: [] },
+        { id: "admin.verifications.producers", label: "Producers", href: "/admin/verifications/producer-orgs", required: [] },
+        { id: "admin.verifications.doctors", label: "Doctors", href: "/admin/verifications/doctors", required: [] },
         { id: "admin.verificationMetrics", label: "Verification Metrics", href: "/admin/verification-metrics", required: [] },
       ],
     },
@@ -782,6 +808,18 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
     { id: "staff.dashboard", label: "Branches", href: "/staff/branch", icon: "solar:home-smile-outline", required: [] },
     { id: "staff.workspace", label: "Workspace", href: "/staff/workspace", icon: "solar:widget-5-outline", required: [] },
   ],
+  doctor: [
+    { id: "doctor.dashboard", label: "Dashboard", href: "/doctor/dashboard", icon: "solar:home-smile-outline", required: [] },
+    { id: "doctor.appointments", label: "Appointments", href: "/doctor/appointments", icon: "solar:calendar-outline", required: [] },
+    { id: "doctor.schedule", label: "Schedule", href: "/doctor/schedule", icon: "solar:calendar-mark-outline", required: [] },
+    { id: "doctor.follow-ups", label: "Follow-ups", href: "/doctor/follow-ups", icon: "solar:calendar-search-outline", required: [] },
+    { id: "doctor.patients", label: "Patients / Visits", href: "/doctor/patients", icon: "solar:shield-check-outline", required: [] },
+    { id: "doctor.prescriptions", label: "Prescriptions", href: "/doctor/prescriptions", icon: "solar:document-text-outline", required: [] },
+    { id: "doctor.cases", label: "Cases / Surgery", href: "/doctor/cases", icon: "solar:heart-pulse-outline", required: [] },
+    { id: "doctor.services", label: "Services", href: "/doctor/services", icon: "solar:stethoscope-outline", required: [] },
+    { id: "doctor.settlement", label: "Settlement / Earnings", href: "/doctor/settlement", icon: "solar:wallet-money-outline", required: [] },
+    { id: "doctor.notifications", label: "Notifications", href: "/doctor/notifications", icon: "solar:bell-outline", required: [] },
+  ],
 };
 
 /**
@@ -843,6 +881,7 @@ export function appKeyFromPath(pathname?: string): AppKey {
   if (p.startsWith("/producer")) return "producer";
   if (p.startsWith("/shop")) return "shop";
   if (p.startsWith("/clinic")) return "clinic";
+  if (p.startsWith("/doctor")) return "doctor";
   if (p.startsWith("/mother")) return "mother";
   if (p.startsWith("/staff")) return "staff";
   return "owner";

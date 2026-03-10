@@ -1,13 +1,8 @@
-'use client'
+"use client";
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import VerificationListPage from "@/src/bpa/admin/components/verification-center/VerificationListPage";
 
-export default function VerificationsOwnersRedirect() {
-  const router = useRouter()
-  useEffect(() => {
-    router.replace('/admin/verifications?tab=owners')
-  }, [router])
-  return null
+export default function VerificationsOwnersPage() {
+  return <VerificationListPage entityKey="owners" />;
 }
 

@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
-import { ownerGet } from "@/app/owner/_lib/ownerApi";
+import { ownerGet, ownerClinicModuleUpdate } from "@/app/owner/_lib/ownerApi";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 import StatusBadge from "@/app/owner/_components/StatusBadge";
 import BranchMetricsCards from "@/app/owner/_components/branch/BranchMetricsCards";
@@ -26,6 +26,27 @@ function pickArray(resp) {
   return [];
 }
 
+function parseJsonObject(value) {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value;
+  if (typeof value === "string") {
+    try {
+      const parsed = JSON.parse(value);
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed : {};
+    } catch {
+      return {};
+    }
+  }
+  return {};
+}
+
+function isClinicEnabled(branch) {
+  if (!branch) return false;
+  const features = parseJsonObject(branch.featuresJson);
+  if (features.clinicEnabled === true) return true;
+  const capabilities = parseJsonObject(branch.capabilitiesJson);
+  return capabilities.clinicEnabled === true || capabilities.clinic === true;
+}
+
 export default function BranchDashboardPage() {
   const params = useParams();
   const branchId = useMemo(() => String(params?.id || ""), [params]);
@@ -42,6 +63,13 @@ export default function BranchDashboardPage() {
   const [services, setServices] = useState([]);
   const [recentOrders, setRecentOrders] = useState([]);
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
+  const [clinicInsights, setClinicInsights] = useState({
+    doctors: 0,
+    todayAppointments: 0,
+    todayRevenue: 0,
+    loading: true,
+  });
+  const [clinicModuleSaving, setClinicModuleSaving] = useState(false);
 
   useEffect(() => {
     if (!branchId) return;
@@ -77,6 +105,7 @@ export default function BranchDashboardPage() {
     async function loadAnalytics() {
       try {
         setAnalyticsLoading(true);
+        setClinicInsights((prev) => ({ ...prev, loading: true }));
         const [
           todaySalesRes,
           yesterdaySalesRes,
@@ -90,6 +119,8 @@ export default function BranchDashboardPage() {
           revenueRes,
           servicesRes,
           ordersRes,
+          clinicDoctorsRes,
+          clinicDashboardRes,
         ] = await Promise.all([
           ownerGet(`/api/v1/reports/sales?branchId=${branchIdNum}&startDate=${today.toISOString().split("T")[0]}&groupBy=day`).catch(() => ({ data: { summary: { totalSales: 0 } } })),
           ownerGet(`/api/v1/reports/sales?branchId=${branchIdNum}&startDate=${yesterday.toISOString().split("T")[0]}&endDate=${yesterday.toISOString().split("T")[0]}&groupBy=day`).catch(() => ({ data: { summary: { totalSales: 0 } } })),
@@ -103,6 +134,8 @@ export default function BranchDashboardPage() {
           ownerGet(`/api/v1/reports/revenue?branchId=${branchIdNum}&startDate=${sixMonthsAgo.toISOString().split("T")[0]}`).catch(() => ({ data: {} })),
           ownerGet(`/api/v1/services?branchId=${branchIdNum}`).catch(() => ({ data: [] })),
           ownerGet(`/api/v1/orders?branchId=${branchIdNum}&limit=10`).catch(() => ({ data: [], items: [] })),
+          ownerGet(`/api/v1/owner/clinic/branches/${branchIdNum}/doctors`).catch(() => null),
+          ownerGet(`/api/v1/owner/clinic/branches/${branchIdNum}/dashboard-stats`).catch(() => null),
         ]);
 
         const todaySales = todaySalesRes?.data?.summary?.totalSales || 0;
@@ -139,14 +172,38 @@ export default function BranchDashboardPage() {
         setOrdersData(salesGrouped.map((d) => ({ date: d.date, orders: d.orders || 0 })));
         setServices(pickArray(servicesRes?.data || servicesRes || []));
         setRecentOrders(pickArray(ordersRes?.data || ordersRes).concat(pickArray(ordersRes?.items || [])));
+        setClinicInsights({
+          doctors: Array.isArray(clinicDoctorsRes?.data?.doctors) ? clinicDoctorsRes.data.doctors.length : 0,
+          todayAppointments: Number(clinicDashboardRes?.data?.todayAppointments || 0),
+          todayRevenue: Number(clinicDashboardRes?.data?.todayRevenue || 0),
+          loading: false,
+        });
       } catch (e) {
         console.error("Failed to load analytics:", e);
+        setClinicInsights({ doctors: 0, todayAppointments: 0, todayRevenue: 0, loading: false });
       } finally {
         setAnalyticsLoading(false);
       }
     }
     loadAnalytics();
   }, [branchId]);
+
+  async function handleEnableClinicModule() {
+    if (!branchId) return;
+    try {
+      setClinicModuleSaving(true);
+      await ownerClinicModuleUpdate(branchId, { enabled: true });
+      setBranch((prev) => {
+        if (!prev) return prev;
+        const features = parseJsonObject(prev.featuresJson);
+        return { ...prev, featuresJson: { ...features, clinicEnabled: true } };
+      });
+    } catch (e) {
+      setError(e?.message || "Failed to enable clinic module");
+    } finally {
+      setClinicModuleSaving(false);
+    }
+  }
 
   if (loading) {
     return (
@@ -182,6 +239,7 @@ export default function BranchDashboardPage() {
 
   const branchName = branch.name || `Branch #${branch.id}`;
   const base = `/owner/branches/${branchId}`;
+  const clinicEnabled = isClinicEnabled(branch);
 
   return (
     <div className="dashboard-main-body">
@@ -233,6 +291,75 @@ export default function BranchDashboardPage() {
         </div>
         <div className="col-12 col-lg-4">
           <BranchActivityFeed branchId={branchId} orders={recentOrders} loading={analyticsLoading} />
+        </div>
+      </div>
+
+      <div className="row g-4 mb-4">
+        <div className="col-12">
+          <div className="card radius-12">
+            <div className="card-body p-24">
+              <div className="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+                <div>
+                  <h5 className="mb-1 fw-bold">
+                    <i className="ri-hospital-line me-2 text-primary" />
+                    Clinic Capability
+                  </h5>
+                  <p className="text-muted mb-0">Branch-level clinic module and operational readiness</p>
+                </div>
+                <span className={`badge ${clinicEnabled ? "bg-success-subtle text-success-emphasis" : "bg-secondary-subtle text-secondary-emphasis"} radius-8`}>
+                  {clinicEnabled ? "Clinic Enabled" : "Clinic Disabled"}
+                </span>
+              </div>
+
+              {clinicEnabled ? (
+                <>
+                  <div className="row g-3">
+                    <div className="col-12 col-md-4">
+                      <div className="bg-light radius-12 p-3">
+                        <div className="text-secondary-light mb-1" style={{ fontSize: 12 }}>Doctors</div>
+                        <h5 className="mb-0 fw-bold">{clinicInsights.loading ? "..." : clinicInsights.doctors}</h5>
+                      </div>
+                    </div>
+                    <div className="col-12 col-md-4">
+                      <div className="bg-light radius-12 p-3">
+                        <div className="text-secondary-light mb-1" style={{ fontSize: 12 }}>Services</div>
+                        <h5 className="mb-0 fw-bold">{services.length}</h5>
+                      </div>
+                    </div>
+                    <div className="col-12 col-md-4">
+                      <div className="bg-light radius-12 p-3">
+                        <div className="text-secondary-light mb-1" style={{ fontSize: 12 }}>Today Appointments</div>
+                        <h5 className="mb-0 fw-bold">{clinicInsights.loading ? "..." : clinicInsights.todayAppointments}</h5>
+                      </div>
+                    </div>
+                  </div>
+                  <div className="d-flex flex-wrap gap-2 mt-3">
+                    <Link href={`/owner/clinic/${branchId}`} className="btn btn-primary radius-12">
+                      <i className="ri-arrow-right-line me-1" />
+                      Manage Clinic
+                    </Link>
+                    <Link href={`/owner/clinic/${branchId}/settings`} className="btn btn-outline-secondary radius-12">
+                      <i className="ri-settings-3-line me-1" />
+                      Clinic Settings
+                    </Link>
+                  </div>
+                </>
+              ) : (
+                <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                  <p className="text-muted mb-0">Clinic features are currently disabled for this branch.</p>
+                  <button
+                    type="button"
+                    className="btn btn-primary radius-12"
+                    onClick={handleEnableClinicModule}
+                    disabled={clinicModuleSaving}
+                  >
+                    <i className="ri-toggle-line me-1" />
+                    {clinicModuleSaving ? "Enabling..." : "Enable Clinic"}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 

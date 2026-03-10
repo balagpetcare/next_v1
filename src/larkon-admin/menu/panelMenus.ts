@@ -11,6 +11,7 @@ const BASE_TO_APP: Record<string, AppKey> = {
   '/owner': 'owner',
   '/shop': 'shop',
   '/clinic': 'clinic',
+  '/doctor': 'doctor',
   '/mother': 'mother',
   '/producer': 'producer',
   '/country': 'country',
@@ -28,6 +29,7 @@ function normalizeHref(href: string | undefined, app: AppKey): string | undefine
   if (app === 'admin' && href === '/admin') return '/admin/dashboard'
   if (app === 'shop' && href === '/shop') return '/shop/dashboard'
   if (app === 'clinic' && href === '/clinic') return '/clinic/dashboard'
+  if (app === 'doctor' && href === '/doctor') return '/doctor/dashboard'
   if (app === 'mother' && href === '/mother') return '/mother/dashboard'
   return href
 }

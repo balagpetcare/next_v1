@@ -64,7 +64,9 @@
     ".next/producer/types/**/*.ts",
     ".next/producer/dev/types/**/*.ts",
     ".next/country/types/**/*.ts",
-    ".next/country/dev/types/**/*.ts"
+    ".next/country/dev/types/**/*.ts",
+    ".next/doctor/types/**/*.ts",
+    ".next/doctor/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

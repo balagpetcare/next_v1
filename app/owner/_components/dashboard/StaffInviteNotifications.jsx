@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ownerGet, ownerPost } from "@/app/owner/_lib/ownerApi";
+import { ownerGetSafe, ownerPost } from "@/app/owner/_lib/ownerApi";
 
 export default function StaffInviteNotifications() {
   const [notifications, setNotifications] = useState([]);
@@ -11,9 +11,9 @@ export default function StaffInviteNotifications() {
   async function loadNotifications() {
     try {
       setLoading(true);
-      const res = await ownerGet("/api/v1/me/notifications");
+      // Use ownerGetSafe so 500/proxy/ECONNRESET don't throw — optional UI
+      const res = await ownerGetSafe("/api/v1/me/notifications");
       if (res && res?.success && Array.isArray(res.data)) {
-        // Filter only STAFF_INVITE notifications
         const staffInvites = res.data.filter((n) => n.type === "STAFF_INVITE");
         setNotifications(staffInvites);
       }

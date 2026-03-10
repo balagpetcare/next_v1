@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo } from "react";
+import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useBranchContext } from "@/lib/useBranchContext";
 import Card from "@/src/bpa/components/ui/Card";
@@ -14,6 +15,22 @@ import BranchAlertsPanel from "@/src/components/branch/BranchAlertsPanel";
 import BranchActivityTimeline from "@/src/components/branch/BranchActivityTimeline";
 
 const LAST_ACTIVE_BRANCH_KEY = "lastActiveBranchId";
+
+const CLINIC_PERMISSIONS = [
+  "clinic.overview.read",
+  "clinic.appointments.read",
+  "clinic.appointments.manage",
+  "clinic.queue.manage",
+  "clinic.patients.read",
+  "clinic.patients.manage",
+  "clinic.visits.read",
+  "clinic.visits.manage",
+];
+
+function hasClinicAccess(permissions) {
+  const perms = Array.isArray(permissions) ? permissions : [];
+  return CLINIC_PERMISSIONS.some((p) => perms.includes(p));
+}
 
 export default function StaffBranchDashboardPage() {
   const params = useParams();
@@ -172,6 +189,50 @@ export default function StaffBranchDashboardPage() {
           permissions={myAccess?.permissions ?? []}
           currentUserId={null}
         />
+
+        {(branch?.type ?? "").toUpperCase() === "CLINIC" &&
+          branch?.clinicEnabled === true &&
+          hasClinicAccess(myAccess?.permissions ?? []) && (
+          <Card title="Clinic" className="mt-24">
+            <div className="d-flex flex-wrap gap-2">
+              <Link
+                href={`/staff/branch/${branchId}/clinic/dashboard`}
+                className="btn btn-outline-primary radius-12"
+              >
+                <i className="ri-dashboard-line me-1" />
+                Dashboard
+              </Link>
+              <Link
+                href={`/staff/branch/${branchId}/clinic/appointments`}
+                className="btn btn-outline-primary radius-12"
+              >
+                <i className="ri-calendar-check-line me-1" />
+                Appointments
+              </Link>
+              <Link
+                href={`/staff/branch/${branchId}/clinic/queue`}
+                className="btn btn-outline-primary radius-12"
+              >
+                <i className="ri-list-check-2 me-1" />
+                Queue
+              </Link>
+              <Link
+                href={`/staff/branch/${branchId}/clinic/patients`}
+                className="btn btn-outline-primary radius-12"
+              >
+                <i className="ri-user-heart-line me-1" />
+                Patients
+              </Link>
+              <Link
+                href={`/staff/branch/${branchId}/clinic/visits`}
+                className="btn btn-outline-primary radius-12"
+              >
+                <i className="ri-file-list-3-line me-1" />
+                Visits
+              </Link>
+            </div>
+          </Card>
+        )}
       </div>
     </PermissionGate>
   );

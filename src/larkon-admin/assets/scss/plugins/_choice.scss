@@ -1,9 +1,7 @@
 //
 // _choices.scss
+// Base styles loaded as plain CSS in layout to avoid Sass parsing choices.min.css (webpack).
 //
-
-
-@import 'choices.js/public/assets/styles/choices.min.css';
 
 .choices {
 

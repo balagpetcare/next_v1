@@ -11,6 +11,8 @@ const actions = [
   { href: "/owner/manager-decisions", label: "Manager Decisions", icon: "solar:checklist-outline", variant: "secondary" },
   { href: "/owner/reports", label: "View Reports", icon: "solar:chart-outline", variant: "secondary" },
   { href: "/owner/transfers", label: "Stock Transfer", icon: "solar:transfer-outline", variant: "primary" },
+  { href: "/owner/clinic", label: "Clinic", icon: "solar:medical-kit-outline", variant: "info" },
+  { href: "/owner/clinic", label: "Appointments", icon: "solar:calendar-outline", variant: "info" },
 ];
 
 export default function QuickActionsPanel() {
@@ -19,8 +21,8 @@ export default function QuickActionsPanel() {
       <div className="card-body p-24">
         <h6 className="mb-3 fw-semibold">Quick Actions</h6>
         <div className="row g-2">
-          {actions.map((action) => (
-            <div key={action.href} className="col-6 col-md-4 col-lg-3">
+          {actions.map((action, i) => (
+            <div key={`${action.href}-${action.label}-${i}`} className="col-6 col-md-4 col-lg-3">
               <Link href={action.href} className="btn btn-outline-primary w-100 d-flex align-items-center justify-content-center gap-2" style={{ minHeight: 50 }}>
                 <i className={`${action.icon} fs-5`} />
                 <span className="small">{action.label}</span>

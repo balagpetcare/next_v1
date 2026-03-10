@@ -10,8 +10,11 @@ import LkTextarea from "@larkon-ui/components/LkTextarea";
 import { useBranchContext } from "@/lib/useBranchContext";
 import {
   staffPosProducts,
+  staffPosBarcodeLookup,
   staffPosSale,
   staffPosReceipt,
+  staffPosInvoice,
+  staffPosReturn,
   staffOrdersList,
   staffOrderGet,
   staffOrderCancel,
@@ -59,6 +62,10 @@ export default function StaffBranchPosPage() {
   const [saleSuccess, setSaleSuccess] = useState(null); // { orderNumber, orderId }
   const [receiptData, setReceiptData] = useState(null);
   const [receiptLoading, setReceiptLoading] = useState(false);
+  const [barcodeInput, setBarcodeInput] = useState("");
+  const [barcodeLoading, setBarcodeLoading] = useState(false);
+  const [invoiceData, setInvoiceData] = useState(null);
+  const [invoiceLoading, setInvoiceLoading] = useState(false);
 
   // Sales History state
   const [orders, setOrders] = useState([]);
@@ -69,11 +76,16 @@ export default function StaffBranchPosPage() {
   const [orderDetail, setOrderDetail] = useState(null);
   const [orderDetailLoading, setOrderDetailLoading] = useState(false);
 
-  // Refund state
+  // Refund state (full-order cancel)
   const [refundOrderId, setRefundOrderId] = useState(null);
   const [refundReason, setRefundReason] = useState("");
   const [refundSubmitting, setRefundSubmitting] = useState(false);
   const [refundError, setRefundError] = useState("");
+  // Line-item return state
+  const [returnOrderDetail, setReturnOrderDetail] = useState(null);
+  const [returnLines, setReturnLines] = useState([]); // [{ variantId, maxQty, productName, variantName, qtyToReturn, reason }]
+  const [returnSubmitting, setReturnSubmitting] = useState(false);
+  const [returnSuccess, setReturnSuccess] = useState(null);
 
   useEffect(() => {
     if (errorCode === "unauthorized") router.replace("/staff/login");
@@ -133,10 +145,12 @@ export default function StaffBranchPosPage() {
   const subtotal = useMemo(() => cart.reduce((s, l) => s + (Number(l.price) || 0) * (Number(l.quantity) || 0), 0), [cart]);
   const discountPercent = canDiscountOverride && discountCustom !== "" ? parseFloat(discountCustom) : discountPreset;
   const discountAmount = (subtotal * (discountPercent / 100)) || 0;
-  const taxAmount = 0;
+  const taxPercent = 0;
+  const taxAmount = (subtotal - discountAmount) * (taxPercent / 100) || 0;
   const grandTotal = Math.max(0, subtotal - discountAmount + taxAmount);
 
-  const addToCart = (item) => {
+  const addToCart = (item, unitPrice) => {
+    const price = unitPrice !== undefined ? unitPrice : (item.variant?.price ?? item.price ?? 0);
     const key = `${item.productId}-${item.variantId ?? "b"}-${Date.now()}`;
     setCart((prev) => [...prev, {
       key,
@@ -146,8 +160,34 @@ export default function StaffBranchPosPage() {
       variantName: item.title,
       sku: item.sku,
       quantity: 1,
-      price: 0,
+      price: Number(price) || 0,
     }]);
+  };
+
+  const handleBarcodeSubmit = async () => {
+    const code = (barcodeInput || "").trim();
+    if (!code || !canSell) return;
+    setBarcodeLoading(true);
+    try {
+      const result = await staffPosBarcodeLookup(branchId, code);
+      if (result && result.productId) {
+        const item = {
+          productId: result.productId,
+          variantId: result.variantId,
+          name: result.product?.name ?? "",
+          title: result.variant?.title ?? "Standard",
+          sku: result.variant?.sku ?? result.variantId,
+          stock: result.stock ?? 0,
+          price: result.price,
+        };
+        if (item.stock > 0) addToCart(item, result.price);
+      }
+      setBarcodeInput("");
+    } catch {
+      setBarcodeInput("");
+    } finally {
+      setBarcodeLoading(false);
+    }
   };
 
   const updateCartLine = (key, field, value) => {
@@ -166,23 +206,18 @@ export default function StaffBranchPosPage() {
       productId: l.productId,
       variantId: l.variantId || undefined,
       quantity: parseInt(String(l.quantity), 10) || 1,
-      price: grandTotal / cart.length, // spread total so backend gets correct total (discount applied proportionally)
+      price: Math.round((Number(l.price) || 0) * 100) / 100,
     }));
     if (items.some((i) => !i.productId || i.quantity < 1)) { setSaleError("Invalid cart."); return; }
-    const totalToSend = grandTotal;
-    const ratio = totalToSend / subtotal || 1;
-    const adjustedItems = cart.map((l) => {
-      const lineTotal = (Number(l.price) || 0) * (Number(l.quantity) || 0);
-      const newPrice = subtotal > 0 ? (lineTotal * ratio) / (Number(l.quantity) || 1) : 0;
-      return { productId: l.productId, variantId: l.variantId, quantity: parseInt(String(l.quantity), 10) || 1, price: Math.round(newPrice * 100) / 100 };
-    });
     setSaleLoading(true);
     setSaleError("");
     try {
       const res = await staffPosSale({
         branchId: bid,
-        items: adjustedItems,
+        items,
         paymentMethod,
+        discountPercent: discountPercent || 0,
+        taxPercent: taxPercent || 0,
         customerId: customerId ? parseInt(customerId, 10) : undefined,
         notes: notes || "POS Sale",
       });
@@ -237,6 +272,8 @@ export default function StaffBranchPosPage() {
       await staffOrderCancel(refundOrderId, refundReason.trim());
       setRefundOrderId(null);
       setRefundReason("");
+      setReturnOrderDetail(null);
+      setReturnLines([]);
       const res = await staffOrdersList(branchId, { limit: 100 });
       setOrders(res.items ?? []);
     } catch (err) {
@@ -245,6 +282,66 @@ export default function StaffBranchPosPage() {
       setRefundSubmitting(false);
     }
   };
+
+  const openLineItemReturn = async (order) => {
+    setReturnSuccess(null);
+    setReturnOrderDetail(null);
+    setReturnLines([]);
+    try {
+      const o = await staffOrderGet(order.id);
+      if (!o?.items?.length) return;
+      setReturnOrderDetail(o);
+      setReturnLines(o.items.filter((i) => i.variantId).map((i) => ({
+        variantId: i.variantId,
+        maxQty: i.quantity,
+        productName: i.product?.name,
+        variantName: i.variant?.title,
+        qtyToReturn: 0,
+        reason: "customer_request",
+      })));
+    } catch {
+      setReturnOrderDetail(null);
+    }
+  };
+
+  const updateReturnLine = (variantId, field, value) => {
+    setReturnLines((prev) => prev.map((l) => (l.variantId === variantId ? { ...l, [field]: value } : l)));
+  };
+
+  const handleLineItemReturnSubmit = async () => {
+    const items = returnLines.filter((l) => (l.qtyToReturn || 0) > 0).map((l) => ({
+      variantId: l.variantId,
+      quantity: Math.min(Number(l.qtyToReturn) || 0, l.maxQty),
+      reason: l.reason,
+    }));
+    if (items.length === 0) { setRefundError("Select at least one item and quantity to return."); return; }
+    setReturnSubmitting(true);
+    setRefundError("");
+    try {
+      const res = await staffPosReturn({
+        branchId: parseInt(branchId, 10),
+        orderId: returnOrderDetail.id,
+        items,
+      });
+      const data = res?.data ?? res;
+      setReturnSuccess({ creditNumber: data?.posCreditNote?.creditNumber ?? data?.creditNumber, returnId: data?.id });
+      setReturnOrderDetail(null);
+      setReturnLines([]);
+      const listRes = await staffOrdersList(branchId, { limit: 100 });
+      setOrders(listRes.items ?? []);
+      setTimeout(() => setReturnSuccess(null), 8000);
+    } catch (err) {
+      setRefundError(err?.message ?? "Failed to process return");
+    } finally {
+      setReturnSubmitting(false);
+    }
+  };
+
+  const RETURN_REASONS = [
+    { value: "customer_request", label: "Customer request" },
+    { value: "defective", label: "Defective" },
+    { value: "wrong_item", label: "Wrong item" },
+  ];
 
   if (ctxLoading) {
     return (
@@ -262,6 +359,7 @@ export default function StaffBranchPosPage() {
 
   return (
     <div className="container py-24">
+      <style dangerouslySetInnerHTML={{ __html: `@media print { body * { visibility: hidden; } .pos-invoice-print, .pos-invoice-print * { visibility: visible; } .pos-invoice-print { position: absolute; left: 0; top: 0; width: 100%; background: white; padding: 16px; } }` }} />
       <BranchHeader branch={branch} myAccess={myAccess} branchId={branchId} />
 
       <div className="d-flex align-items-center gap-12 mb-24">
@@ -307,6 +405,25 @@ export default function StaffBranchPosPage() {
                   className="btn btn-sm btn-outline-success"
                   onClick={async () => {
                     if (!saleSuccess?.orderId) return;
+                    setInvoiceLoading(true);
+                    setInvoiceData(null);
+                    try {
+                      const inv = await staffPosInvoice(saleSuccess.orderId);
+                      setInvoiceData(inv || false);
+                    } catch {
+                      setInvoiceData(false);
+                    } finally {
+                      setInvoiceLoading(false);
+                    }
+                  }}
+                >
+                  {invoiceLoading ? "Loading..." : "Print invoice"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-outline-success"
+                  onClick={async () => {
+                    if (!saleSuccess?.orderId) return;
                     setReceiptLoading(true);
                     setReceiptData(null);
                     try {
@@ -322,6 +439,47 @@ export default function StaffBranchPosPage() {
                   {receiptLoading ? "Loading..." : "View receipt"}
                 </button>
                 <button type="button" className="btn btn-sm btn-outline-success" onClick={() => setSaleSuccess(null)}>Dismiss</button>
+              </div>
+            </div>
+          )}
+          {invoiceData !== null && invoiceData !== undefined && (
+            <div className="modal show d-block" style={{ background: "rgba(0,0,0,0.5)" }} aria-modal="true">
+              <div className="modal-dialog modal-lg">
+                <div className="modal-content">
+                  <div className="modal-header d-print-none">
+                    <h6 className="modal-title">Invoice</h6>
+                    <div className="d-flex gap-8">
+                      <button type="button" className="btn btn-sm btn-primary" onClick={() => window.print()}>
+                        Print
+                      </button>
+                      <button type="button" className="btn-close" onClick={() => { setInvoiceData(null); }} aria-label="Close" />
+                    </div>
+                  </div>
+                  <div className="modal-body">
+                    {invoiceData === false ? (
+                      <p className="text-secondary-light mb-0">Invoice not available.</p>
+                    ) : (
+                      <div className="small pos-invoice-print">
+                        <p className="fw-semibold">Invoice #{invoiceData?.invoiceNumber ?? "—"}</p>
+                        <p>Order #{invoiceData?.orderNumber ?? "—"}</p>
+                        <p className="text-secondary-light">{invoiceData?.date ? new Date(invoiceData.date).toLocaleString() : ""}</p>
+                        <p>{invoiceData?.branch?.name ?? "Branch"}</p>
+                        <table className="table table-sm mt-12">
+                          <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
+                          <tbody>
+                            {(invoiceData?.items || []).map((item, i) => (
+                              <tr key={i}><td>{item.product} {item.variant ? `· ${item.variant}` : ""}</td><td>{item.quantity}</td><td>{Number(item.price || 0).toFixed(2)}</td><td>{Number(item.total || 0).toFixed(2)}</td></tr>
+                            ))}
+                          </tbody>
+                        </table>
+                        <p>Subtotal: {Number(invoiceData?.subtotal ?? 0).toFixed(2)}</p>
+                        {Number(invoiceData?.discountAmt ?? 0) > 0 && <p>Discount: -{Number(invoiceData?.discountAmt ?? 0).toFixed(2)}</p>}
+                        {Number(invoiceData?.taxAmt ?? 0) > 0 && <p>Tax: {Number(invoiceData?.taxAmt ?? 0).toFixed(2)}</p>}
+                        <p className="fw-semibold">Total: {Number(invoiceData?.grandTotal ?? 0).toFixed(2)} · {invoiceData?.paymentMethod ?? ""}</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
               </div>
             </div>
           )}
@@ -362,7 +520,23 @@ export default function StaffBranchPosPage() {
 
           <div className="row g-20">
             <div className="col-lg-7">
-              <Card title="Products" subtitle="Search by name or SKU, then add to cart">
+              <Card title="Products" subtitle="Search by name or SKU, or scan barcode">
+                <div className="d-flex gap-8 mb-16 flex-wrap align-items-center">
+                  <LkInput
+                    type="text"
+                    size="sm"
+                    className="radius-12 flex-grow-1"
+                    style={{ maxWidth: 220 }}
+                    placeholder="Barcode (scan or type, then Enter)"
+                    value={barcodeInput}
+                    onChange={(e) => setBarcodeInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleBarcodeSubmit(); } }}
+                    disabled={!canSell || barcodeLoading}
+                  />
+                  <button type="button" className="btn btn-sm btn-outline-primary" onClick={handleBarcodeSubmit} disabled={!barcodeInput?.trim() || barcodeLoading || !canSell}>
+                    {barcodeLoading ? "..." : "Add by barcode"}
+                  </button>
+                </div>
                 <LkInput
                   type="search"
                   size="sm"
@@ -529,7 +703,7 @@ export default function StaffBranchPosPage() {
                   <div className="border-top pt-16 mb-16">
                     <div className="d-flex justify-content-between text-sm"><span>Subtotal</span><span>{subtotal.toFixed(2)}</span></div>
                     <div className="d-flex justify-content-between text-sm"><span>Discount ({discountPercent}%)</span><span>-{discountAmount.toFixed(2)}</span></div>
-                    {taxAmount > 0 && <div className="d-flex justify-content-between text-sm"><span>Tax</span><span>{taxAmount.toFixed(2)}</span></div>}
+                    {(taxPercent > 0 || taxAmount > 0) && <div className="d-flex justify-content-between text-sm"><span>Tax</span><span>{taxAmount.toFixed(2)}</span></div>}
                     <div className="d-flex justify-content-between fw-semibold mt-8"><span>Grand total</span><span>{grandTotal.toFixed(2)}</span></div>
                   </div>
                   <PermissionGate requiredPerm="pos.sell" mode="disable" permissions={permissions}>
@@ -677,35 +851,81 @@ export default function StaffBranchPosPage() {
       )}
 
       {activeTab === "refunds" && canRefund && (
-        <Card title="Refunds" subtitle="Full order refund (cancel). Reason required. Partial refund not yet supported by backend.">
+        <Card title="Refunds" subtitle="Full order cancel or line-item return (restock + credit note).">
+          {returnSuccess && (
+            <div className="alert alert-success d-flex align-items-center justify-content-between">
+              <span>Return processed. Credit note: <strong>{returnSuccess.creditNumber}</strong></span>
+              <button type="button" className="btn btn-sm btn-outline-success" onClick={() => setReturnSuccess(null)}>Dismiss</button>
+            </div>
+          )}
           {refundError && (
             <div className="alert alert-danger d-flex align-items-center justify-content-between">
               <span>{refundError}</span>
               <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => setRefundError("")}>Dismiss</button>
             </div>
           )}
-          {refundOrderId ? (
+          {returnOrderDetail ? (
             <div className="border rounded p-16 mb-16">
-              <p className="mb-8">Refunding order <strong>#{refundOrderId}</strong></p>
+              <p className="mb-12">Line-item return for order <strong>#{returnOrderDetail.orderNumber ?? returnOrderDetail.id}</strong></p>
+              <div className="table-responsive">
+                <table className="table table-sm">
+                  <thead>
+                    <tr>
+                      <th>Item</th>
+                      <th>Ordered</th>
+                      <th>Return qty</th>
+                      <th>Reason</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {returnLines.map((l) => (
+                      <tr key={l.variantId}>
+                        <td>{l.productName} {l.variantName ? `· ${l.variantName}` : ""}</td>
+                        <td>{l.maxQty}</td>
+                        <td>
+                          <LkInput
+                            type="number"
+                            min={0}
+                            max={l.maxQty}
+                            size="sm"
+                            className="radius-12"
+                            style={{ width: 70 }}
+                            value={l.qtyToReturn}
+                            onChange={(e) => updateReturnLine(l.variantId, "qtyToReturn", e.target.value)}
+                          />
+                        </td>
+                        <td>
+                          <LkSelect size="sm" className="radius-12" style={{ minWidth: 140 }} value={l.reason} onChange={(e) => updateReturnLine(l.variantId, "reason", e.target.value)}>
+                            {RETURN_REASONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                          </LkSelect>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              <div className="d-flex gap-8 mt-12">
+                <button type="button" className="btn btn-outline-secondary btn-sm" onClick={() => { setReturnOrderDetail(null); setReturnLines([]); }}>Cancel</button>
+                <button type="button" className="btn btn-warning btn-sm" disabled={returnSubmitting || !returnLines.some((l) => (l.qtyToReturn || 0) > 0)} onClick={handleLineItemReturnSubmit}>
+                  {returnSubmitting ? "Processing..." : "Submit return"}
+                </button>
+              </div>
+            </div>
+          ) : refundOrderId ? (
+            <div className="border rounded p-16 mb-16">
+              <p className="mb-8">Full refund (cancel) order <strong>#{refundOrderId}</strong></p>
               <LkFormGroup label="Reason (required)" className="text-sm">
-                <LkTextarea
-                  size="sm"
-                  className="radius-12 mb-12"
-                  rows={2}
-                  value={refundReason}
-                  onChange={(e) => setRefundReason(e.target.value)}
-                  placeholder="e.g. Customer request, wrong item"
-                />
+                <LkTextarea size="sm" className="radius-12 mb-12" rows={2} value={refundReason} onChange={(e) => setRefundReason(e.target.value)} placeholder="e.g. Customer request" />
               </LkFormGroup>
               <div className="d-flex gap-8">
                 <button type="button" className="btn btn-outline-secondary btn-sm" onClick={() => { setRefundOrderId(null); setRefundReason(""); }}>Cancel</button>
                 <button type="button" className="btn btn-warning btn-sm" disabled={refundSubmitting || !refundReason.trim()} onClick={handleRefundSubmit}>
-                  {refundSubmitting ? "Processing..." : "Submit refund"}
+                  {refundSubmitting ? "Processing..." : "Submit full refund"}
                 </button>
               </div>
             </div>
           ) : (
-            <p className="text-secondary-light mb-0">Select an order from Sales History and click Refund, or choose a completed order below.</p>
+            <p className="text-secondary-light mb-0">Select an order below: use &quot;Partial return&quot; for line-item return (restock + credit note) or &quot;Full refund&quot; to cancel the order.</p>
           )}
           <div className="table-responsive mt-16">
             <table className="table table-sm">
@@ -726,7 +946,8 @@ export default function StaffBranchPosPage() {
                     <td>{Number(o.totalAmount ?? 0).toFixed(2)}</td>
                     <td><span className="badge bg-success">{o.status}</span></td>
                     <td>
-                      <button type="button" className="btn btn-sm btn-outline-warning" onClick={() => { setRefundOrderId(o.id); setRefundReason(""); }}>Refund</button>
+                      <button type="button" className="btn btn-sm btn-outline-primary me-8" onClick={() => openLineItemReturn(o)}>Partial return</button>
+                      <button type="button" className="btn btn-sm btn-outline-warning" onClick={() => { setRefundOrderId(o.id); setRefundReason(""); setReturnOrderDetail(null); }}>Full refund</button>
                     </td>
                   </tr>
                 ))}

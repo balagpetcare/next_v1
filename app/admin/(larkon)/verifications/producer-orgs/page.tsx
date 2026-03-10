@@ -1,13 +1,8 @@
-'use client'
+"use client";
 
-import { useEffect } from 'react'
-import { useRouter } from 'next/navigation'
+import VerificationListPage from "@/src/bpa/admin/components/verification-center/VerificationListPage";
 
-export default function VerificationsProducerOrgsRedirect() {
-  const router = useRouter()
-  useEffect(() => {
-    router.replace('/admin/verifications?tab=producer_orgs')
-  }, [router])
-  return null
+export default function VerificationsProducerOrgsPage() {
+  return <VerificationListPage entityKey="producer_orgs" />;
 }
 

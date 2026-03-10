@@ -64,6 +64,23 @@ export default function OwnerKycClientPage() {
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const hasRedirected = useRef(false);
+  const hasCheckedDoctorRedirect = useRef(false);
+
+  // If user is a doctor candidate (needs doctor verification), send to doctor verification instead of KYC
+  useEffect(() => {
+    if (hasCheckedDoctorRedirect.current) return;
+    hasCheckedDoctorRedirect.current = true;
+    const apiBase = String(process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/+$/, "") || "";
+    fetch(`${apiBase}/api/v1/auth/me`, { credentials: "include", headers: { Accept: "application/json" } })
+      .then((r) => r.json().catch(() => null))
+      .then((j) => {
+        const doctorStatus = j?.doctorVerificationStatus;
+        if (doctorStatus != null && String(doctorStatus).toUpperCase() !== "VERIFIED") {
+          router.replace("/doctor/verification");
+        }
+      })
+      .catch(() => {});
+  }, [router]);
 
   const load = useCallback(async () => {
     setError("");

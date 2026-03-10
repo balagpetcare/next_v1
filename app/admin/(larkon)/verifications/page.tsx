@@ -4,6 +4,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useSearchParams } from 'next/navigation'
 import { apiGet, apiPost } from '@/lib/api'
+import { adminVerificationsApi } from '@/lib/adminApi'
+import { vetReferenceCountries, vetReferenceBodiesByCountry } from '@/lib/api'
 import AdminPageShell from '@/src/bpa/admin/components/AdminPageShell'
 import FilterPanel from '@/src/bpa/admin/components/FilterPanel'
 import SectionCard from '@/src/bpa/admin/components/SectionCard'
@@ -14,12 +16,15 @@ import DocGrid from '@/src/bpa/admin/components/DocGrid'
 import TimelineView from '@/src/bpa/admin/components/TimelineView'
 import CommentThread from '@/src/bpa/admin/components/CommentThread'
 
+export { default } from './overviewClient'
+
 const TABS = [
   { key: 'owners', label: 'Owner', apiList: '/api/v1/admin/verifications/owners', apiDetail: (id: number) => `/api/v1/admin/verifications/owners/${id}`, apiComment: (id: number) => `/api/v1/admin/verifications/owners/${id}/comment` },
   { key: 'organizations', label: 'Organization', apiList: '/api/v1/admin/verifications/organizations', apiDetail: (id: number) => `/api/v1/admin/verifications/organizations/${id}`, apiComment: (id: number) => `/api/v1/admin/verifications/organizations/${id}/comment` },
   { key: 'branches', label: 'Branch', apiList: '/api/v1/admin/verifications/branches', apiDetail: (id: number) => `/api/v1/admin/verifications/branches/${id}`, apiComment: (id: number) => `/api/v1/admin/verifications/branches/${id}/comment` },
   { key: 'staff', label: 'Staff', apiList: '/api/v1/admin/verifications/staff', apiDetail: (id: number) => `/api/v1/admin/verifications/staff/${id}`, apiComment: (id: number) => `/api/v1/admin/verifications/staff/${id}/comment` },
   { key: 'producer_orgs', label: 'Producer Org', apiList: '/api/v1/admin/verifications/producer-orgs', apiDetail: (id: number) => `/api/v1/admin/verifications/producer-orgs/${id}`, apiComment: (id: number) => `/api/v1/admin/verifications/producer-orgs/${id}/comment` },
+  { key: 'doctors', label: 'Doctor', apiList: '/api/v1/admin/verifications/doctors', apiDetail: (id: number) => `/api/v1/admin/verifications/doctors/${id}`, apiComment: null },
 ]
 
 const STATUS_OPTIONS = ['', 'PENDING', 'SUBMITTED', 'REQUEST_CHANGES', 'VERIFIED', 'REJECTED', 'SUSPENDED', 'UNSUBMITTED']
@@ -104,6 +109,48 @@ function OverviewProducerOrg({ row }: { row: Record<string, unknown> }) {
   )
 }
 
+function OverviewDoctor({ row }: { row: Record<string, unknown> }) {
+  const u = row.user as Record<string, unknown> | undefined
+  const auth = u?.auth as Record<string, unknown> | undefined
+  const licenses = (row.licenses ?? []) as Array<{
+    id: number
+    licenseNumber: string
+    issueDate?: string | null
+    expiryDate?: string | null
+    regulatoryBody?: { name: string; abbreviation?: string | null; verificationUrl?: string | null }
+    documents?: unknown[]
+  }>
+  return (
+    <div className="d-flex flex-column gap-2">
+      <Field label="User ID" value={row.userId} />
+      <Field label="Phone" value={auth?.phone} />
+      <Field label="Email" value={auth?.email} />
+      <Field label="Primary country" value={row.primaryCountryCode ?? '—'} />
+      <Field label="License number (legacy)" value={row.licenseNumber} />
+      <Field label="Registration body (legacy)" value={row.registrationBody} />
+      <Field label="NID" value={row.nidNumber} />
+      <Field label="Submitted" value={row.submittedAt ? new Date(String(row.submittedAt)).toLocaleString() : '—'} />
+      <Field label="Review note" value={row.reviewNote} />
+      {licenses.length > 0 && (
+        <div className="mt-2 pt-2 border-top">
+          <div className="small fw-semibold text-secondary mb-2">Licenses</div>
+          {licenses.map((lic) => (
+            <div key={lic.id} className="d-flex flex-wrap align-items-center gap-2 py-1">
+              <span className="fw-semibold">{lic.regulatoryBody?.abbreviation || lic.regulatoryBody?.name || 'License'}:</span>
+              <span>{lic.licenseNumber}</span>
+              {lic.regulatoryBody?.verificationUrl && (
+                <a href={lic.regulatoryBody.verificationUrl} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline-primary">
+                  Verify online
+                </a>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 function RiskSignalsWidget({ row }: { entityType?: string; entityId?: unknown; row?: Record<string, unknown> | null }) {
   const risk = row?.riskScore != null ? Number(row.riskScore) : null
   if (risk == null || risk <= 50) return <div className="text-secondary small">No risk signals.</div>
@@ -114,11 +161,14 @@ function RiskSignalsWidget({ row }: { entityType?: string; entityId?: unknown; r
   )
 }
 
-export default function VerificationInboxPage() {
+export function LegacyVerificationInboxPage() {
   const searchParams = useSearchParams()
   const [tab, setTab] = useState('owners')
   const [status, setStatus] = useState('')
   const [search, setSearch] = useState('')
+  const [doctorCountry, setDoctorCountry] = useState('')
+  const [doctorBodyId, setDoctorBodyId] = useState<number | ''>('')
+  const [doctorBodyOptions, setDoctorBodyOptions] = useState<{ id: number; name: string; abbreviation?: string | null }[]>([])
   const [rows, setRows] = useState<Record<string, unknown>[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -132,19 +182,39 @@ export default function VerificationInboxPage() {
     setLoading(true)
     setError('')
     try {
-      const q = status ? `?status=${encodeURIComponent(status)}` : ''
-      const r = await apiGet<{ data?: Record<string, unknown>[] }>(`${conf.apiList}${q}`)
-      setRows(r?.data ?? [])
+      if (tab === 'doctors') {
+        const r = await adminVerificationsApi.doctors({
+          status: status || undefined,
+          country: doctorCountry.trim() || undefined,
+          bodyId: doctorBodyId !== '' && Number.isFinite(Number(doctorBodyId)) ? Number(doctorBodyId) : undefined,
+        })
+        setRows((r?.data as Record<string, unknown>[]) ?? [])
+      } else {
+        const q = status ? `?status=${encodeURIComponent(status)}` : ''
+        const r = await apiGet<{ data?: Record<string, unknown>[] }>(`${conf.apiList}${q}`)
+        setRows(r?.data ?? [])
+      }
     } catch (e) {
       setError((e as Error)?.message ?? 'Failed to load')
     } finally {
       setLoading(false)
     }
-  }, [conf.apiList, status])
+  }, [tab, conf.apiList, status, doctorCountry, doctorBodyId])
 
   useEffect(() => {
     loadList()
   }, [loadList])
+
+  useEffect(() => {
+    if (tab !== 'doctors' || !doctorCountry.trim()) {
+      setDoctorBodyOptions([])
+      setDoctorBodyId('')
+      return
+    }
+    vetReferenceBodiesByCountry(doctorCountry)
+      .then((list) => setDoctorBodyOptions(list))
+      .catch(() => setDoctorBodyOptions([]))
+  }, [tab, doctorCountry])
 
   const openDrawer = useCallback(async (type: string, id: number) => {
     setDrawer({ open: true, type, id })
@@ -209,8 +279,9 @@ export default function VerificationInboxPage() {
       const phone = (String(r.mobile || r.phone || auth?.phone || oauth?.phone || '')).toLowerCase()
       const email = (String(r.email || auth?.email || oauth?.email || '')).toLowerCase()
       const nid = String(r.nidNumber ?? '').toLowerCase()
+      const license = String(r.licenseNumber ?? '').toLowerCase()
       const idStr = String(r.id ?? r.userId ?? '').toLowerCase()
-      return [name, phone, email, nid, idStr].some((s) => s.includes(q))
+      return [name, phone, email, nid, license, idStr].some((s) => s.includes(q))
     })
   }, [rows, search])
 
@@ -238,13 +309,25 @@ export default function VerificationInboxPage() {
       const auth = owner?.auth as Record<string, unknown> | undefined
       return { id: r.id as number, type: 'producer_orgs', name: r.name || `Producer Org #${r.id}`, meta: `${auth?.email || auth?.phone || '—'} • Owner #${owner?.id || r.ownerUserId || '—'}`, submitted: r.createdAt, status: r.status || 'PENDING' }
     })
+    if (tab === 'doctors') return filtered.map((r) => {
+      const u = r.user as Record<string, unknown> | undefined
+      const auth = u?.auth as Record<string, unknown> | undefined
+      const licenses = (r.licenses ?? []) as Array<{ regulatoryBody?: { abbreviation?: string } }>
+      const firstAbbr = licenses[0]?.regulatoryBody?.abbreviation
+      const country = r.primaryCountryCode as string | undefined
+      const meta = [country, firstAbbr, auth?.phone || auth?.email || '—', `User #${r.userId ?? '—'}`].filter(Boolean).join(' • ')
+      return { id: r.id as number, type: 'doctors', name: `Doctor verification #${r.id}`, meta, submitted: r.submittedAt, status: r.verificationStatus || 'UNSUBMITTED' }
+    })
     return [] as { id: number; type: string; name: unknown; meta: string; submitted: unknown; status: string }[]
   }
 
   const tableRows = buildTableRows()
   const tabConf = drawer.type ? TABS.find((t) => t.key === drawer.type) : null
   const basePath = detail && tabConf && drawer.id ? tabConf.apiDetail(drawer.id) : ''
-  const commentApi = detail && tabConf && drawer.id ? tabConf.apiComment(drawer.id) : null
+  const commentApi =
+    detail && tabConf && drawer.id && typeof tabConf.apiComment === 'function'
+      ? tabConf.apiComment(drawer.id)
+      : null
 
   const overview = useMemo(() => {
     if (!detail || !drawer.type) return null
@@ -253,17 +336,56 @@ export default function VerificationInboxPage() {
     if (drawer.type === 'branches') return <OverviewBranch row={detail} />
     if (drawer.type === 'staff') return <OverviewStaff row={detail} />
     if (drawer.type === 'producer_orgs') return <OverviewProducerOrg row={detail} />
+    if (drawer.type === 'doctors') return <OverviewDoctor row={detail} />
     return null
   }, [detail, drawer.type])
 
   const tabs = useMemo(() => {
     const docs = detail?.documents as unknown[] | undefined
+    const licenses = (detail?.licenses ?? []) as Array<{
+      id: number
+      licenseNumber: string
+      regulatoryBody?: { name: string; abbreviation?: string | null; verificationUrl?: string | null }
+      documents?: Array<{ id: number; documentType: string; url?: string }>
+    }>
     const logs = (detail?.logs ?? []) as Array<{ id: unknown; action: string; createdAt: string; note?: string }>
-    return [
+    const baseTabs = [
       { key: 'overview', label: 'Overview', children: overview },
       { key: 'documents', label: 'Documents', children: docs?.length ? <DocGrid documents={docs} /> : <div className="text-secondary small">No documents.</div> },
       { key: 'activity', label: 'Activity', children: <TimelineView logs={logs} /> },
-      {
+    ]
+    if (drawer.type === 'doctors' && licenses.length > 0) {
+      baseTabs.splice(2, 0, {
+        key: 'licenses',
+        label: 'Licenses',
+        children: (
+          <div className="d-flex flex-column gap-3">
+            {licenses.map((lic) => (
+              <div key={lic.id} className="card">
+                <div className="card-body">
+                  <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
+                    <span className="fw-semibold">{lic.regulatoryBody?.abbreviation || lic.regulatoryBody?.name || 'License'}</span>
+                    <span className="text-secondary">{lic.licenseNumber}</span>
+                    {lic.regulatoryBody?.verificationUrl && (
+                      <a href={lic.regulatoryBody.verificationUrl} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline-primary">
+                        Verify online
+                      </a>
+                    )}
+                  </div>
+                  {(lic.documents?.length ?? 0) > 0 ? (
+                    <DocGrid documents={lic.documents} />
+                  ) : (
+                    <div className="text-secondary small">No documents for this license.</div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ),
+      })
+    }
+    if (commentApi != null) {
+      baseTabs.push({
         key: 'notes',
         label: 'Notes',
         children: (
@@ -283,8 +405,9 @@ export default function VerificationInboxPage() {
             }}
           />
         ),
-      },
-    ]
+      })
+    }
+    return baseTabs
   }, [detail, overview, commentApi, drawer.id, tabConf])
 
   return (
@@ -299,6 +422,7 @@ export default function VerificationInboxPage() {
           <Link href="/admin/verifications/branches" className="btn btn-sm btn-outline-secondary">Branches</Link>
           <Link href="/admin/verifications/staff" className="btn btn-sm btn-outline-secondary">Staff</Link>
           <Link href="/admin/verifications/producer-orgs" className="btn btn-sm btn-outline-secondary">Producer orgs</Link>
+          <Link href="/admin/verifications?tab=doctors" className="btn btn-sm btn-outline-secondary">Doctors</Link>
         </div>
       }
     >
@@ -322,6 +446,33 @@ export default function VerificationInboxPage() {
                   <option key={s || 'all'} value={s}>{s || 'All'}</option>
                 ))}
               </select>
+              {tab === 'doctors' && (
+                <>
+                  <label className="small text-secondary mt-2">Country (code)</label>
+                  <input
+                    type="text"
+                    className="form-control form-control-sm"
+                    placeholder="e.g. BD, IN, US"
+                    value={doctorCountry}
+                    onChange={(e) => setDoctorCountry(e.target.value)}
+                  />
+                  {doctorBodyOptions.length > 0 && (
+                    <>
+                      <label className="small text-secondary mt-2">Regulatory body</label>
+                      <select
+                        className="form-select form-select-sm"
+                        value={doctorBodyId === '' ? '' : doctorBodyId}
+                        onChange={(e) => setDoctorBodyId(e.target.value === '' ? '' : Number(e.target.value))}
+                      >
+                        <option value="">All</option>
+                        {doctorBodyOptions.map((b) => (
+                          <option key={b.id} value={b.id}>{b.abbreviation || b.name}</option>
+                        ))}
+                      </select>
+                    </>
+                  )}
+                </>
+              )}
               <label className="small text-secondary mt-2">Search</label>
               <input
                 type="text"
@@ -383,7 +534,7 @@ export default function VerificationInboxPage() {
       <DetailDrawer
         open={drawer.open}
         onClose={closeDrawer}
-        title={detail ? String(detail.fullName || (detail.organization as Record<string, unknown>)?.name || detail.organizationName || (detail.branch as Record<string, unknown>)?.name || detail.name || `#${drawer.id}`) : 'Review'}
+        title={detail ? String(detail.fullName || (detail.organization as Record<string, unknown>)?.name || detail.organizationName || (detail.branch as Record<string, unknown>)?.name || detail.name || (drawer.type === 'doctors' ? `Doctor verification #${drawer.id}` : `#${drawer.id}`)) : 'Review'}
         subtitle={detail && <StatusChip status={String(detail.verificationStatus ?? detail.status)} />}
         tabs={tabs}
         loading={detailLoading}

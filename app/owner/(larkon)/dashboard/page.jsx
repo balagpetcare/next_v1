@@ -256,6 +256,23 @@ export default function OwnerDashboard() {
         </div>
       </section>
 
+      <section className="row g-3 mb-4" aria-label="Clinic">
+        <div className="col-12">
+          <div className="card radius-12">
+            <div className="card-body p-24">
+              <h6 className="mb-2 fw-semibold">Clinic</h6>
+              <p className="text-secondary small mb-3">
+                Services, staff, appointments, calendar. Manage pet clinic branches from one place.
+              </p>
+              <Link href="/owner/clinic" className="btn btn-outline-primary radius-12">
+                <i className="solar:medical-kit-outline me-1" />
+                Manage clinic
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
       <section className="row g-3 mb-4" aria-label="Products and activity">
         <div className="col-12 col-lg-4">
           <ProductSummaryCard loading={loading} />

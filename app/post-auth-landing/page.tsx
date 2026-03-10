@@ -42,7 +42,11 @@ const PANEL_PATHS: Record<string, string> = {
   country: "/country/dashboard",
   shop: "/shop",
   clinic: "/clinic",
+  doctor: "/doctor/dashboard",
 };
+
+/** Doctor panel runs on port 3107; redirect to full URL when we're on another port */
+const DOCTOR_PANEL_PORT = 3107;
 
 function doRedirect(
   router: ReturnType<typeof useRouter>,
@@ -51,6 +55,11 @@ function doRedirect(
 ) {
   if (process.env.NODE_ENV === "development") {
     console.log(`[post-auth-landing] X-Redirect-Reason: ${reason} -> ${path}`);
+  }
+  if (typeof window !== "undefined" && path.startsWith("/doctor") && window.location.port !== String(DOCTOR_PANEL_PORT)) {
+    const url = `${window.location.protocol}//${window.location.hostname}:${DOCTOR_PANEL_PORT}${path}`;
+    window.location.href = url;
+    return;
   }
   router.replace(path);
 }
@@ -77,7 +86,18 @@ function PostAuthLandingContent() {
         const isCustomerOnly = r.isCustomerOnly === true;
         const verificationRequired = r.verificationRequired === true;
         const verificationStatus = r.verificationStatus ?? "NONE";
-        const verificationRedirect = r.verificationRedirect ?? null;
+        let verificationRedirect = r.verificationRedirect ?? null;
+        // Doctor candidates must go to doctor verification, not owner KYC
+        const doctorStatus = me?.doctorVerificationStatus;
+        const onDoctorPanel = typeof window !== "undefined" && window.location.port === "3107";
+        if (verificationRedirect === "/owner/kyc") {
+          if (onDoctorPanel) {
+            // Logged in from doctor panel (3107): keep them in doctor flow
+            verificationRedirect = "/doctor/verification";
+          } else if (doctorStatus != null && String(doctorStatus).toUpperCase() !== "VERIFIED") {
+            verificationRedirect = "/doctor/verification";
+          }
+        }
         let selectedPanel = getCookie(COOKIE_SELECTED_PANEL);
         if (onboardingIntroRequired || unclassified) {
           clearCookie(COOKIE_SELECTED_PANEL);

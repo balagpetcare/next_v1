@@ -1,14 +1,24 @@
-﻿"use client";
+"use client";
 
 import { useState } from 'react';
 import { Icon } from '@iconify/react';
 import { apiPost } from '@/lib/api';
 import ConfirmationAlert from './ConfirmationAlert';
 
-export default function DecisionPanel({ basePath, onDone, loading: externalLoading }) {
+export default function DecisionPanel({
+  basePath,
+  onDone,
+  loading: externalLoading,
+  allowedActions = ['approve', 'request-changes', 'reject', 'suspend'],
+}) {
   const [loading, setLoading] = useState(false);
   const [note, setNote] = useState('');
   const [showConfirm, setShowConfirm] = useState(null); // 'approve' | 'reject' | 'suspend' | 'request-changes' | null
+
+  const canApprove = allowedActions.includes('approve');
+  const canRequestChanges = allowedActions.includes('request-changes');
+  const canReject = allowedActions.includes('reject');
+  const canSuspend = allowedActions.includes('suspend');
 
   const handleAction = async (action, noteText = '') => {
     if (!basePath) return;
@@ -42,6 +52,7 @@ export default function DecisionPanel({ basePath, onDone, loading: externalLoadi
   };
 
   const openConfirm = (action) => {
+    if (!allowedActions.includes(action)) return;
     if (!basePath) {
       alert('Error: Unable to perform action. Please refresh the page.');
       return;
@@ -99,62 +110,70 @@ export default function DecisionPanel({ basePath, onDone, loading: externalLoadi
     <>
       <div className="d-flex flex-column gap-2">
         <div className="d-flex flex-wrap gap-2">
-          <button 
-            className="btn btn-success d-flex align-items-center gap-2" 
-            disabled={isLoading} 
-            onClick={() => openConfirm('approve')}
-            style={{
-              borderRadius: '8px',
-              padding: '10px 20px',
-              fontWeight: '500',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            <Icon icon="solar:check-circle-bold" />
-            Approve
-          </button>
-          <button 
-            className="btn btn-warning d-flex align-items-center gap-2" 
-            disabled={isLoading} 
-            onClick={() => openConfirm('request-changes')}
-            style={{
-              borderRadius: '8px',
-              padding: '10px 20px',
-              fontWeight: '500',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            <Icon icon="solar:edit-circle-bold" />
-            Request Changes
-          </button>
-          <button 
-            className="btn btn-danger d-flex align-items-center gap-2" 
-            disabled={isLoading} 
-            onClick={() => openConfirm('reject')}
-            style={{
-              borderRadius: '8px',
-              padding: '10px 20px',
-              fontWeight: '500',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            <Icon icon="solar:close-circle-bold" />
-            Reject
-          </button>
-          <button 
-            className="btn btn-outline-warning d-flex align-items-center gap-2" 
-            disabled={isLoading} 
-            onClick={() => openConfirm('suspend')}
-            style={{
-              borderRadius: '8px',
-              padding: '10px 20px',
-              fontWeight: '500',
-              transition: 'all 0.2s ease',
-            }}
-          >
-            <Icon icon="solar:stop-circle-bold" />
-            Suspend
-          </button>
+          {canApprove ? (
+            <button
+              className="btn btn-success d-flex align-items-center gap-2"
+              disabled={isLoading}
+              onClick={() => openConfirm('approve')}
+              style={{
+                borderRadius: '8px',
+                padding: '10px 20px',
+                fontWeight: '500',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <Icon icon="solar:check-circle-bold" />
+              Approve
+            </button>
+          ) : null}
+          {canRequestChanges ? (
+            <button
+              className="btn btn-warning d-flex align-items-center gap-2"
+              disabled={isLoading}
+              onClick={() => openConfirm('request-changes')}
+              style={{
+                borderRadius: '8px',
+                padding: '10px 20px',
+                fontWeight: '500',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <Icon icon="solar:edit-circle-bold" />
+              Request Changes
+            </button>
+          ) : null}
+          {canReject ? (
+            <button
+              className="btn btn-danger d-flex align-items-center gap-2"
+              disabled={isLoading}
+              onClick={() => openConfirm('reject')}
+              style={{
+                borderRadius: '8px',
+                padding: '10px 20px',
+                fontWeight: '500',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <Icon icon="solar:close-circle-bold" />
+              Reject
+            </button>
+          ) : null}
+          {canSuspend ? (
+            <button
+              className="btn btn-outline-warning d-flex align-items-center gap-2"
+              disabled={isLoading}
+              onClick={() => openConfirm('suspend')}
+              style={{
+                borderRadius: '8px',
+                padding: '10px 20px',
+                fontWeight: '500',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              <Icon icon="solar:stop-circle-bold" />
+              Suspend
+            </button>
+          ) : null}
         </div>
       </div>
 

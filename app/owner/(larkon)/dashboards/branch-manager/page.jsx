@@ -316,6 +316,24 @@ export default function BranchManagerDashboardPage() {
   const [drawerUserId, setDrawerUserId] = useState(null);
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [drawerTab, setDrawerTab] = useState("profile");
+  const [activityBranchId, setActivityBranchId] = useState("");
+  const [activityList, setActivityList] = useState([]);
+  const [activityLoading, setActivityLoading] = useState(false);
+
+  const fetchManagerActivity = (branchId) => {
+    if (!branchId) {
+      setActivityList([]);
+      return;
+    }
+    setActivityLoading(true);
+    ownerGet(`/api/v1/owner/manager-activity/${branchId}?limit=50`)
+      .then((res) => {
+        const data = res?.data ?? [];
+        setActivityList(Array.isArray(data) ? data : []);
+      })
+      .catch(() => setActivityList([]))
+      .finally(() => setActivityLoading(false));
+  };
 
   const fetchManagers = () => {
     setLoading(true);
@@ -441,6 +459,74 @@ export default function BranchManagerDashboardPage() {
               />
             </div>
           </div>
+        </div>
+      </div>
+
+      <div className="card radius-12 mb-24">
+        <div className="card-body p-24">
+          <h6 className="mb-3">Branch activity (recent)</h6>
+          <p className="small text-muted mb-3">View recent audit activity for a branch (POS, appointments, queue, stock requests, approvals).</p>
+          <div className="row g-2 align-items-end mb-3">
+            <div className="col-12 col-md-4">
+              <label className="form-label small">Branch</label>
+              <select
+                className="form-select form-select-sm radius-12"
+                value={activityBranchId}
+                onChange={(e) => {
+                  const id = e.target.value;
+                  setActivityBranchId(id);
+                  fetchManagerActivity(id);
+                }}
+              >
+                <option value="">Select branch</option>
+                {branches.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name ?? `Branch #${b.id}`}</option>
+                ))}
+              </select>
+            </div>
+            {activityBranchId && (
+              <div className="col-auto">
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary btn-sm radius-12"
+                  onClick={() => fetchManagerActivity(activityBranchId)}
+                  disabled={activityLoading}
+                >
+                  {activityLoading ? "Loading…" : "Refresh"}
+                </button>
+              </div>
+            )}
+          </div>
+          {activityBranchId && (
+            activityLoading ? (
+              <div className="text-muted small"><span className="spinner-border spinner-border-sm me-2" />Loading activity…</div>
+            ) : activityList.length === 0 ? (
+              <p className="text-muted small mb-0">No recent activity for this branch.</p>
+            ) : (
+              <div className="table-responsive">
+                <table className="table table-sm mb-0">
+                  <thead>
+                    <tr>
+                      <th>Time</th>
+                      <th>Action</th>
+                      <th>Entity</th>
+                      <th>Actor role</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {activityList.map((log) => (
+                      <tr key={log.id}>
+                        <td className="small text-muted">{formatDate(log.createdAt)}</td>
+                        <td>{log.action}</td>
+                        <td>{log.entityType}:{log.entityId}</td>
+                        <td>{log.actorRole ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )
+          )}
         </div>
       </div>
 

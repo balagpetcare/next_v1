@@ -36,27 +36,77 @@ export const adminUsersApi = {
 };
 
 // Verifications
+function buildVerificationQuery(params?: {
+  status?: string;
+  search?: string;
+  q?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  limit?: number;
+  offset?: number;
+  country?: string;
+  bodyId?: number;
+}) {
+  const sp = new URLSearchParams();
+  const search = params?.search ?? params?.q;
+  if (params?.status) sp.set("status", params.status);
+  if (search) sp.set("search", search);
+  if (params?.dateFrom) sp.set("dateFrom", params.dateFrom);
+  if (params?.dateTo) sp.set("dateTo", params.dateTo);
+  if (params?.limit != null) sp.set("limit", String(params.limit));
+  if (params?.offset != null) sp.set("offset", String(params.offset));
+  if (params?.country) sp.set("country", params.country);
+  if (params?.bodyId != null) sp.set("bodyId", String(params.bodyId));
+  const qs = sp.toString();
+  return qs ? `?${qs}` : "";
+}
+
 export const adminVerificationsApi = {
-  owners: (params?: { status?: string }) => {
-    const qs = params?.status ? `?status=${params.status}` : "";
-    return apiGet<{ data: unknown[] }>(`${prefix}/admin/verifications/owners${qs}`);
+  stats: () => {
+    return apiGet<{
+      data: {
+        generatedAt: string;
+        totals: { total: number; pending: number; approvedToday: number; rejectedToday: number };
+        entities: Record<string, { key: string; label: string; total: number; pending: number; approvedToday: number; rejectedToday: number }>;
+        recentActivity: unknown[];
+      };
+    }>(`${prefix}/admin/verifications/stats`);
   },
-  organizations: (params?: { status?: string }) => {
-    const qs = params?.status ? `?status=${params.status}` : "";
-    return apiGet<{ data: unknown[] }>(`${prefix}/admin/verifications/organizations${qs}`);
+  owners: (params?: { status?: string; search?: string; dateFrom?: string; dateTo?: string; limit?: number; offset?: number }) => {
+    const qs = buildVerificationQuery(params);
+    return apiGet<{ data: unknown[]; total?: number; limit?: number; offset?: number }>(`${prefix}/admin/verifications/owners${qs}`);
   },
-  branches: (params?: { status?: string }) => {
-    const qs = params?.status ? `?status=${params.status}` : "";
-    return apiGet<{ data: unknown[] }>(`${prefix}/admin/verifications/branches${qs}`);
+  organizations: (params?: { status?: string; search?: string; dateFrom?: string; dateTo?: string; limit?: number; offset?: number }) => {
+    const qs = buildVerificationQuery(params);
+    return apiGet<{ data: unknown[]; total?: number; limit?: number; offset?: number }>(`${prefix}/admin/verifications/organizations${qs}`);
   },
-  staff: (params?: { status?: string }) => {
-    const qs = params?.status ? `?status=${params.status}` : "";
-    return apiGet<{ data: unknown[] }>(`${prefix}/admin/verifications/staff${qs}`);
+  branches: (params?: { status?: string; search?: string; dateFrom?: string; dateTo?: string; limit?: number; offset?: number }) => {
+    const qs = buildVerificationQuery(params);
+    return apiGet<{ data: unknown[]; total?: number; limit?: number; offset?: number }>(`${prefix}/admin/verifications/branches${qs}`);
   },
-  producerOrgs: (params?: { status?: string }) => {
-    const qs = params?.status ? `?status=${params.status}` : "";
-    return apiGet<{ data: unknown[] }>(`${prefix}/admin/verifications/producer-orgs${qs}`);
+  staff: (params?: { status?: string; search?: string; dateFrom?: string; dateTo?: string; limit?: number; offset?: number }) => {
+    const qs = buildVerificationQuery(params);
+    return apiGet<{ data: unknown[]; total?: number; limit?: number; offset?: number }>(`${prefix}/admin/verifications/staff${qs}`);
   },
+  producerOrgs: (params?: { status?: string; search?: string; dateFrom?: string; dateTo?: string; limit?: number; offset?: number }) => {
+    const qs = buildVerificationQuery(params);
+    return apiGet<{ data: unknown[]; total?: number; limit?: number; offset?: number }>(`${prefix}/admin/verifications/producer-orgs${qs}`);
+  },
+  doctors: (params?: { status?: string; search?: string; country?: string; bodyId?: number; dateFrom?: string; dateTo?: string; limit?: number; offset?: number }) => {
+    const qs = buildVerificationQuery(params);
+    return apiGet<{ data: unknown[]; total?: number; limit?: number; offset?: number }>(`${prefix}/admin/verifications/doctors${qs}`);
+  },
+  getOwner: (id: number) => apiGet<{ data: Record<string, unknown> }>(`${prefix}/admin/verifications/owners/${id}`),
+  getOrganization: (id: number) => apiGet<{ data: Record<string, unknown> }>(`${prefix}/admin/verifications/organizations/${id}`),
+  getBranch: (id: number) => apiGet<{ data: Record<string, unknown> }>(`${prefix}/admin/verifications/branches/${id}`),
+  getStaff: (id: number) => apiGet<{ data: Record<string, unknown> }>(`${prefix}/admin/verifications/staff/${id}`),
+  getProducerOrg: (id: number) => apiGet<{ data: Record<string, unknown> }>(`${prefix}/admin/verifications/producer-orgs/${id}`),
+  getDoctor: (id: number) =>
+    apiGet<{ data: Record<string, unknown> }>(`${prefix}/admin/verifications/doctors/${id}`),
+  approveDoctor: (id: number, body?: { note?: string }) =>
+    apiPost<{ data: unknown }>(`${prefix}/admin/verifications/doctors/${id}/approve`, body ?? {}),
+  rejectDoctor: (id: number, body: { note?: string }) =>
+    apiPost<{ data: unknown }>(`${prefix}/admin/verifications/doctors/${id}/reject`, body),
 };
 
 // Products
@@ -126,4 +176,30 @@ export const branchManagerApi = {
     apiGet<{ data: any[] }>(
       `${prefix}/branches/${branchId}/manager/staff`,
     ),
+};
+
+// Clinical catalog (governance)
+export const adminClinicalCatalogApi = {
+  items: (params: { orgId: number; domainType?: string; search?: string; page?: number; limit?: number }) => {
+    const sp = new URLSearchParams();
+    sp.set("orgId", String(params.orgId));
+    if (params.domainType) sp.set("domainType", params.domainType);
+    if (params.search) sp.set("search", params.search);
+    if (params.page != null) sp.set("page", String(params.page));
+    if (params.limit != null) sp.set("limit", String(params.limit));
+    return apiGet<{ data: { items: unknown[]; pagination: unknown } }>(`${prefix}/admin/clinical-catalog/items?${sp}`);
+  },
+  approvals: () => apiGet<{ data: unknown[] }>(`${prefix}/admin/clinical-catalog/approvals`),
+  approve: (logId: number, body?: { remarks?: string }) => apiPost<{ data: unknown }>(`${prefix}/admin/clinical-catalog/approvals/${logId}/approve`, body ?? {}),
+  reject: (logId: number, body?: { remarks?: string }) => apiPost<{ data: unknown }>(`${prefix}/admin/clinical-catalog/approvals/${logId}/reject`, body ?? {}),
+  auditLogs: (params?: { orgId?: number; itemId?: number; page?: number; limit?: number }) => {
+    const sp = new URLSearchParams();
+    if (params?.orgId != null) sp.set("orgId", String(params.orgId));
+    if (params?.itemId != null) sp.set("itemId", String(params.itemId));
+    if (params?.page != null) sp.set("page", String(params.page));
+    if (params?.limit != null) sp.set("limit", String(params.limit));
+    return apiGet<{ data: { items: unknown[]; pagination: { page: number; limit: number; total: number; totalPages: number } } }>(
+      `${prefix}/admin/clinical-catalog/audit-logs${sp.toString() ? `?${sp}` : ""}`
+    );
+  },
 };

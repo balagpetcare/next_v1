@@ -95,6 +95,9 @@ function OwnerStaffNewContent() {
     const isDeliveryHub = branchTypes.some(
       (x) => String(x?.type?.code || "").toUpperCase() === "DELIVERY_HUB"
     );
+    const isClinic = branchTypes.some(
+      (x) => String(x?.type?.code || "").toUpperCase() === "CLINIC"
+    );
 
     if (isDeliveryHub) {
       return [
@@ -103,11 +106,15 @@ function OwnerStaffNewContent() {
       ];
     }
 
-    return [
+    const base = [
       { value: "BRANCH_MANAGER", label: "Branch Manager" },
       { value: "BRANCH_STAFF", label: "Branch Staff" },
       { value: "SELLER", label: "Seller" },
     ];
+    if (isClinic) {
+      base.push({ value: "DOCTOR", label: "Doctor (clinic)", inviteAsDoctor: true });
+    }
+    return base;
   }, [selectedBranch]);
 
   // Reset role when branch changes
@@ -141,11 +148,15 @@ function OwnerStaffNewContent() {
 
     setSubmitting(true);
     try {
+      const selectedRoleOpt = roleOptions.find((o) => o.value === role);
+      const inviteAsDoctor = Boolean(selectedRoleOpt?.inviteAsDoctor);
+      const apiRole = inviteAsDoctor ? "BRANCH_STAFF" : role;
       const payload = {
-        role,
+        role: apiRole,
         phone: phone?.trim() || undefined,
         email: email?.trim() || undefined,
         displayName: displayName?.trim() || undefined,
+        ...(inviteAsDoctor ? { inviteAsDoctor: true } : {}),
       };
 
       const j = await ownerPost(`/api/v1/owner/branches/${branchId}/members/invite`, payload);

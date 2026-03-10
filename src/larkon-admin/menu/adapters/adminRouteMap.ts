@@ -45,6 +45,12 @@ export const IMPLEMENTED_ADMIN_HREFS: Set<string> = new Set([
   // Verification Center
   '/admin/verification-metrics',
   '/admin/verifications',
+  '/admin/verifications/owners',
+  '/admin/verifications/organizations',
+  '/admin/verifications/branches',
+  '/admin/verifications/staff',
+  '/admin/verifications/producer-orgs',
+  '/admin/verifications/doctors',
   // Producer Governance
   '/admin/producer-overview',
   '/admin/producer-governance',
@@ -72,6 +78,7 @@ export const IMPLEMENTED_ADMIN_HREFS: Set<string> = new Set([
   '/admin/products',
   '/admin/products/moderation',
   '/admin/products/master-catalog',
+  '/admin/clinical-catalog',
   '/admin/products/master-catalog/import',
   '/admin/products/approvals',
   '/admin/vendors',
