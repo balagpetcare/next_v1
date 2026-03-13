@@ -14,14 +14,16 @@ const nextConfig = {
     },
   },
 
-  // Proxy /api/v1/* to backend (port 3000). beforeFiles so API hits backend first.
-  // Exclude /api/proxy/* so Next.js API routes (e.g. producer-print proxy) run.
+  // Do NOT put /api/v1/* rewrite in beforeFiles: so requests hit the App Router API route
+  // (app/api/v1/[[...path]]/route.js) first. That route proxies to the backend and forwards
+  // Set-Cookie, so cookie-based login works on shared login (e.g. localhost:3104). fallback
+  // rewrite for API when the route is not hit.
   async rewrites() {
     const apiTarget = process.env.API_BASE_URL || "http://localhost:3000";
+    const apiRewrite = { source: "/api/v1/:path*", destination: `${apiTarget}/api/v1/:path*` };
     return {
-      beforeFiles: [
-        { source: "/api/v1/:path*", destination: `${apiTarget}/api/v1/:path*` },
-      ],
+      beforeFiles: [],
+      fallback: [apiRewrite],
     };
   },
 

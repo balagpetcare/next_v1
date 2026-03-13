@@ -78,6 +78,12 @@ export default function Page() {
     return () => { cancelled = true; };
   }, [router]);
 
+  useEffect(() => {
+    if (checked) {
+      router.replace("/mother/dashboard");
+    }
+  }, [checked, router]);
+
   if (!checked) {
     return (
       <div className="min-vh-100 d-flex align-items-center justify-content-center">
@@ -86,7 +92,6 @@ export default function Page() {
     );
   }
 
-  router.replace("/mother/dashboard");
   return (
     <div className="min-vh-100 d-flex align-items-center justify-content-center">
       <div className="text-secondary">{t("common.loading")}</div>

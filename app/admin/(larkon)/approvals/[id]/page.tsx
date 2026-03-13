@@ -8,6 +8,7 @@ import ErrorState from '@/src/bpa/admin/components/ErrorState'
 import LoadingSkeleton from '@/src/bpa/admin/components/LoadingSkeleton'
 import { getGovernance, postGovernance } from '@/src/bpa/admin/lib/governanceApi'
 import { adminToast } from '@/src/bpa/admin/lib/adminToast'
+import { formatValueForDisplay, humanizeFieldLabel } from '@/src/lib/displayFormatters'
 
 type RevisionItem = { id: number; revisionNumber: number; submittedByUserId: number; approvalId: number | null; createdAt: string }
 
@@ -348,9 +349,9 @@ export default function AdminApprovalDetailPage() {
                       {product.specJson && typeof product.specJson === 'object' ? (
                         <div className="mt-3">
                           <h6 className="text-muted">Specs</h6>
-                          <pre className="bg-light p-2 rounded small mb-0" style={{ maxHeight: 200, overflow: 'auto' }}>
-                            {JSON.stringify(product.specJson, null, 2)}
-                          </pre>
+                          <div className="bg-light p-2 rounded small mb-0" style={{ maxHeight: 200, overflow: 'auto' }}>
+                            {formatValueForDisplay(product.specJson)}
+                          </div>
                         </div>
                       ) : null}
                     </>
@@ -486,7 +487,7 @@ export default function AdminApprovalDetailPage() {
                       <div className="mt-2 p-2 bg-light rounded small">
                         {Object.entries(revisionDiff).map(([field, { from, to }]) => (
                           <div key={field} className="mb-2">
-                            <strong>{field}</strong>: <span className="text-decoration-line-through">{JSON.stringify(from)}</span> → <span>{JSON.stringify(to)}</span>
+                            <strong>{humanizeFieldLabel(field)}</strong>: <span className="text-decoration-line-through">{formatValueForDisplay(from)}</span> → <span>{formatValueForDisplay(to)}</span>
                           </div>
                         ))}
                       </div>

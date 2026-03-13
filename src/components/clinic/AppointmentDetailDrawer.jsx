@@ -1,10 +1,12 @@
 "use client";
 
+import Link from "next/link";
+
 /**
  * Right-side detail drawer for a single appointment.
- * Sections: Basic Info, Patient/Pet, Clinical, Queue/Progress, Payment, Timeline (audit).
+ * Sections: Basic Info, Patient/Pet, Clinical, Queue/Progress, Payment, Workflow (Visit → Case → Billing), Timeline (audit).
  */
-export default function AppointmentDetailDrawer({ show, onClose, appointment, loading }) {
+export default function AppointmentDetailDrawer({ show, onClose, appointment, loading, branchId }) {
   if (!show) return null;
 
   const a = appointment;
@@ -95,6 +97,23 @@ export default function AppointmentDetailDrawer({ show, onClose, appointment, lo
               <Row label="Paid amount" value={a.paidAmount != null ? Number(a.paidAmount) : "—"} />
               <Row label="Payment method" value={a.paymentMethod ?? "—"} />
             </Section>
+
+            {branchId && (
+              <Section title="Workflow (Appointment → Visit → Case → Billing)">
+                {a.visitId ? (
+                  <div className="d-flex flex-wrap gap-2 small">
+                    <Link href={`/staff/branch/${branchId}/clinic/visits/${a.visitId}`} className="btn btn-outline-primary btn-sm">
+                      View Visit
+                    </Link>
+                    <Link href={`/staff/branch/${branchId}/clinic/billing?visitId=${a.visitId}`} className="btn btn-outline-secondary btn-sm">
+                      Billing
+                    </Link>
+                  </div>
+                ) : (
+                  <p className="small text-muted mb-0">Check in from Queue to start a visit. Then open Visit → Case → Billing.</p>
+                )}
+              </Section>
+            )}
 
             <Section title="Timeline">
               {events.length === 0 ? (

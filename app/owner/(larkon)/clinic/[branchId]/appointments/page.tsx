@@ -7,7 +7,9 @@ import {
   ownerClinicAppointments,
   ownerClinicAppointmentCancel,
   ownerClinicAppointmentReschedule,
+  ownerClinicAppointmentConfirm,
   ownerClinicSlots,
+  ownerClinicBookingEligibleDoctors,
 } from "@/app/owner/_lib/ownerApi";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 
@@ -47,6 +49,11 @@ export default function OwnerClinicAppointmentsPage() {
   const [error, setError] = useState("");
   const [date, setDate] = useState(() => new Date().toISOString().split("T")[0]);
   const [statusFilter, setStatusFilter] = useState("");
+  const [doctorFilter, setDoctorFilter] = useState<string | number>("");
+  const [serviceFilter, setServiceFilter] = useState<string | number>("");
+  const [appointmentTypeFilter, setAppointmentTypeFilter] = useState("");
+  const [showNewModal, setShowNewModal] = useState(false);
+  const [doctorsForFilter, setDoctorsForFilter] = useState<{ id: number; displayName?: string }[]>([]);
   const [actioningId, setActioningId] = useState<number | null>(null);
   const [rescheduleApt, setRescheduleApt] = useState<AppointmentItem | null>(null);
 
@@ -58,6 +65,9 @@ export default function OwnerClinicAppointmentsPage() {
       const result = await ownerClinicAppointments(branchId, {
         date,
         status: statusFilter || undefined,
+        doctorId: doctorFilter !== "" ? Number(doctorFilter) : undefined,
+        serviceId: serviceFilter !== "" ? Number(serviceFilter) : undefined,
+        appointmentType: appointmentTypeFilter || undefined,
         limit: 100,
         offset: 0,
       });
@@ -72,12 +82,19 @@ export default function OwnerClinicAppointmentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [branchId, date, statusFilter]);
+  }, [branchId, date, statusFilter, doctorFilter, serviceFilter, appointmentTypeFilter]);
 
   useEffect(() => {
     if (!branchId) return;
     loadAppointments();
   }, [branchId, loadAppointments]);
+
+  useEffect(() => {
+    if (!branchId) return;
+    ownerClinicBookingEligibleDoctors(branchId, {})
+      .then((list: unknown) => setDoctorsForFilter(Array.isArray(list) ? list as { id: number; displayName?: string }[] : []))
+      .catch(() => setDoctorsForFilter([]));
+  }, [branchId]);
 
   async function handleCancel(appointmentId: number, reason?: string) {
     if (!branchId) return;
@@ -109,8 +126,23 @@ export default function OwnerClinicAppointmentsPage() {
     }
   }
 
+  async function handleConfirm(appointmentId: number) {
+    if (!branchId) return;
+    setActioningId(appointmentId);
+    setError("");
+    try {
+      await ownerClinicAppointmentConfirm(branchId, appointmentId);
+      await loadAppointments();
+    } catch (e) {
+      setError((e as Error)?.message || "Confirm failed");
+    } finally {
+      setActioningId(null);
+    }
+  }
+
   const canCancel = (s: string) => ["BOOKED", "CONFIRMED", "CHECKED_IN"].includes(s);
   const canReschedule = (s: string) => ["BOOKED", "CONFIRMED"].includes(s);
+  const canConfirm = (s: string) => s === "BOOKED";
 
   if (!branchId) {
     return (
@@ -164,12 +196,47 @@ export default function OwnerClinicAppointmentsPage() {
               <option value="CANCELLED">CANCELLED</option>
               <option value="NO_SHOW">NO_SHOW</option>
             </select>
+            <select
+              className="form-select form-select-sm"
+              style={{ width: 160 }}
+              value={doctorFilter}
+              onChange={(e) => setDoctorFilter(e.target.value === "" ? "" : Number(e.target.value))}
+            >
+              <option value="">All doctors</option>
+              {doctorsForFilter.map((d) => (
+                <option key={d.id} value={d.id}>{d.displayName ?? `Doctor ${d.id}`}</option>
+              ))}
+            </select>
+            <select
+              className="form-select form-select-sm"
+              style={{ width: 150 }}
+              value={appointmentTypeFilter}
+              onChange={(e) => setAppointmentTypeFilter(e.target.value)}
+            >
+              <option value="">All types</option>
+              <option value="CONSULTATION">Consultation</option>
+              <option value="SERVICE">Service</option>
+              <option value="PACKAGE">Package</option>
+              <option value="SURGERY">Surgery</option>
+              <option value="FOLLOW_UP">Follow-up</option>
+            </select>
+            <input
+              type="number"
+              className="form-control form-control-sm"
+              style={{ width: 90 }}
+              placeholder="Service ID"
+              value={serviceFilter === "" ? "" : serviceFilter}
+              onChange={(e) => setServiceFilter(e.target.value === "" ? "" : Number(e.target.value))}
+            />
             <Link href={`/owner/clinic/${branchId}`} className="btn btn-outline-secondary btn-sm radius-12">
               ← Branch
             </Link>
             <Link href={`/owner/clinic/${branchId}/calendar`} className="btn btn-outline-primary btn-sm radius-12">
               Calendar
             </Link>
+            <button type="button" className="btn btn-primary btn-sm radius-12" onClick={() => setShowNewModal(true)}>
+              New appointment
+            </button>
           </div>
           <p className="text-muted small mb-0">
             To create or run day-to-day appointments (check-in, queue), use the <strong>Staff Panel</strong> for this branch.
@@ -221,6 +288,16 @@ export default function OwnerClinicAppointmentsPage() {
                         </td>
                         <td className="text-end">
                           <div className="btn-group btn-group-sm">
+                            {canConfirm(status) && (
+                              <button
+                                type="button"
+                                className="btn btn-outline-success"
+                                onClick={() => handleConfirm(a.id)}
+                                disabled={acting}
+                              >
+                                {acting ? "…" : "Confirm"}
+                              </button>
+                            )}
                             {canCancel(status) && (
                               <button
                                 type="button"
@@ -256,6 +333,27 @@ export default function OwnerClinicAppointmentsPage() {
           {total > 0 && <small className="text-muted d-block mt-2">Total: {total}</small>}
         </div>
       </div>
+
+      {showNewModal && (
+        <div className="modal d-block bg-dark bg-opacity-50" tabIndex={-1}>
+          <div className="modal-dialog">
+            <div className="modal-content radius-12">
+              <div className="modal-header">
+                <h5 className="modal-title">New appointment</h5>
+                <button type="button" className="btn-close" onClick={() => setShowNewModal(false)} aria-label="Close" />
+              </div>
+              <div className="modal-body">
+                <p className="mb-0">
+                  To create an appointment with the full booking flow (patient, service/package, doctor, slot), use the <strong>Staff Panel</strong> for this branch.
+                </p>
+                <Link href={`/staff/branch/${branchId}/clinic/appointments`} className="btn btn-primary mt-3">
+                  Open Staff Appointments
+                </Link>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {rescheduleApt && (
         <RescheduleModal

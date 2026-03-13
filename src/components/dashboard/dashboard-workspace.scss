@@ -1,0 +1,54 @@
+//
+// BPA Dashboard workspace & layout
+// Import from dashboard-overrides or layout. Full-width premium workspace.
+//
+
+// Spacing scale (align with Bootstrap; use in components)
+.bpa-workspace {
+  width: 100%;
+  padding: 1.5rem;
+
+  @media (min-width: 768px) {
+    padding: 2rem;
+  }
+
+  &--no-padding {
+    padding: 0;
+  }
+}
+
+.bpa-page-header {
+  .breadcrumb {
+    font-size: 0.875rem;
+  }
+}
+
+.bpa-filter-bar {
+  min-height: 2.5rem;
+}
+
+.bpa-stat-card {
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  .card[role="button"]:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 0.25rem 0.5rem rgba(0, 0, 0, 0.08) !important;
+  }
+}
+
+.bpa-sticky-action-bar {
+  z-index: 1020;
+}
+
+.bpa-detail-drawer {
+  &.offcanvas {
+    max-width: 420px;
+    @media (min-width: 576px) {
+      max-width: 480px;
+    }
+  }
+}
+
+.bpa-empty-state,
+.bpa-loading-state {
+  min-height: 120px;
+}

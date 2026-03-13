@@ -2,28 +2,22 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ownerGet } from "@/app/owner/_lib/ownerApi";
+import { ownerGetSafe } from "@/app/owner/_lib/ownerApi";
 
 export default function ProductSummaryCard({ loading: externalLoading }) {
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
-  const [error, setError] = useState("");
 
   useEffect(() => {
     async function loadData() {
-      try {
-        setLoading(true);
-        setError("");
-        const res = await ownerGet("/api/v1/owner/products/summary");
-        if (res && res?.success && res.data) {
-          setData(res.data);
-        }
-      } catch (e) {
-        setError(e?.message || "Failed to load product summary");
-        console.error("Product summary error:", e);
-      } finally {
-        setLoading(false);
+      setLoading(true);
+      const res = await ownerGetSafe("/api/v1/owner/products/summary");
+      if (res && res?.success && res.data) {
+        setData(res.data);
+      } else {
+        setData(null);
       }
+      setLoading(false);
     }
     loadData();
   }, []);
@@ -42,12 +36,6 @@ export default function ProductSummaryCard({ loading: externalLoading }) {
             View All
           </Link>
         </div>
-
-        {error && (
-          <div className="alert alert-danger radius-8 mb-3" style={{ fontSize: 12 }}>
-            {error}
-          </div>
-        )}
 
         {isLoading ? (
           <div className="text-center py-3">
@@ -170,6 +158,10 @@ export default function ProductSummaryCard({ loading: externalLoading }) {
               </div>
             )}
           </>
+        ) : !loading ? (
+          <div className="text-center py-3 text-secondary-light" style={{ fontSize: 12 }}>
+            Summary unavailable. Ensure the backend is running (e.g. npm run dev in backend-api).
+          </div>
         ) : null}
       </div>
     </div>

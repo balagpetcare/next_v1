@@ -20,6 +20,7 @@ export interface DoctorAppointmentDrawerProps {
   onCall: (id: number) => Promise<void>;
   onStartConsult: (id: number) => Promise<void>;
   onComplete: (id: number) => Promise<void>;
+  onConfirm?: (id: number) => Promise<void>;
   onCancel: (id: number, reason: string) => Promise<void>;
   onReschedule: (id: number, data: { scheduledStartAt: string; scheduledEndAt: string }) => Promise<void>;
   onAddNote: (id: number, body: { noteType?: string; contentJson?: Record<string, unknown> }) => Promise<void>;
@@ -37,6 +38,7 @@ export function DoctorAppointmentDrawer({
   onCall,
   onStartConsult,
   onComplete,
+  onConfirm,
   onCancel,
   onReschedule,
   onAddNote,
@@ -140,6 +142,7 @@ export function DoctorAppointmentDrawer({
                   onCall={onCall}
                   onStartConsult={onStartConsult}
                   onComplete={onComplete}
+                  onConfirm={onConfirm}
                   onReschedule={onReschedule}
                   onCancel={onCancel}
                   onRefresh={onRefresh}

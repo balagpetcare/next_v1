@@ -33,7 +33,7 @@ export default function LarkonDashboardShell({ children, basePath }: LarkonDashb
             <Suspense fallback={<FallbackLoading />}>
               <VerticalNavigationBar />
             </Suspense>
-            <div className="page-content">
+            <div className="page-content bpa-app-workspace">
               <div className="container-fluid">{children}</div>
               <Footer />
             </div>

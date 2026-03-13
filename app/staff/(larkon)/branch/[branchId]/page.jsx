@@ -13,8 +13,8 @@ import BranchKpiRow from "@/src/components/branch/BranchKpiRow";
 import BranchTodayBoard from "@/src/components/branch/BranchTodayBoard";
 import BranchAlertsPanel from "@/src/components/branch/BranchAlertsPanel";
 import BranchActivityTimeline from "@/src/components/branch/BranchActivityTimeline";
-
-const LAST_ACTIVE_BRANCH_KEY = "lastActiveBranchId";
+import { OperationalAlertStrip } from "@/src/components/dashboard";
+import { LAST_ACTIVE_BRANCH_KEY } from "@/lib/logoutState";
 
 const CLINIC_PERMISSIONS = [
   "clinic.overview.read",
@@ -51,12 +51,17 @@ export default function StaffBranchDashboardPage() {
     hasViewPermission,
   } = useBranchContext(branchId);
 
-  // 401 → redirect to login (existing pattern)
+  // 401 → clear stale lastActiveBranchId so re-login doesn't auto-redirect here, then redirect to login
   useEffect(() => {
     if (errorCode === "unauthorized") {
+      try {
+        if (typeof window !== "undefined" && branchId && localStorage.getItem(LAST_ACTIVE_BRANCH_KEY) === String(branchId)) {
+          localStorage.removeItem(LAST_ACTIVE_BRANCH_KEY);
+        }
+      } catch (_) {}
       router.replace("/staff/login");
     }
-  }, [errorCode, router]);
+  }, [errorCode, router, branchId]);
 
   // On successful load, persist last active branch
   useEffect(() => {
@@ -81,12 +86,11 @@ export default function StaffBranchDashboardPage() {
     );
   }
 
-  // 403: AccessDenied (shared component); clear lastActiveBranchId so selector won't auto-redirect here
+  // 403: AccessDenied; clear lastActiveBranchId so selector won't auto-redirect here after re-login
   if (errorCode === "forbidden" || !hasViewPermission) {
     if (typeof window !== "undefined" && branchId) {
       try {
-        const key = "lastActiveBranchId";
-        if (localStorage.getItem(key) === String(branchId)) localStorage.removeItem(key);
+        if (localStorage.getItem(LAST_ACTIVE_BRANCH_KEY) === String(branchId)) localStorage.removeItem(LAST_ACTIVE_BRANCH_KEY);
       } catch (_) {}
     }
     return (
@@ -104,8 +108,13 @@ export default function StaffBranchDashboardPage() {
     );
   }
 
-  // 404: Not Found
+  // 404: Not Found — clear lastActiveBranchId so re-login doesn't auto-redirect to invalid branch
   if (errorCode === "not_found" || (!branch && !isLoading)) {
+    if (typeof window !== "undefined" && branchId) {
+      try {
+        if (localStorage.getItem(LAST_ACTIVE_BRANCH_KEY) === String(branchId)) localStorage.removeItem(LAST_ACTIVE_BRANCH_KEY);
+      } catch (_) {}
+    }
     return (
       <div className="container py-40">
         <Card>
@@ -165,6 +174,8 @@ export default function StaffBranchDashboardPage() {
           branch={branch}
           branchId={branchId}
         />
+
+        <OperationalAlertStrip branchId={branchId} className="mb-3" />
 
         <div className="row g-20 mb-24">
           <div className="col-md-6">

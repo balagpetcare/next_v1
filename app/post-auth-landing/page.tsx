@@ -3,6 +3,12 @@
 import { Suspense, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import {
+  getBrowserSafeApiBase,
+  isPathAllowedForPanels,
+  resolveLandingPathFromMe,
+  CHOOSE_ACTIVITY_PATH,
+} from "@/lib/authRedirect";
 
 const COOKIE_SELECTED_PANEL = "selectedPanel";
 const LOOP_GUARD_KEY = "postAuth_lastRedirect";
@@ -19,16 +25,16 @@ function clearCookie(name: string) {
   document.cookie = `${name}=; path=/; max-age=0`;
 }
 
-function apiBase() {
-  if (typeof window !== "undefined") return "";
-  return process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
-}
-
 async function fetchMe() {
-  const res = await fetch(`${apiBase()}/api/v1/auth/me`, {
+  const base = getBrowserSafeApiBase();
+  const url = `${base}/api/v1/auth/me`;
+  const res = await fetch(url, {
     credentials: "include",
     headers: { Accept: "application/json" },
   });
+  if (process.env.NODE_ENV === "development") {
+    console.info("[post-auth-landing] auth/me", { url: url || "(same-origin)", status: res.status, ok: res.ok });
+  }
   if (!res.ok) throw new Error("Unauthorized");
   return res.json();
 }
@@ -105,6 +111,12 @@ function PostAuthLandingContent() {
         }
         const intendedPanel = getCookie("intendedPanel");
 
+        // Only trust selectedPanel if it is in server-allowed panels (prevents cross-panel redirect loop)
+        if (selectedPanel && allowedPanels && !allowedPanels.includes(selectedPanel)) {
+          clearCookie(COOKIE_SELECTED_PANEL);
+          selectedPanel = null;
+        }
+
         const payload = {
           onboardingIntroRequired,
           needsActivitySelection,
@@ -156,37 +168,52 @@ function PostAuthLandingContent() {
           return;
         }
 
-        // B) verificationRequired && verificationStatus != APPROVED -> verificationRedirect
+        // B) verificationRequired && verificationStatus != APPROVED -> verificationRedirect (only if allowed)
         if (verificationRequired && verificationStatus !== "APPROVED" && verificationRedirect) {
-          recordRedirect(verificationRedirect);
-          doRedirect(router, verificationRedirect, "verification_required");
-          return;
+          if (isPathAllowedForPanels(verificationRedirect, allowedPanels)) {
+            recordRedirect(verificationRedirect);
+            doRedirect(router, verificationRedirect, "verification_required");
+            return;
+          }
         }
 
-        // C) needsActivitySelection -> /choose-activity (do NOT trust selectedPanel when unclassified)
+        // C) needsActivitySelection -> use selectedPanel only when in allowedPanels; else choose-activity
         if (needsActivitySelection && !unclassified) {
-          if (isCustomerOnly && selectedPanel === "mother") {
+          if (isCustomerOnly && selectedPanel === "mother" && isPathAllowedForPanels("/mother", allowedPanels)) {
             recordRedirect("/mother");
             doRedirect(router, "/mother", "isCustomerOnly_selectedPanel_mother");
             return;
           }
-          if (selectedPanel && PANEL_PATHS[selectedPanel]) {
+          if (selectedPanel && PANEL_PATHS[selectedPanel] && allowedPanels?.includes(selectedPanel)) {
             const path = PANEL_PATHS[selectedPanel];
             recordRedirect(path);
             doRedirect(router, path, `selectedPanel_${selectedPanel}`);
             return;
           }
-          recordRedirect("/choose-activity");
-          doRedirect(router, "/choose-activity", "needsActivitySelection");
+          recordRedirect(CHOOSE_ACTIVITY_PATH);
+          doRedirect(router, CHOOSE_ACTIVITY_PATH, "needsActivitySelection");
           return;
         }
 
-        // D) default_redirect
-        const path = default_redirect.startsWith("/") ? default_redirect : `/${default_redirect}`;
+        // D) default_redirect: resolve safe path (never redirect to a panel user cannot access)
+        const path = resolveLandingPathFromMe({
+          default_redirect,
+          allowedPanels: allowedPanels ?? [],
+          selectedPanel,
+          intendedPanel,
+          panelPaths: PANEL_PATHS,
+        });
         recordRedirect(path);
         doRedirect(router, path, "default_redirect");
       } catch (e) {
         if (cancelled) return;
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[post-auth-landing] auth/me failed, redirecting to /login", e?.message ?? e);
+        }
+        // Redirect to neutral login (no next param) to avoid cross-panel loop
+        try {
+          sessionStorage.removeItem("staffLogin_lastRedirectAt");
+        } catch (_) {}
         router.replace("/login");
       }
     }

@@ -4,6 +4,8 @@
 // Uses theme CSS variables so light/dark and primary color apply to the entire dashboard.
 //
 
+@import '../../components/dashboard/dashboard-workspace.scss';
+
 .larkon-dashboard {
   // Theme: ensure wrapper and content area use Bootstrap theme variables (no hard-coded light colors)
   &.wrapper {

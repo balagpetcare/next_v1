@@ -64,7 +64,7 @@ export default function MedicineControlDashboardPage() {
       {loading && <div className="mb-24 text-center text-secondary-light">Loading...</div>}
       {!loading && dashboard && (
         <div className="row g-3 mb-24">
-          <div className="col-md-3">
+          <div className="col-md-2">
             <div className="card radius-12 h-100">
               <div className="card-body">
                 <h6 className="text-muted text-uppercase small mb-1">Issued today</h6>
@@ -72,7 +72,7 @@ export default function MedicineControlDashboardPage() {
               </div>
             </div>
           </div>
-          <div className="col-md-3">
+          <div className="col-md-2">
             <div className="card radius-12 h-100">
               <div className="card-body">
                 <h6 className="text-muted text-uppercase small mb-1">Unresolved returns</h6>
@@ -80,7 +80,7 @@ export default function MedicineControlDashboardPage() {
               </div>
             </div>
           </div>
-          <div className="col-md-3">
+          <div className="col-md-2">
             <div className="card radius-12 h-100">
               <div className="card-body">
                 <h6 className="text-muted text-uppercase small mb-1">Active vials</h6>
@@ -88,11 +88,27 @@ export default function MedicineControlDashboardPage() {
               </div>
             </div>
           </div>
-          <div className="col-md-3">
+          <div className="col-md-2">
             <div className="card radius-12 h-100">
               <div className="card-body">
                 <h6 className="text-muted text-uppercase small mb-1">Pending approvals</h6>
                 <p className="mb-0 fs-4 fw-semibold">{dashboard.pendingApprovals ?? 0}</p>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-2">
+            <div className="card radius-12 h-100">
+              <div className="card-body">
+                <h6 className="text-muted text-uppercase small mb-1">Tokens generated</h6>
+                <p className="mb-0 fs-4 fw-semibold">{dashboard?.injectionMonitor?.tokensGenerated ?? 0}</p>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-2">
+            <div className="card radius-12 h-100">
+              <div className="card-body">
+                <h6 className="text-muted text-uppercase small mb-1">Flagged recon</h6>
+                <p className="mb-0 fs-4 fw-semibold">{dashboard?.reconciliation?.flaggedOpen ?? 0}</p>
               </div>
             </div>
           </div>
@@ -108,6 +124,10 @@ export default function MedicineControlDashboardPage() {
             <Link href={`${base}/returns`} className="btn btn-outline-primary btn-sm">Vial Returns</Link>
             <Link href={`${base}/audit-bins`} className="btn btn-outline-primary btn-sm">Audit Bins</Link>
             <Link href={`${base}/policies`} className="btn btn-outline-primary btn-sm">Policies</Link>
+            <Link href={`${base}/injection-tokens`} className="btn btn-outline-primary btn-sm">Injection Tokens</Link>
+            <Link href={`${base}/injection-room`} className="btn btn-outline-primary btn-sm">Injection Room</Link>
+            <Link href={`${base}/injection-monitor`} className="btn btn-outline-primary btn-sm">Injection Monitor</Link>
+            <Link href={`${base}/reconciliation`} className="btn btn-outline-primary btn-sm">Reconciliation</Link>
           </div>
         </div>
       </div>

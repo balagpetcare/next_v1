@@ -566,23 +566,97 @@ export interface ClinicRoom {
   branchId: number;
   name: string;
   roomType: string;
+  code?: string | null;
+  floor?: string | null;
+  zone?: string | null;
   capacity?: number | null;
   status: string;
+  operationalStatus?: string;
   notes?: string | null;
+  bookable?: boolean;
+  cleaningBufferMinutes?: number | null;
+  maintenanceBufferMinutes?: number | null;
+  supportsWalkIns?: boolean;
+  emergencyOverrideAllowed?: boolean;
+  preferredDoctorIds?: number[];
+  allowedServiceIds?: number[];
+  allowedPackageIds?: number[];
   createdAt?: string;
   updatedAt?: string;
 }
 
-export async function ownerClinicRooms(branchId: string | number): Promise<ClinicRoom[] | null> {
-  const res = await ownerGet<{ success?: boolean; data?: ClinicRoom[] }>(
-    `/api/v1/owner/clinic/branches/${branchId}/rooms`
+export type RoomSummary = {
+  total: number;
+  availableNow: number;
+  occupiedNow: number;
+  cleaning: number;
+  maintenance: number;
+  blocked: number;
+  todayBookings: number;
+};
+
+export async function ownerClinicRooms(
+  branchId: string | number,
+  params?: { roomType?: string; status?: string; operationalStatus?: string; zone?: string; floor?: string; summary?: boolean }
+): Promise<ClinicRoom[] | null> {
+  const q = new URLSearchParams();
+  if (params?.roomType) q.set("roomType", params.roomType);
+  if (params?.status) q.set("status", params.status);
+  if (params?.operationalStatus) q.set("operationalStatus", params.operationalStatus);
+  if (params?.zone) q.set("zone", params.zone);
+  if (params?.floor) q.set("floor", params.floor);
+  if (params?.summary) q.set("summary", "1");
+  const url = `/api/v1/owner/clinic/branches/${branchId}/rooms${q.toString() ? `?${q.toString()}` : ""}`;
+  const res = await ownerGet<{ success?: boolean; data?: ClinicRoom[]; summary?: RoomSummary }>(url);
+  return res?.data ?? null;
+}
+
+export async function ownerClinicRoomsWithSummary(
+  branchId: string | number,
+  filters?: { roomType?: string; status?: string; operationalStatus?: string; zone?: string; floor?: string }
+): Promise<{ rooms: ClinicRoom[]; summary: RoomSummary } | null> {
+  const res = await ownerGet<{ success?: boolean; data?: ClinicRoom[]; summary?: RoomSummary }>(
+    `/api/v1/owner/clinic/branches/${branchId}/rooms?summary=1${filters?.roomType ? `&roomType=${encodeURIComponent(filters.roomType)}` : ""}${filters?.status ? `&status=${encodeURIComponent(filters.status)}` : ""}${filters?.operationalStatus ? `&operationalStatus=${encodeURIComponent(filters.operationalStatus)}` : ""}${filters?.zone ? `&zone=${encodeURIComponent(filters.zone)}` : ""}${filters?.floor ? `&floor=${encodeURIComponent(filters.floor)}` : ""}`
+  );
+  if (!res?.data) return null;
+  return { rooms: res.data, summary: res.summary ?? { total: 0, availableNow: 0, occupiedNow: 0, cleaning: 0, maintenance: 0, blocked: 0, todayBookings: 0 } };
+}
+
+export async function ownerClinicRoomDetail(branchId: string | number, roomId: string | number): Promise<ClinicRoom | null> {
+  const res = await ownerGet<{ success?: boolean; data?: ClinicRoom }>(
+    `/api/v1/owner/clinic/branches/${branchId}/rooms/${roomId}`
   );
   return res?.data ?? null;
 }
 
+export type RoomAuditEntry = { id: number; action: string; summaryText: string; actorId: string; createdAt: string };
+
+export async function ownerClinicRoomAudit(branchId: string | number, roomId: string | number, limit?: number): Promise<RoomAuditEntry[]> {
+  const url = `/api/v1/owner/clinic/branches/${branchId}/rooms/${roomId}/audit${limit != null ? `?limit=${limit}` : ""}`;
+  const res = await ownerGet<{ success?: boolean; data?: RoomAuditEntry[] }>(url);
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
 export async function ownerClinicRoomCreate(
   branchId: string | number,
-  data: { name: string; roomType?: string; capacity?: number; status?: string; notes?: string }
+  data: {
+    name: string;
+    roomType?: string;
+    code?: string;
+    floor?: string;
+    zone?: string;
+    capacity?: number;
+    status?: string;
+    notes?: string;
+    bookable?: boolean;
+    cleaningBufferMinutes?: number;
+    maintenanceBufferMinutes?: number;
+    supportsWalkIns?: boolean;
+    emergencyOverrideAllowed?: boolean;
+    preferredDoctorIds?: number[];
+    allowedServiceIds?: number[];
+    allowedPackageIds?: number[];
+  }
 ) {
   const res = await ownerPost<{ success?: boolean; data?: ClinicRoom }>(
     `/api/v1/owner/clinic/branches/${branchId}/rooms`,
@@ -594,7 +668,25 @@ export async function ownerClinicRoomCreate(
 export async function ownerClinicRoomUpdate(
   branchId: string | number,
   roomId: string | number,
-  data: { name?: string; roomType?: string; capacity?: number; status?: string; notes?: string }
+  data: {
+    name?: string;
+    roomType?: string;
+    code?: string;
+    floor?: string;
+    zone?: string;
+    capacity?: number;
+    status?: string;
+    operationalStatus?: string;
+    notes?: string;
+    bookable?: boolean;
+    cleaningBufferMinutes?: number;
+    maintenanceBufferMinutes?: number;
+    supportsWalkIns?: boolean;
+    emergencyOverrideAllowed?: boolean;
+    preferredDoctorIds?: number[];
+    allowedServiceIds?: number[];
+    allowedPackageIds?: number[];
+  }
 ) {
   const res = await ownerPatch<{ success?: boolean; data?: ClinicRoom }>(
     `/api/v1/owner/clinic/branches/${branchId}/rooms/${roomId}`,
@@ -608,6 +700,59 @@ export async function ownerClinicRoomDelete(branchId: string | number, roomId: s
     `/api/v1/owner/clinic/branches/${branchId}/rooms/${roomId}`
   );
   return (res as { data?: ClinicRoom })?.data ?? null;
+}
+
+export type ScheduleBoardAppointment = {
+  id: number;
+  roomId: number | null;
+  roomName: string | null;
+  doctorId: number | null;
+  doctorName: string | null;
+  serviceId: number;
+  serviceName: string;
+  patientId: number | null;
+  petId: number | null;
+  petName: string | null;
+  scheduledStartAt: string;
+  scheduledEndAt: string;
+  status: string;
+  hasConflict: boolean;
+};
+
+export type ScheduleBoardResult = {
+  dateFrom: string;
+  dateTo: string;
+  rooms: { id: number; name: string; code: string | null; roomType: string }[];
+  appointments: ScheduleBoardAppointment[];
+  conflicts: { appointmentId: number; roomId: number; overlapsWith: number[] }[];
+};
+
+export async function ownerScheduleBoard(
+  branchId: string | number,
+  params?: { dateFrom?: string; dateTo?: string; roomId?: number; doctorId?: number; serviceId?: number }
+): Promise<ScheduleBoardResult | null> {
+  const q = new URLSearchParams();
+  if (params?.dateFrom) q.set("dateFrom", params.dateFrom);
+  if (params?.dateTo) q.set("dateTo", params.dateTo);
+  if (params?.roomId != null) q.set("roomId", String(params.roomId));
+  if (params?.doctorId != null) q.set("doctorId", String(params.doctorId));
+  if (params?.serviceId != null) q.set("serviceId", String(params.serviceId));
+  const res = await ownerGet<{ success?: boolean; data?: ScheduleBoardResult }>(
+    `/api/v1/owner/clinic/branches/${branchId}/schedule-board${q.toString() ? `?${q.toString()}` : ""}`
+  );
+  return res?.data ?? null;
+}
+
+export async function ownerRoomSchedule(
+  branchId: string | number,
+  roomId: string | number,
+  date?: string
+): Promise<ScheduleBoardAppointment[]> {
+  const q = date ? `?date=${encodeURIComponent(date)}` : "";
+  const res = await ownerGet<{ success?: boolean; data?: ScheduleBoardAppointment[] }>(
+    `/api/v1/owner/clinic/branches/${branchId}/rooms/${roomId}/schedule${q}`
+  );
+  return Array.isArray(res?.data) ? res.data : [];
 }
 
 // --- Clinic Staff Profile ---
@@ -805,12 +950,14 @@ export async function ownerClinicAssignTemplate(
 // Clinic Phase 2: Appointments + Schedule Exceptions
 export async function ownerClinicAppointments(
   branchId: string | number,
-  params?: { date?: string; doctorId?: number; status?: string; limit?: number; offset?: number }
+  params?: { date?: string; doctorId?: number; status?: string; serviceId?: number; appointmentType?: string; limit?: number; offset?: number }
 ) {
   const q = new URLSearchParams();
   if (params?.date) q.set("date", params.date);
   if (params?.doctorId != null) q.set("doctorId", String(params.doctorId));
   if (params?.status) q.set("status", params.status);
+  if (params?.serviceId != null) q.set("serviceId", String(params.serviceId));
+  if (params?.appointmentType) q.set("appointmentType", params.appointmentType);
   if (params?.limit != null) q.set("limit", String(params.limit));
   if (params?.offset != null) q.set("offset", String(params.offset));
   const query = q.toString();
@@ -829,6 +976,58 @@ export async function ownerClinicSlots(
   const path = `/api/v1/owner/clinic/branches/${branchId}/slots?${q.toString()}`;
   const res = await ownerGet<{ success?: boolean; data?: { slots: unknown[] } }>(path);
   return (res as { data?: { slots: unknown[] } })?.data?.slots ?? [];
+}
+
+export async function ownerClinicBookingAvailableSlots(
+  branchId: string | number,
+  params: { date: string; serviceId?: number; packageId?: number; doctorId?: number; durationMinutes?: number }
+) {
+  const q = new URLSearchParams({ date: params.date });
+  if (params.serviceId != null) q.set("serviceId", String(params.serviceId));
+  if (params.packageId != null) q.set("packageId", String(params.packageId));
+  if (params.doctorId != null) q.set("doctorId", String(params.doctorId));
+  if (params.durationMinutes != null) q.set("durationMinutes", String(params.durationMinutes));
+  const path = `/api/v1/owner/clinic/branches/${branchId}/booking/available-slots?${q.toString()}`;
+  const res = await ownerGet<{ success?: boolean; data?: { slots: { doctorId: number; doctorName: string; slots: { start: string; end: string }[] }[] } }>(path);
+  return (res as { data?: { slots: unknown[] } })?.data?.slots ?? [];
+}
+
+export async function ownerClinicBookingEligibleDoctors(
+  branchId: string | number,
+  params?: { serviceId?: number; packageId?: number }
+) {
+  const q = new URLSearchParams();
+  if (params?.serviceId != null) q.set("serviceId", String(params.serviceId));
+  if (params?.packageId != null) q.set("packageId", String(params.packageId));
+  const path = `/api/v1/owner/clinic/branches/${branchId}/booking/eligible-doctors${q.toString() ? `?${q}` : ""}`;
+  const res = await ownerGet<{ success?: boolean; data?: { doctors: unknown[] } }>(path);
+  return (res as { data?: { doctors: unknown[] } })?.data?.doctors ?? [];
+}
+
+export async function ownerClinicBookingPricePreview(
+  branchId: string | number,
+  params?: { serviceId?: number; packageId?: number; doctorId?: number; species?: string }
+) {
+  const q = new URLSearchParams();
+  if (params?.serviceId != null) q.set("serviceId", String(params.serviceId));
+  if (params?.packageId != null) q.set("packageId", String(params.packageId));
+  if (params?.doctorId != null) q.set("doctorId", String(params.doctorId));
+  if (params?.species) q.set("species", params.species);
+  const path = `/api/v1/owner/clinic/branches/${branchId}/booking/price-preview${q.toString() ? `?${q}` : ""}`;
+  const res = await ownerGet<{ success?: boolean; data?: { basePrice: number; doctorFee: number; discountAmount: number; totalPrice: number; breakdown: { label: string; amount: number }[] } }>(path);
+  return (res as { data?: unknown })?.data ?? null;
+}
+
+export async function ownerClinicBookingConstraints(branchId: string | number, date?: string) {
+  const path = `/api/v1/owner/clinic/branches/${branchId}/booking/constraints${date ? `?date=${encodeURIComponent(date)}` : ""}`;
+  const res = await ownerGet<{ success?: boolean; data?: unknown }>(path);
+  return (res as { data?: unknown })?.data ?? null;
+}
+
+export async function ownerClinicAppointmentConfirm(branchId: string | number, appointmentId: number) {
+  const path = `/api/v1/owner/clinic/branches/${branchId}/appointments/${appointmentId}/confirm`;
+  const res = await ownerPost<{ success?: boolean; data?: unknown }>(path, {});
+  return (res as { data?: unknown })?.data;
 }
 
 export async function ownerClinicAppointmentCreate(
@@ -943,6 +1142,41 @@ export async function ownerClinicDoctorInvite(
     body
   );
   return (res as { data?: { invite?: unknown; branch?: { id: number; name: string }; devInviteToken?: string } })?.data ?? {};
+}
+
+/** GET /api/v1/owner/invitations — list staff invites (optionally by branchId and status) */
+export async function listOwnerInvitations(params?: {
+  branchId?: number | string;
+  status?: string;
+}): Promise<{ success?: boolean; data?: StaffInviteRow[] }> {
+  const q = new URLSearchParams();
+  if (params?.branchId != null) q.set("branchId", String(params.branchId));
+  if (params?.status) q.set("status", params.status);
+  const path = `/api/v1/owner/invitations${q.toString() ? `?${q}` : ""}`;
+  const res = await ownerGet<{ success?: boolean; data?: StaffInviteRow[] }>(path);
+  return res ?? { success: false, data: [] };
+}
+
+export type StaffInviteRow = {
+  id: number;
+  branchId: number;
+  email?: string | null;
+  phone?: string | null;
+  status: string;
+  inviteAsDoctor?: boolean;
+  role?: string | null;
+  expiresAt?: string | null;
+  createdAt: string;
+  branch?: { id: number; name: string };
+  invitedBy?: { id: number; profile?: { displayName?: string }; auth?: { email?: string } };
+};
+
+export async function ownerResendInvitation(inviteId: number): Promise<{ success?: boolean; data?: unknown; message?: string }> {
+  return ownerPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/owner/invitations/${inviteId}/resend`, {});
+}
+
+export async function ownerCancelInvitation(inviteId: number): Promise<{ success?: boolean; data?: unknown; message?: string }> {
+  return ownerPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/owner/invitations/${inviteId}/cancel`, {});
 }
 
 export async function ownerClinicDoctorDetail(
@@ -1637,6 +1871,33 @@ export async function ownerClinicSupplyRequestReview(
   return (res as { data?: unknown })?.data ?? res;
 }
 
+export async function ownerClinicSupplyRequestMarkOrdered(requestId: number): Promise<unknown> {
+  const res = await ownerPost<{ success?: boolean; data?: unknown }>(
+    `/api/v1/owner/clinic/supply-requests/${requestId}/mark-ordered`,
+    {}
+  );
+  return (res as { data?: unknown })?.data ?? res;
+}
+
+export async function ownerClinicSupplyRequestMarkReceived(
+  requestId: number,
+  body: { items: { requestItemId: number; receivedQty: number }[]; postToInventory?: boolean }
+): Promise<unknown> {
+  const res = await ownerPost<{ success?: boolean; data?: unknown }>(
+    `/api/v1/owner/clinic/supply-requests/${requestId}/mark-received`,
+    body
+  );
+  return (res as { data?: unknown })?.data ?? res;
+}
+
+export async function ownerClinicSupplyRequestCancel(requestId: number): Promise<unknown> {
+  const res = await ownerPost<{ success?: boolean; data?: unknown }>(
+    `/api/v1/owner/clinic/supply-requests/${requestId}/cancel`,
+    {}
+  );
+  return (res as { data?: unknown })?.data ?? res;
+}
+
 export async function ownerClinicTransferFromRequest(requestId: number, body: { fromBranchId: number }): Promise<unknown> {
   const res = await ownerPost<{ success?: boolean; data?: unknown }>(
     `/api/v1/owner/clinic/supply-requests/${requestId}/transfer`,
@@ -2150,5 +2411,74 @@ export async function ownerMyPets(): Promise<{ pets: any[] } | null> {
 
 export async function ownerMyPetGet(petId: string | number): Promise<any | null> {
   const res = await ownerGet<{ success?: boolean; data?: any }>(`/api/v1/owner/me/pets/${petId}`);
+  return (res as { data?: any })?.data ?? null;
+}
+
+// ========== Injection token + reconciliation (Clinic Medicine Control) ==========
+export async function ownerClinicInjectionMonitor(
+  branchId: string | number,
+  params?: { date?: string }
+): Promise<any | null> {
+  const q = new URLSearchParams();
+  if (params?.date) q.set("date", params.date);
+  const query = q.toString();
+  const res = await ownerGet<{ success?: boolean; data?: any }>(
+    `/api/v1/clinic/branches/${branchId}/medicine-control/dashboard/injection-monitor${query ? `?${query}` : ""}`
+  );
+  return (res as { data?: any })?.data ?? null;
+}
+
+export async function ownerClinicReconciliations(
+  branchId: string | number,
+  params?: {
+    date?: string;
+    fromDate?: string;
+    toDate?: string;
+    status?: string;
+    hasMismatch?: boolean;
+    take?: number;
+    skip?: number;
+  }
+): Promise<{ list: any[]; total: number; row?: any | null }> {
+  const q = new URLSearchParams();
+  if (params?.date) q.set("date", params.date);
+  if (params?.fromDate) q.set("fromDate", params.fromDate);
+  if (params?.toDate) q.set("toDate", params.toDate);
+  if (params?.status) q.set("status", params.status);
+  if (params?.hasMismatch != null) q.set("hasMismatch", String(params.hasMismatch));
+  if (params?.take != null) q.set("take", String(params.take));
+  if (params?.skip != null) q.set("skip", String(params.skip));
+  const query = q.toString();
+  const res = await ownerGet<{ success?: boolean; data?: any }>(
+    `/api/v1/clinic/branches/${branchId}/medicine-control/reconciliation${query ? `?${query}` : ""}`
+  );
+  const data = (res as { data?: any })?.data ?? {};
+  if (data?.row) return { list: data.row ? [data.row] : [], total: data.row ? 1 : 0, row: data.row };
+  return {
+    list: Array.isArray(data?.list) ? data.list : [],
+    total: Number(data?.total ?? 0),
+  };
+}
+
+export async function ownerClinicRunReconciliation(
+  branchId: string | number,
+  body?: { date?: string }
+): Promise<any | null> {
+  const res = await ownerPost<{ success?: boolean; data?: any }>(
+    `/api/v1/clinic/branches/${branchId}/medicine-control/reconciliation/run`,
+    body ?? {}
+  );
+  return (res as { data?: any })?.data ?? null;
+}
+
+export async function ownerClinicAcknowledgeReconciliation(
+  branchId: string | number,
+  reconciliationId: number,
+  note?: string
+): Promise<any | null> {
+  const res = await ownerPatch<{ success?: boolean; data?: any }>(
+    `/api/v1/clinic/branches/${branchId}/medicine-control/reconciliation/${reconciliationId}/acknowledge`,
+    note ? { note } : {}
+  );
   return (res as { data?: any })?.data ?? null;
 }

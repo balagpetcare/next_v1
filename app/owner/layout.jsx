@@ -42,6 +42,9 @@ export default function OwnerLayout({ children }) {
         });
 
         if (!res.ok) {
+          if (process.env.NODE_ENV === "development") {
+            console.info("[owner] auth/me failed", { status: res.status });
+          }
           if (!cancelled) {
             const next = pathname ? `/owner/login?next=${encodeURIComponent(pathname)}` : "/owner/login";
             router.replace(next);
@@ -49,6 +52,9 @@ export default function OwnerLayout({ children }) {
           return;
         }
 
+        if (process.env.NODE_ENV === "development") {
+          console.info("[owner] auth/me ok");
+        }
         const j = await res.json().catch(() => null);
         const hasOwnerAccess = j?.panels?.owner === true;
         const needsOnboarding = j?.onboarding?.needsOnboarding === true;

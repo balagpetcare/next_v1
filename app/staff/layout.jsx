@@ -3,10 +3,7 @@
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import NotificationContainer from "@/app/owner/_components/Notification";
-import { getFallbackUrlForPanels } from "@/lib/authRedirect";
-
-// Base API host (no trailing slash). Example: http://localhost:3000
-const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+import { getFallbackUrlForPanels, getAuthMeBase } from "@/lib/authRedirect";
 
 export default function StaffLayout({ children }) {
   const pathname = usePathname();
@@ -17,7 +14,7 @@ export default function StaffLayout({ children }) {
     pathname?.startsWith("/staff/login") ||
     pathname?.startsWith("/staff/logout");
 
-  // Check authentication and staff access
+  // Check authentication and staff access (same-origin /api so cookie is sent after staff login)
   useEffect(() => {
     let cancelled = false;
     async function checkAuth() {
@@ -25,17 +22,23 @@ export default function StaffLayout({ children }) {
         // Skip auth checks on auth routes
         if (!pathname || isAuthRoute) return;
 
-        const res = await fetch(`${API_BASE}/api/v1/auth/me`, {
+        const res = await fetch(`${getAuthMeBase()}/api/v1/auth/me`, {
           method: "GET",
           credentials: "include",
           headers: { Accept: "application/json" },
         });
 
         if (!res.ok) {
+          if (process.env.NODE_ENV === "development") {
+            console.info("[staff] auth/me failed", { status: res.status });
+          }
           if (!cancelled) router.replace("/staff/login");
           return;
         }
 
+        if (process.env.NODE_ENV === "development") {
+          console.info("[staff] auth/me ok");
+        }
         const j = await res.json().catch(() => null);
 
         // Staff access: panels.staff (branch members + owners), or admin

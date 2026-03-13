@@ -29,6 +29,7 @@ import { EarningsWidget } from "./_components/EarningsWidget";
 import { NotificationBell } from "./_components/NotificationBell";
 import { RemindersWidget } from "./_components/RemindersWidget";
 import { PerformanceChart } from "./_components/PerformanceChart";
+import { DoctorInvitationsWidget } from "./_components/DoctorInvitationsWidget";
 
 export default function DoctorDashboardPage() {
   const [profile, setProfile] = useState<any>(null);
@@ -144,6 +145,8 @@ export default function DoctorDashboardPage() {
     },
   });
 
+  const hasClinic = (profile?.branches ?? []).length > 0;
+
   return (
     <div className="dashboard-main-body">
       {error ? (
@@ -151,6 +154,26 @@ export default function DoctorDashboardPage() {
           {error}
         </div>
       ) : null}
+
+      <DoctorInvitationsWidget />
+
+      <div id="invitations">
+        {!hasClinic && profile ? (
+          <div className="card radius-12 mb-3 border-primary">
+          <div className="card-body text-center py-4">
+            <h5 className="card-title">No Clinic Connected</h5>
+            <p className="text-muted mb-3">You are currently not practicing in any clinic.</p>
+            <div className="d-flex flex-wrap gap-2 justify-content-center">
+              <a href="#invitations" className="btn btn-primary radius-12">Accept Invitation</a>
+              <span className="text-muted small align-self-center">Use invitations above to join a clinic.</span>
+            </div>
+            <p className="small text-muted mt-3 mb-0">
+              You can still use Profile, License, Documents, and Availability. Clinic appointments and earnings appear once you join a clinic.
+            </p>
+          </div>
+        </div>
+        ) : null}
+      </div>
 
       <div className="d-flex align-items-start justify-content-between gap-2">
         <div className="flex-grow-1">
@@ -180,86 +203,90 @@ export default function DoctorDashboardPage() {
         />
       </div>
 
-      <DoctorKpiCards kpis={summary?.kpis} loading={loading} />
+      {hasClinic ? (
+        <>
+          <DoctorKpiCards kpis={summary?.kpis} loading={loading} />
 
-      <div className="row g-3 mb-3">
-        <div className="col-lg-7">
-          <DoctorScheduleWidget
-            schedule={summary?.todaySchedule ?? []}
-            currentShift={summary?.currentShift ?? null}
-            upcomingLeaves={upcomingLeaves}
-          />
-        </div>
-        <div className="col-lg-5">
-          <DoctorQueueWidget queue={summary?.liveQueue ?? []} />
-        </div>
-      </div>
-
-      <div className="row g-3 mb-3">
-        <div className="col-lg-5">
-          <ActivePatientWidget patient={summary?.activePatient ?? null} />
-        </div>
-        <div className="col-lg-7">
-          <QuickActionsPanel />
-        </div>
-      </div>
-
-      <div className="row g-3 mb-3">
-        <div className="col-lg-6">
-          <FollowUpWidget items={followUps} />
-        </div>
-        <div className="col-lg-6">
-          <SurgeryWidget items={cases} />
-        </div>
-      </div>
-
-      <div className="mb-3">
-        <PrescriptionDraftWidget items={prescriptions} />
-      </div>
-
-      <div className="row g-3 mb-3">
-        <div className="col-lg-6">
-          <EarningsWidget
-            todayEarnings={Number(summary?.kpis?.todayEarnings ?? 0)}
-            settlement={settlementSummary}
-          />
-        </div>
-        <div className="col-lg-6">
-          <RemindersWidget reminders={reminders} />
-        </div>
-      </div>
-
-      <div className="row g-3">
-        <div className="col-lg-6">
-          <PerformanceChart metrics={metrics} />
-        </div>
-        <div className="col-lg-6">
-          <div className="card radius-12 h-100">
-            <div className="card-header">
-              <h6 className="mb-0">My Clinics</h6>
+          <div className="row g-3 mb-3">
+            <div className="col-lg-7">
+              <DoctorScheduleWidget
+                schedule={summary?.todaySchedule ?? []}
+                currentShift={summary?.currentShift ?? null}
+                upcomingLeaves={upcomingLeaves}
+              />
             </div>
-            <div className="card-body">
-              <div className="row g-2">
-                {(summary?.branches ?? []).map((b: any) => (
-                  <div key={b.id} className="col-12">
-                    <div className="border rounded-3 p-2 d-flex justify-content-between align-items-center">
-                      <div>
-                        <div className="fw-semibold">{b.name}</div>
-                        <div className="small text-muted">
-                          Appointments: {b.todayAppointments} • Waiting: {b.waitingCount}
+            <div className="col-lg-5">
+              <DoctorQueueWidget queue={summary?.liveQueue ?? []} />
+            </div>
+          </div>
+
+          <div className="row g-3 mb-3">
+            <div className="col-lg-5">
+              <ActivePatientWidget patient={summary?.activePatient ?? null} />
+            </div>
+            <div className="col-lg-7">
+              <QuickActionsPanel />
+            </div>
+          </div>
+
+          <div className="row g-3 mb-3">
+            <div className="col-lg-6">
+              <FollowUpWidget items={followUps} />
+            </div>
+            <div className="col-lg-6">
+              <SurgeryWidget items={cases} />
+            </div>
+          </div>
+
+          <div className="mb-3">
+            <PrescriptionDraftWidget items={prescriptions} />
+          </div>
+
+          <div className="row g-3 mb-3">
+            <div className="col-lg-6">
+              <EarningsWidget
+                todayEarnings={Number(summary?.kpis?.todayEarnings ?? 0)}
+                settlement={settlementSummary}
+              />
+            </div>
+            <div className="col-lg-6">
+              <RemindersWidget reminders={reminders} />
+            </div>
+          </div>
+
+          <div className="row g-3">
+            <div className="col-lg-6">
+              <PerformanceChart metrics={metrics} />
+            </div>
+            <div className="col-lg-6">
+              <div className="card radius-12 h-100">
+                <div className="card-header">
+                  <h6 className="mb-0">My Clinics</h6>
+                </div>
+                <div className="card-body">
+                  <div className="row g-2">
+                    {(summary?.branches ?? []).map((b: any) => (
+                      <div key={b.id} className="col-12">
+                        <div className="border rounded-3 p-2 d-flex justify-content-between align-items-center">
+                          <div>
+                            <div className="fw-semibold">{b.name}</div>
+                            <div className="small text-muted">
+                              Appointments: {b.todayAppointments} • Waiting: {b.waitingCount}
+                            </div>
+                          </div>
+                          <span className={`badge ${b.onboardingStatus === "COMPLETED" ? "bg-success" : "bg-warning text-dark"}`}>
+                            {b.onboardingStatus}
+                          </span>
                         </div>
                       </div>
-                      <span className={`badge ${b.onboardingStatus === "COMPLETED" ? "bg-success" : "bg-warning text-dark"}`}>
-                        {b.onboardingStatus}
-                      </span>
-                    </div>
+                    ))}
                   </div>
-                ))}
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </div>
+        </>
+      ) : null}
     </div>
   );
 }

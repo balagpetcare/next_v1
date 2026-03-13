@@ -6,6 +6,20 @@
  * clinic.* permission; each item is gated by its own clinic.overview|appointments|queue|patients|visits.*
  */
 
+import {
+  overview as doctorOpsOverview,
+  doctors as doctorOpsDoctors,
+  scheduleBoard,
+  availability as doctorOpsAvailability,
+  serviceAssignment,
+  approvals as doctorOpsApprovals,
+  credentials as doctorOpsCredentials,
+  certifications as doctorOpsCertifications,
+  licenses as doctorOpsLicenses,
+  performance as doctorOpsPerformance,
+  auditLogs as doctorOpsAuditLogs,
+} from "@/src/lib/doctorOperationsRoutes";
+
 export type BranchSidebarItem = {
   key: string;
   label: string;
@@ -49,16 +63,53 @@ export const BRANCH_SIDEBAR: BranchSidebarGroup[] = [
     featureFlag: (branch) => branch?.clinicEnabled === true,
     items: [
       { key: "clinic-dashboard", label: "Dashboard", icon: "ri:dashboard-line", href: (id) => "/staff/branch/" + id + "/clinic/dashboard", requiredPerm: "clinic.overview.read", anyPerms: ["clinic.overview.manage"] },
+      { key: "clinic-analytics", label: "Analytics", icon: "ri:bar-chart-grouped-line", href: (id) => "/staff/branch/" + id + "/clinic/analytics", requiredPerm: "clinic.analytics.view", anyPerms: ["clinic.stats.view", "clinic.reports.branch_analytics"] },
       { key: "clinic-appointments", label: "Appointments", icon: "ri:calendar-check-line", href: (id) => "/staff/branch/" + id + "/clinic/appointments", requiredPerm: "clinic.appointments.read", anyPerms: ["clinic.appointments.manage"] },
       { key: "clinic-queue", label: "Queue", icon: "ri:list-check-2", href: (id) => "/staff/branch/" + id + "/clinic/queue", requiredPerm: "clinic.queue.read", anyPerms: ["clinic.queue.manage"], badgeKey: "clinicQueue" },
+      { key: "clinic-rooms", label: "Rooms", icon: "ri:door-open-line", href: (id) => "/staff/branch/" + id + "/clinic/rooms", requiredPerm: "clinic.rooms.view", anyPerms: ["clinic.rooms.manage"] },
+      { key: "clinic-schedule-board", label: "Schedule board", icon: "ri:calendar-line", href: (id) => "/staff/branch/" + id + "/clinic/schedule-board", requiredPerm: "clinic.rooms.view_schedule", anyPerms: ["clinic.rooms.view", "clinic.rooms.manage"] },
       { key: "clinic-patients", label: "Patients", icon: "ri:user-heart-line", href: (id) => "/staff/branch/" + id + "/clinic/patients", requiredPerm: "clinic.patients.read", anyPerms: ["clinic.patients.manage"] },
       { key: "clinic-visits", label: "Visits", icon: "ri:file-list-3-line", href: (id) => "/staff/branch/" + id + "/clinic/visits", requiredPerm: "clinic.visits.read", anyPerms: ["clinic.visits.manage"] },
       { key: "clinic-cases", label: "Cases", icon: "ri:folder-open-line", href: (id) => "/staff/branch/" + id + "/clinic/cases", requiredPerm: "clinic.cases.read", anyPerms: ["clinic.cases.write"] },
       { key: "clinic-items", label: "Clinic items", icon: "ri:box-3-line", href: (id) => "/staff/branch/" + id + "/clinic/items", requiredPerm: "clinic.items.read", anyPerms: ["clinic.stock.read"] },
-      { key: "clinic-supply-requests", label: "Supply requests", icon: "ri:file-list-3-line", href: (id) => "/staff/branch/" + id + "/clinic/supply-requests", requiredPerm: "clinic.cases.read", anyPerms: ["clinic.cases.write"] },
-      { key: "clinic-transfers", label: "Incoming transfers", icon: "ri:swap-line", href: (id) => "/staff/branch/" + id + "/clinic/transfers", requiredPerm: "clinic.cases.read", anyPerms: ["clinic.cases.write"] },
-      { key: "clinic-sterilization", label: "Sterilization", icon: "ri:temp-cold-line", href: (id) => "/staff/branch/" + id + "/clinic/sterilization", requiredPerm: "clinic.cases.read", anyPerms: ["clinic.cases.write"] },
+      { key: "clinic-supply-requests", label: "Supply requests", icon: "ri:file-list-3-line", href: (id) => "/staff/branch/" + id + "/clinic/supply-requests", requiredPerm: "clinic.supply.read", anyPerms: ["clinic.supply.manage", "clinic.cases.read", "clinic.cases.write"] },
+      { key: "clinic-transfers", label: "Incoming transfers", icon: "ri:swap-line", href: (id) => "/staff/branch/" + id + "/clinic/transfers", requiredPerm: "clinic.transfers.read", anyPerms: ["clinic.transfers.receive", "clinic.cases.read", "clinic.cases.write"] },
+      { key: "clinic-sterilization", label: "Sterilization", icon: "ri:temp-cold-line", href: (id) => "/staff/branch/" + id + "/clinic/sterilization", requiredPerm: "clinic.sterilization.view", anyPerms: ["clinic.sterilization.manage", "clinic.cases.read", "clinic.cases.write"] },
       { key: "clinic-vial-returns", label: "Vial returns (surgery)", icon: "ri:flask-line", href: (id) => "/staff/branch/" + id + "/clinic/vial-returns", requiredPerm: "clinic.consumption.read", anyPerms: ["clinic.consumption.write"] },
+      { key: "clinic-treatment-courses", label: "Treatment Courses", icon: "ri:calendar-event-line", href: (id) => "/staff/branch/" + id + "/clinic/treatment-courses", requiredPerm: "medicine.dose.record", anyPerms: ["medicine.dose.read"] },
+    ],
+  },
+  {
+    group: "Doctor Operations",
+    featureFlag: (branch) => branch?.clinicEnabled === true,
+    items: [
+      { key: "clinic-doctors-overview", label: "Overview", icon: "ri:dashboard-line", href: doctorOpsOverview, requiredPerm: "clinic.doctors.view", anyPerms: ["clinic.doctors.assign"] },
+      { key: "clinic-doctors", label: "Doctors", icon: "ri:user-star-line", href: doctorOpsDoctors, requiredPerm: "clinic.doctors.view", anyPerms: ["clinic.doctors.assign"] },
+      { key: "clinic-doctors-schedule-board", label: "Schedule Board", icon: "ri:calendar-schedule-line", href: scheduleBoard, requiredPerm: "clinic.schedule.manage", anyPerms: ["clinic.doctors.view"] },
+      { key: "clinic-doctors-availability", label: "Availability", icon: "ri:calendar-event-line", href: doctorOpsAvailability, requiredPerm: "clinic.doctors.manage_leave", anyPerms: ["clinic.doctors.view"] },
+      { key: "clinic-doctors-service-assignment", label: "Service Assignment", icon: "ri:list-check-2", href: serviceAssignment, requiredPerm: "clinic.doctors.manage_services", anyPerms: ["clinic.doctors.view"] },
+      { key: "clinic-doctors-approvals", label: "Pending Approvals", icon: "ri:checkbox-multiple-line", href: doctorOpsApprovals, requiredPerm: "approvals.view", anyPerms: ["clinic.doctors.view"] },
+      { key: "clinic-doctors-credentials", label: "Credential Review", icon: "ri:file-shield-line", href: doctorOpsCredentials, requiredPerm: "clinic.doctors.manage_credentials", anyPerms: ["clinic.doctors.view"] },
+      { key: "clinic-doctors-certifications", label: "Certifications", icon: "ri:award-line", href: doctorOpsCertifications, requiredPerm: "clinic.doctors.view_certifications" },
+      { key: "clinic-doctors-licenses", label: "Licenses", icon: "ri:passport-line", href: doctorOpsLicenses, requiredPerm: "clinic.doctors.view_licenses" },
+      { key: "clinic-doctors-performance", label: "Performance & Earnings", icon: "ri:bank-card-line", href: doctorOpsPerformance, requiredPerm: "clinic.doctors.view", anyPerms: ["clinic.doctors.assign"] },
+      { key: "clinic-doctors-audit", label: "Audit Logs", icon: "ri:file-list-3-line", href: doctorOpsAuditLogs, requiredPerm: "clinic.doctors.view", anyPerms: ["clinic.doctors.assign"] },
+    ],
+  },
+  {
+    group: "Catalog",
+    featureFlag: (branch) => branch?.clinicEnabled === true,
+    items: [
+      { key: "clinic-catalog", label: "Catalog", icon: "ri:book-2-line", href: (id) => "/staff/branch/" + id + "/clinic/catalog", requiredPerm: "clinic.catalog.view", anyPerms: ["clinic.catalog.search", "clinic.catalog.branch_add"] },
+    ],
+  },
+  {
+    group: "Billing & Finance",
+    featureFlag: (branch) => branch?.clinicEnabled === true,
+    items: [
+      { key: "clinic-billing", label: "Billing", icon: "ri:bill-line", href: (id) => "/staff/branch/" + id + "/clinic/billing", requiredPerm: "clinic.billing.view", anyPerms: ["manager.billing.create_invoice", "manager.billing.collect_payment"] },
+      { key: "clinic-treatment-billing", label: "Treatment Billing", icon: "ri:bill-line", href: (id) => "/staff/branch/" + id + "/clinic/treatment-billing", requiredPerm: "clinic.billing.view", anyPerms: ["medicine.dose.read", "medicine.dose.record"] },
+      { key: "clinic-settlement", label: "Settlement", icon: "ri:bank-card-line", href: (id) => "/staff/branch/" + id + "/clinic/settlement", requiredPerm: "clinic.settlement.read", anyPerms: ["clinic.settlement.review"] },
     ],
   },
   {
@@ -66,10 +117,15 @@ export const BRANCH_SIDEBAR: BranchSidebarGroup[] = [
     featureFlag: (branch) => branch?.clinicEnabled === true,
     items: [
       { key: "medicine-dashboard", label: "Dashboard", icon: "ri:medicine-bottle-line", href: (id) => "/staff/branch/" + id + "/clinic/medicine-control", requiredPerm: "medicine.policy.read", anyPerms: ["medicine.dispense.request", "medicine.dispense.approve"] },
+      { key: "medicine-injection-tokens", label: "Injection Tokens", icon: "ri:qr-code-line", href: (id) => "/staff/branch/" + id + "/clinic/medicine-control/injection-tokens", requiredPerm: "injection.token.list", anyPerms: ["injection.token.generate", "injection.token.validate"] },
+      { key: "medicine-injection-room", label: "Injection Room", icon: "ri:syringe-line", href: (id) => "/staff/branch/" + id + "/clinic/medicine-control/injection-room", requiredPerm: "medicine.dose.record", anyPerms: ["injection.token.validate", "injection.token.emergency_bypass"] },
       { key: "medicine-dispense-requests", label: "Dispense Requests", icon: "ri:file-list-3-line", href: (id) => "/staff/branch/" + id + "/clinic/medicine-control/dispense-requests", requiredPerm: "medicine.dispense.request", anyPerms: ["medicine.dispense.approve", "medicine.dispense.issue"] },
+      { key: "medicine-internal-orders", label: "Internal Orders", icon: "ri:file-list-3-line", href: (id) => "/staff/branch/" + id + "/clinic/medicine-control/internal-orders", requiredPerm: "medicine.dispense.request", anyPerms: ["medicine.dispense.approve", "medicine.dispense.issue"] },
       { key: "medicine-active-vials", label: "Active Vials", icon: "ri:flask-line", href: (id) => "/staff/branch/" + id + "/clinic/medicine-control/active-vials", requiredPerm: "medicine.vial.open", anyPerms: ["medicine.vial.use", "medicine.vial.return"] },
       { key: "medicine-returns", label: "Vial Returns", icon: "ri:arrow-go-back-line", href: (id) => "/staff/branch/" + id + "/clinic/medicine-control/returns", requiredPerm: "medicine.return.submit", anyPerms: ["medicine.return.verify"] },
       { key: "medicine-audit-bins", label: "Audit Bins", icon: "ri:archive-2-line", href: (id) => "/staff/branch/" + id + "/clinic/medicine-control/audit-bins", requiredPerm: "medicine.audit.bin.view", anyPerms: ["medicine.audit.bin.manage"] },
+      { key: "medicine-injection-monitor", label: "Injection Monitor", icon: "ri:pulse-line", href: (id) => "/staff/branch/" + id + "/clinic/medicine-control/injection-monitor", requiredPerm: "medicine.reconciliation.read", anyPerms: ["medicine.dose.read"] },
+      { key: "medicine-reconciliation", label: "Reconciliation", icon: "ri:shield-check-line", href: (id) => "/staff/branch/" + id + "/clinic/medicine-control/reconciliation", requiredPerm: "medicine.reconciliation.read", anyPerms: ["medicine.reconciliation.run", "medicine.reconciliation.acknowledge"] },
       { key: "medicine-policies", label: "Policies", icon: "ri:settings-3-line", href: (id) => "/staff/branch/" + id + "/clinic/medicine-control/policies", requiredPerm: "medicine.policy.read", anyPerms: ["medicine.policy.manage"] },
     ],
   },
@@ -85,7 +141,7 @@ export const BRANCH_SIDEBAR: BranchSidebarGroup[] = [
       { key: "manager-dashboard", label: "Manager Dashboard", icon: "ri:dashboard-2-line", href: (id) => "/staff/branch/" + id + "/manager-dashboard", requiredPerm: "manager.reports.daily_revenue", anyPerms: ["manager.reports.doctor_performance", "manager.staff.duty_roster"] },
       { key: "roster", label: "Staff Roster", icon: "ri:calendar-schedule-line", href: (id) => "/staff/branch/" + id + "/roster", requiredPerm: "manager.staff.duty_roster" },
       { key: "escalations", label: "Escalations", icon: "ri:arrow-up-circle-line", href: (id) => "/staff/branch/" + id + "/escalations", requiredPerm: "manager.reports.daily_revenue", anyPerms: ["approvals.manage"] },
-      { key: "manager-reports", label: "Manager Reports", icon: "ri:bar-chart-box-line", href: (id) => "/staff/branch/" + id + "/reports", requiredPerm: "manager.reports.daily_revenue" },
+      { key: "manager-reports", label: "Manager Reports", icon: "ri:bar-chart-box-line", href: (id) => "/staff/branch/" + id + "/manager-reports", requiredPerm: "manager.reports.daily_revenue" },
     ],
   },
   {

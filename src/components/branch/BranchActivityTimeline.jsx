@@ -2,6 +2,7 @@
 
 import { useState, useMemo } from "react";
 import Card from "@/src/bpa/components/ui/Card";
+import { formatMetadataForDisplay } from "@/src/lib/displayFormatters";
 
 /**
  * BranchActivityTimeline – last 20–50 activities; filter All vs Me. Requires dashboard.view (or audit.view if present).
@@ -57,13 +58,7 @@ export default function BranchActivityTimeline({
                 </span>
                 {item.metadata != null && (
                   <span className="text-secondary-light text-xs d-block">
-                    {(() => {
-                      try {
-                        return typeof item.metadata === "string" ? item.metadata : JSON.stringify(item.metadata);
-                      } catch {
-                        return "—";
-                      }
-                    })()}
+                    {formatMetadataForDisplay(item.metadata)}
                   </span>
                 )}
                 {item.createdAt && (

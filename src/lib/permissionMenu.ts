@@ -63,6 +63,7 @@ function filterTree(items: MenuItem[], perms: Set<string>): MenuItem[] {
 const CORE_OWNER_FALLBACK: MenuItem[] = [
   { id: "owner.dashboard", label: "Dashboard", href: "/owner/dashboard", icon: "solar:home-smile-outline", required: [] },
   { id: "owner.escalations", label: "Escalations", href: "/owner/escalations", icon: "ri:arrow-up-circle-line", required: [] },
+  { id: "owner.approvals", label: "Clinic Approvals", href: "/owner/approvals", icon: "solar:clipboard-check-outline", required: [] },
   {
     id: "owner.operations",
     label: "Operations",
@@ -82,11 +83,15 @@ const CORE_OWNER_FALLBACK: MenuItem[] = [
     children: [
       { id: "owner.clinic.overview", label: "Clinic Network", href: "/owner/clinic", required: [] },
       { id: "owner.clinic.doctors", label: "Doctors", href: "/owner/clinic?view=doctors", required: [] },
+      { id: "owner.clinic.doctorPerformance", label: "Doctor Performance", href: "/owner/clinic?view=doctor-performance", required: [] },
+      { id: "owner.clinic.doctorAudit", label: "Doctor Audit", href: "/owner/clinic?view=doctor-audit", required: [] },
       { id: "owner.clinic.services", label: "Services", href: "/owner/clinic?view=services", required: [] },
       { id: "owner.clinic.packages", label: "Packages", href: "/owner/clinic?view=packages", required: [] },
       { id: "owner.clinic.schedule", label: "Schedule", href: "/owner/clinic?view=schedule", required: [] },
       { id: "owner.clinic.reports", label: "Reports", href: "/owner/clinic?view=reports", required: [] },
       { id: "owner.clinic.settings", label: "Settings", href: "/owner/clinic?view=settings", required: [] },
+      { id: "owner.clinic.injectionMonitor", label: "Injection Monitor", href: "/owner/clinic?view=injection-monitor", required: [] },
+      { id: "owner.clinic.reconciliation", label: "Reconciliation", href: "/owner/clinic?view=reconciliation", required: [] },
     ],
   },
   {
@@ -250,11 +255,15 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
       children: [
         { id: "owner.clinic.overview", label: "Clinic Network", href: "/owner/clinic", required: ["clinic.overview.read"] },
         { id: "owner.clinic.doctors", label: "Doctors", href: "/owner/clinic?view=doctors", required: ["clinic.staff.manage"] },
+        { id: "owner.clinic.doctorPerformance", label: "Doctor Performance", href: "/owner/clinic?view=doctor-performance", required: ["clinic.staff.manage"] },
+        { id: "owner.clinic.doctorAudit", label: "Doctor Audit", href: "/owner/clinic?view=doctor-audit", required: ["clinic.staff.manage"] },
         { id: "owner.clinic.services", label: "Services", href: "/owner/clinic?view=services", required: ["clinic.services.manage"] },
         { id: "owner.clinic.packages", label: "Packages", href: "/owner/clinic?view=packages", required: ["clinic.services.manage"] },
         { id: "owner.clinic.schedule", label: "Schedule", href: "/owner/clinic?view=schedule", required: ["clinic.schedule.manage"] },
         { id: "owner.clinic.reports", label: "Reports", href: "/owner/clinic?view=reports", required: ["clinic.settings.read"] },
         { id: "owner.clinic.settings", label: "Settings", href: "/owner/clinic?view=settings", required: ["clinic.settings.read"] },
+        { id: "owner.clinic.injectionMonitor", label: "Injection Monitor", href: "/owner/clinic?view=injection-monitor", required: ["medicine.reconciliation.read"] },
+        { id: "owner.clinic.reconciliation", label: "Reconciliation", href: "/owner/clinic?view=reconciliation", required: ["medicine.reconciliation.read"] },
       ],
     },
     {
@@ -426,10 +435,14 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
     { id: "clinic.staff", label: "Staff", href: "/clinic/staff", icon: "solar:user-id-outline", required: ["staff.read"] },
     { id: "clinic.medicineControl", label: "Medicine Control", href: "/clinic/medicine-control", icon: "ri:medicine-bottle-line", required: ["medicine.policy.read"], children: [
       { id: "clinic.medicineControl.dashboard", label: "Dashboard", href: "/clinic/medicine-control", required: ["medicine.policy.read"] },
+      { id: "clinic.medicineControl.tokens", label: "Injection Tokens", href: "/clinic/medicine-control/injection-tokens", required: ["injection.token.list"] },
+      { id: "clinic.medicineControl.injectionRoom", label: "Injection Room", href: "/clinic/medicine-control/injection-room", required: ["medicine.dose.record"] },
       { id: "clinic.medicineControl.dispense", label: "Dispense Requests", href: "/clinic/medicine-control/dispense-requests", required: ["medicine.dispense.request"] },
       { id: "clinic.medicineControl.vials", label: "Active Vials", href: "/clinic/medicine-control/active-vials", required: ["medicine.vial.open"] },
       { id: "clinic.medicineControl.returns", label: "Vial Returns", href: "/clinic/medicine-control/returns", required: ["medicine.return.submit"] },
       { id: "clinic.medicineControl.bins", label: "Audit Bins", href: "/clinic/medicine-control/audit-bins", required: ["medicine.audit.bin.view"] },
+      { id: "clinic.medicineControl.injectionMonitor", label: "Injection Monitor", href: "/clinic/medicine-control/injection-monitor", required: ["medicine.reconciliation.read"] },
+      { id: "clinic.medicineControl.reconciliation", label: "Reconciliation", href: "/clinic/medicine-control/reconciliation", required: ["medicine.reconciliation.read"] },
       { id: "clinic.medicineControl.policies", label: "Policies", href: "/clinic/medicine-control/policies", required: ["medicine.policy.read"] },
     ] },
   ],
@@ -810,6 +823,8 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
   ],
   doctor: [
     { id: "doctor.dashboard", label: "Dashboard", href: "/doctor/dashboard", icon: "solar:home-smile-outline", required: [] },
+    { id: "doctor.clinics", label: "Clinics", href: "/doctor/clinics", icon: "solar:buildings-2-outline", required: [] },
+    { id: "doctor.requests", label: "My Requests", href: "/doctor/requests", icon: "solar:clipboard-list-outline", required: [] },
     { id: "doctor.appointments", label: "Appointments", href: "/doctor/appointments", icon: "solar:calendar-outline", required: [] },
     { id: "doctor.schedule", label: "Schedule", href: "/doctor/schedule", icon: "solar:calendar-mark-outline", required: [] },
     { id: "doctor.follow-ups", label: "Follow-ups", href: "/doctor/follow-ups", icon: "solar:calendar-search-outline", required: [] },

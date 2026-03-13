@@ -669,10 +669,53 @@ export async function staffClinicServiceTypes(branchId: string): Promise<{ items
   }
 }
 
+// ========== Me – invitations (staff/doctor invite inbox) ==========
+/** GET /api/v1/me/invitations – list staff invitations for current user */
+export async function getMeInvitations(): Promise<{ id: number; branchId: number; branchName: string | null; orgName: string | null; role: string; status: string; inviteAsDoctor: boolean; expiresAt: string | null; createdAt: string | null }[]> {
+  const res = await apiGet<{ success?: boolean; data?: any[] }>("/api/v1/me/invitations");
+  return res?.data ?? [];
+}
+
+/** POST /api/v1/me/invitations/:id/accept */
+export async function acceptMeInvitation(inviteId: number): Promise<{ success: boolean; message?: string; data?: any }> {
+  return apiPost<{ success?: boolean; message?: string; data?: any }>(`/api/v1/me/invitations/${inviteId}/accept`, {});
+}
+
+/** POST /api/v1/me/invitations/:id/decline */
+export async function declineMeInvitation(inviteId: number): Promise<{ success: boolean; message?: string }> {
+  return apiPost<{ success?: boolean; message?: string }>(`/api/v1/me/invitations/${inviteId}/decline`, {});
+}
+
 // ========== Doctor Panel – /api/v1/doctor/* ==========
-export async function doctorGetMe(): Promise<{ doctorBranchMemberIds: number[]; branches: { branchId: number; branchName: string; branchMemberId: number; status: string; defaultConsultationFee: number | null; visiting: boolean }[] }> {
+export async function doctorGetMe(): Promise<{
+  doctorBranchMemberIds: number[];
+  branches: { branchId: number; branchName: string; branchMemberId: number; status: string; defaultConsultationFee: number | null; visiting: boolean; onboardingStatus?: string }[];
+  onboardingCompleted?: boolean;
+  displayName?: string | null;
+}> {
   const res = await apiGet<{ success?: boolean; data?: any }>("/api/v1/doctor/me");
-  return res?.data ?? { doctorBranchMemberIds: [], branches: [] };
+  return res?.data ?? { doctorBranchMemberIds: [], branches: [], onboardingCompleted: false, displayName: null };
+}
+
+/** POST /api/v1/doctor/onboarding/complete – set profile-level onboarding completed (no branch). */
+export async function doctorCompleteProfileOnboarding(): Promise<{ success: boolean; data?: any }> {
+  const res = await apiPost<{ success?: boolean; data?: any }>("/api/v1/doctor/onboarding/complete", {});
+  return { success: !!res?.success, data: res?.data };
+}
+
+/** GET /api/v1/doctor/requests – list current doctor's requests (fee/schedule/cancel/leave). */
+export async function doctorListRequests(params?: { branchId?: number; status?: string }): Promise<{ items: any[]; total: number }> {
+  const q = new URLSearchParams();
+  if (params?.branchId != null) q.set("branchId", String(params.branchId));
+  if (params?.status) q.set("status", params.status);
+  const res = await apiGet<{ success?: boolean; data?: { items: any[]; total: number } }>(`/api/v1/doctor/requests${q.toString() ? `?${q}` : ""}`);
+  return res?.data ?? { items: [], total: 0 };
+}
+
+/** POST /api/v1/doctor/requests – create a doctor request (requires clinic approval). */
+export async function doctorCreateRequest(body: { branchId: number; type: string; payload?: Record<string, unknown> }): Promise<any> {
+  const res = await apiPost<{ success?: boolean; data?: any }>("/api/v1/doctor/requests", body);
+  return res?.data ?? null;
 }
 
 export async function doctorGetDashboardSummary(params?: { branchId?: number; date?: string }) {
@@ -686,22 +729,28 @@ export async function doctorGetDashboardSummary(params?: { branchId?: number; da
 
 export async function doctorListAppointments(params?: {
   date?: string;
+  fromDate?: string;
+  toDate?: string;
   branchId?: number;
   status?: string;
   statuses?: string;
   visitType?: string;
   priority?: string;
+  appointmentType?: string;
   search?: string;
   limit?: number;
   offset?: number;
 }) {
   const q = new URLSearchParams();
   if (params?.date) q.set("date", params.date);
+  if (params?.fromDate) q.set("fromDate", params.fromDate);
+  if (params?.toDate) q.set("toDate", params.toDate);
   if (params?.branchId != null) q.set("branchId", String(params.branchId));
   if (params?.status) q.set("status", params.status);
   if (params?.statuses) q.set("statuses", params.statuses);
   if (params?.visitType) q.set("visitType", params.visitType);
   if (params?.priority) q.set("priority", params.priority);
+  if (params?.appointmentType) q.set("appointmentType", params.appointmentType);
   if (params?.search) q.set("search", params.search);
   if (params?.limit != null) q.set("limit", String(params.limit));
   if (params?.offset != null) q.set("offset", String(params.offset));
@@ -709,9 +758,22 @@ export async function doctorListAppointments(params?: {
   return { appointments: res?.data?.appointments ?? [], total: res?.data?.total ?? 0 };
 }
 
-export async function doctorGetAppointmentStats(params?: { date?: string; branchId?: number }) {
+/** POST /api/v1/doctor/appointments/:id/confirm - BOOKED -> CONFIRMED */
+export async function doctorConfirmAppointment(appointmentId: number) {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(`/api/v1/doctor/appointments/${appointmentId}/confirm`, {});
+  return res?.data ?? null;
+}
+
+export async function doctorGetAppointmentStats(params?: {
+  date?: string;
+  fromDate?: string;
+  toDate?: string;
+  branchId?: number;
+}) {
   const q = new URLSearchParams();
   if (params?.date) q.set("date", params.date);
+  if (params?.fromDate) q.set("fromDate", params.fromDate);
+  if (params?.toDate) q.set("toDate", params.toDate);
   if (params?.branchId != null) q.set("branchId", String(params.branchId));
   const res = await apiGet<{
     success?: boolean;
@@ -1256,6 +1318,84 @@ export async function staffClinicSlots(branchId: string, params: { date: string;
   }
 }
 
+/** GET /api/v1/clinic/branches/:branchId/booking/available-slots – service/package-aware slots */
+export async function staffBookingAvailableSlots(
+  branchId: string,
+  params: { date: string; serviceId?: number; packageId?: number; doctorId?: number; durationMinutes?: number }
+) {
+  const q = new URLSearchParams({ date: params.date });
+  if (params.serviceId != null) q.set("serviceId", String(params.serviceId));
+  if (params.packageId != null) q.set("packageId", String(params.packageId));
+  if (params.doctorId != null) q.set("doctorId", String(params.doctorId));
+  if (params.durationMinutes != null) q.set("durationMinutes", String(params.durationMinutes));
+  const res = await apiGet<{ success?: boolean; data?: { slots: { doctorId: number; doctorName: string; slots: { start: string; end: string }[] }[] } }>(
+    `${clinicBase(branchId)}/booking/available-slots?${q}`
+  );
+  return res?.data?.slots ?? [];
+}
+
+/** GET /api/v1/clinic/branches/:branchId/booking/eligible-doctors */
+export async function staffBookingEligibleDoctors(
+  branchId: string,
+  params?: { serviceId?: number; packageId?: number }
+) {
+  const q = new URLSearchParams();
+  if (params?.serviceId != null) q.set("serviceId", String(params.serviceId));
+  if (params?.packageId != null) q.set("packageId", String(params.packageId));
+  const res = await apiGet<{ success?: boolean; data?: { doctors: { doctorId: number; doctorName: string; specializationTags?: string[]; defaultConsultationFee?: number; serviceFee?: number; durationMin?: number }[] } }>(
+    `${clinicBase(branchId)}/booking/eligible-doctors${q.toString() ? `?${q}` : ""}`
+  );
+  return res?.data?.doctors ?? [];
+}
+
+/** GET /api/v1/clinic/branches/:branchId/booking/price-preview */
+export async function staffBookingPricePreview(
+  branchId: string,
+  params?: { serviceId?: number; packageId?: number; doctorId?: number; species?: string }
+) {
+  const q = new URLSearchParams();
+  if (params?.serviceId != null) q.set("serviceId", String(params.serviceId));
+  if (params?.packageId != null) q.set("packageId", String(params.packageId));
+  if (params?.doctorId != null) q.set("doctorId", String(params.doctorId));
+  if (params?.species) q.set("species", params.species);
+  const res = await apiGet<{ success?: boolean; data?: { basePrice: number; doctorFee: number; discountAmount: number; totalPrice: number; breakdown: { label: string; amount: number }[] } }>(
+    `${clinicBase(branchId)}/booking/price-preview${q.toString() ? `?${q}` : ""}`
+  );
+  return res?.data ?? null;
+}
+
+/** GET /api/v1/clinic/branches/:branchId/booking/constraints */
+export async function staffBookingConstraints(branchId: string, date?: string) {
+  const q = date ? `?date=${encodeURIComponent(date)}` : "";
+  const res = await apiGet<{ success?: boolean; data?: { isOpen: boolean; openingHours?: Record<string, string>; weeklyOffDays?: number[]; holidays?: { date: string; name: string | null; isClosed: boolean }[]; maxAdvanceDays: number; policies?: Record<string, unknown> } }>(
+    `${clinicBase(branchId)}/booking/constraints${q}`
+  );
+  return res?.data ?? null;
+}
+
+/** GET /api/v1/clinic/branches/:branchId/booking/compatible-rooms */
+export async function staffBookingCompatibleRooms(
+  branchId: string,
+  params: { start: string; end: string; serviceId?: number; surgeryPackageId?: number; doctorId?: number }
+) {
+  const q = new URLSearchParams({ start: params.start, end: params.end });
+  if (params.serviceId != null) q.set("serviceId", String(params.serviceId));
+  if (params.surgeryPackageId != null) q.set("surgeryPackageId", String(params.surgeryPackageId));
+  if (params.doctorId != null) q.set("doctorId", String(params.doctorId));
+  const res = await apiGet<{ success?: boolean; data?: { roomIds: number[]; rooms: { id: number; name: string; code: string | null; roomType: string }[] } }>(
+    `${clinicBase(branchId)}/booking/compatible-rooms?${q}`
+  );
+  return res?.data ?? { roomIds: [], rooms: [] };
+}
+
+/** POST /api/v1/clinic/branches/:branchId/appointments/:id/confirm */
+export async function staffAppointmentConfirm(branchId: string, appointmentId: number) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/appointments/${appointmentId}/confirm`
+  );
+  return res?.data;
+}
+
 export async function staffClinicDoctors(branchId: string): Promise<{ id: number; displayName: string }[]> {
   try {
     const res = await apiGet<{ success?: boolean; data?: { doctors?: { id: number; displayName: string }[] } }>(`${clinicBase(branchId)}/doctors`);
@@ -1265,6 +1405,345 @@ export async function staffClinicDoctors(branchId: string): Promise<{ id: number
   } catch {
     return [];
   }
+}
+
+// --- Staff Doctor Management (Enterprise) ---
+export async function staffDoctorsSummary(branchId: string) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/summary`);
+  return res?.data ?? null;
+}
+
+export async function staffDoctorsAlerts(branchId: string) {
+  const res = await apiGet<{ success?: boolean; data?: any[] }>(`${clinicBase(branchId)}/doctors/alerts`);
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export async function staffDoctorsEnriched(branchId: string, params?: Record<string, string | number | undefined>) {
+  const q = new URLSearchParams();
+  if (params) Object.entries(params).forEach(([k, v]) => v != null && v !== "" && q.set(k, String(v)));
+  const res = await apiGet<{ success?: boolean; data?: { items: any[]; total: number } }>(`${clinicBase(branchId)}/doctors/enriched${q.toString() ? `?${q}` : ""}`);
+  return res?.data ?? { items: [], total: 0 };
+}
+
+export async function staffClinicListInvitations(
+  branchId: string,
+  params?: { status?: string; inviteAsDoctor?: boolean; limit?: number; offset?: number }
+) {
+  const q = new URLSearchParams();
+  if (params?.status) q.set("status", params.status);
+  if (params?.inviteAsDoctor !== undefined) q.set("inviteAsDoctor", String(params.inviteAsDoctor));
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const res = await apiGet<{ success?: boolean; data?: { items: any[]; total: number } }>(
+    `${clinicBase(branchId)}/doctors/invitations${q.toString() ? `?${q}` : ""}`
+  );
+  return res?.data ?? { items: [], total: 0 };
+}
+
+export async function staffClinicResendInvitation(branchId: string, inviteId: number) {
+  const res = await apiPost<{ success?: boolean; data?: { invite?: any; rawToken?: string } }>(
+    `${clinicBase(branchId)}/doctors/invitations/${inviteId}/resend`,
+    {}
+  );
+  return res?.data ?? null;
+}
+
+export async function staffClinicCancelInvitation(branchId: string, inviteId: number) {
+  const res = await apiPost<{ success?: boolean; data?: { invite?: any } }>(
+    `${clinicBase(branchId)}/doctors/invitations/${inviteId}/cancel`,
+    {}
+  );
+  return res?.data ?? null;
+}
+
+export async function staffDoctorProfile(branchId: string, memberId: number) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/${memberId}/profile`);
+  return res?.data ?? null;
+}
+
+export async function staffDoctor360Summary(branchId: string, memberId: number) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/${memberId}/360-summary`);
+  return res?.data ?? null;
+}
+
+export async function staffDoctorStatusUpdate(branchId: string, memberId: number, body: { status: "ACTIVE" | "INACTIVE" }) {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/${memberId}/status`, body);
+  return res?.data ?? res;
+}
+
+export async function staffDoctorCredentials(branchId: string, memberId: number) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/${memberId}/credentials`);
+  return res?.data ?? { documents: [], licenses: [], branchCredentials: [] };
+}
+
+export async function staffDoctorPostCredential(branchId: string, memberId: number, body: Record<string, unknown>) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/${memberId}/credentials`, body);
+  return res?.data ?? res;
+}
+
+export async function staffDoctorPatchCredential(branchId: string, memberId: number, credentialId: number, body: { status: "PENDING" | "UNDER_REVIEW" }) {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/${memberId}/credentials/${credentialId}`, body);
+  return res?.data ?? res;
+}
+
+export async function staffDoctorSubmitCredentialApproval(branchId: string, memberId: number, credentialId: number) {
+  const res = await apiPost<{ success?: boolean; data?: { id: number; status: string } }>(`${clinicBase(branchId)}/doctors/${memberId}/credentials/${credentialId}/submit-approval`, {});
+  return res?.data ?? res;
+}
+
+export async function staffDoctorServices(branchId: string, memberId: number) {
+  const res = await apiGet<{ success?: boolean; data?: any[] }>(`${clinicBase(branchId)}/doctors/${memberId}/services`);
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export async function staffDoctorPackages(branchId: string, memberId: number) {
+  const res = await apiGet<{ success?: boolean; data?: any[] }>(`${clinicBase(branchId)}/doctors/${memberId}/packages`);
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export async function staffDoctorSchedule(branchId: string, memberId: number, params?: { from?: string; to?: string }) {
+  const q = new URLSearchParams();
+  if (params?.from) q.set("from", params.from);
+  if (params?.to) q.set("to", params.to);
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/${memberId}/schedule${q.toString() ? `?${q}` : ""}`);
+  return res?.data ?? { templates: [], exceptions: [] };
+}
+
+export async function staffDoctorFees(branchId: string, memberId: number) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/${memberId}/fees`);
+  return res?.data ?? { current: {}, proposed: null };
+}
+
+export async function staffDoctorPerformance(branchId: string, memberId: number, params?: { from?: string; to?: string }) {
+  const q = new URLSearchParams();
+  if (params?.from) q.set("from", params.from);
+  if (params?.to) q.set("to", params.to);
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/${memberId}/performance${q.toString() ? `?${q}` : ""}`);
+  return res?.data ?? null;
+}
+
+export async function staffDoctorLeave(branchId: string, memberId: number) {
+  const res = await apiGet<{ success?: boolean; data?: any[] }>(`${clinicBase(branchId)}/doctors/${memberId}/leave`);
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export async function staffDoctorApprovals(branchId: string, memberId: number) {
+  const res = await apiGet<{ success?: boolean; data?: any[] }>(`${clinicBase(branchId)}/doctors/${memberId}/approvals`);
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+/** GET /api/v1/clinic/branches/:branchId/approval-requests */
+export async function staffClinicApprovalRequestsList(branchId: string, params?: { status?: string; requestType?: string }) {
+  const q = new URLSearchParams();
+  if (params?.status) q.set("status", params.status);
+  if (params?.requestType) q.set("requestType", params.requestType);
+  const res = await apiGet<{ success?: boolean; data?: any[] }>(`${clinicBase(branchId)}/approval-requests${q.toString() ? `?${q}` : ""}`);
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export async function staffApprovalDecide(
+  branchId: string,
+  requestId: number,
+  body: { decision: "APPROVED" | "REJECTED"; rejectReason?: string }
+) {
+  const res = await apiPut<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/approval-requests/${requestId}/decide`,
+    body
+  );
+  return res?.data ?? res;
+}
+
+export async function staffDoctorAuditLog(branchId: string, memberId: number, params?: { limit?: number; offset?: number }) {
+  const q = new URLSearchParams();
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const res = await apiGet<{ success?: boolean; data?: { items: any[]; total: number } }>(`${clinicBase(branchId)}/doctors/${memberId}/audit-log${q.toString() ? `?${q}` : ""}`);
+  return res?.data ?? { items: [], total: 0 };
+}
+
+export async function staffDoctorsScheduleBoard(branchId: string, params?: { from?: string; to?: string; doctorIds?: number[] }) {
+  const q = new URLSearchParams();
+  if (params?.from) q.set("from", params.from);
+  if (params?.to) q.set("to", params.to);
+  if (params?.doctorIds?.length) params.doctorIds.forEach((id) => q.append("doctorIds", String(id)));
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/schedule-board${q.toString() ? `?${q}` : ""}`);
+  return res?.data ?? { doctors: [], templates: [], exceptions: [], appointments: [] };
+}
+
+export async function staffDoctorsServiceMatrix(branchId: string) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/service-matrix`);
+  return res?.data ?? { doctors: [], services: [], matrix: [] };
+}
+
+export async function staffDoctorsPackageMatrix(branchId: string) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/package-matrix`);
+  return res?.data ?? { doctors: [], packages: [], matrix: [] };
+}
+
+export async function staffDoctorsCredentialsQueue(branchId: string) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/credentials-queue`);
+  return res?.data ?? {
+    missing: [], pending: [], expiringSoon: [], rejected: [],
+    credentialsPending: [], credentialsUnderReview: [], credentialsApproved: [], credentialsRejected: [], credentialsExpiringSoon: [],
+  };
+}
+
+export async function staffCertificationsBoard(branchId: string) {
+  const res = await apiGet<{ success?: boolean; data?: { items: any[]; summary: any } }>(`${clinicBase(branchId)}/doctors/certifications-board`);
+  return res?.data ?? { items: [], summary: { total: 0, verified: 0, expiringSoon: 0, expired: 0, unverified: 0 } };
+}
+
+export async function staffLicensesBoard(branchId: string) {
+  const res = await apiGet<{ success?: boolean; data?: { items: any[]; summary: any; alerts: any[] } }>(`${clinicBase(branchId)}/doctors/licenses-board`);
+  return res?.data ?? { items: [], summary: { total: 0, active: 0, expiringSoon: 0, expired: 0, unverified: 0 }, alerts: [] };
+}
+
+export async function staffDoctorsAvailabilityBoard(branchId: string) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/availability-board`);
+  return res?.data ?? { onLeaveToday: [], upcomingLeave: [], pendingRequests: [] };
+}
+
+export async function staffDoctorsPendingApprovals(branchId: string) {
+  const res = await apiGet<{ success?: boolean; data?: any[] }>(`${clinicBase(branchId)}/doctors/pending-approvals`);
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export type StaffDoctorsPerformanceSummaryParams = { from?: string; to?: string; limit?: number; offset?: number };
+
+export async function staffDoctorsPerformanceSummary(branchId: string, params?: StaffDoctorsPerformanceSummaryParams) {
+  const q = new URLSearchParams();
+  if (params?.from) q.set("from", params.from);
+  if (params?.to) q.set("to", params.to);
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const suffix = q.toString() ? `?${q.toString()}` : "";
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/performance-summary${suffix}`);
+  return res?.data ?? null;
+}
+
+export type StaffDoctorsAuditLogsParams = {
+  memberId?: number;
+  action?: string;
+  from?: string;
+  to?: string;
+  limit?: number;
+  offset?: number;
+};
+
+export async function staffDoctorsAuditLogs(branchId: string, params?: StaffDoctorsAuditLogsParams) {
+  const q = new URLSearchParams();
+  if (params?.memberId != null) q.set("memberId", String(params.memberId));
+  if (params?.action) q.set("action", params.action);
+  if (params?.from) q.set("from", params.from);
+  if (params?.to) q.set("to", params.to);
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const suffix = q.toString() ? `?${q.toString()}` : "";
+  const res = await apiGet<{ success?: boolean; data?: { items: any[]; total: number } }>(`${clinicBase(branchId)}/doctors/audit-logs${suffix}`);
+  return res?.data ?? { items: [], total: 0 };
+}
+
+export async function staffDoctorApprovalAction(
+  branchId: string,
+  requestId: number,
+  body: { decision: "APPROVED" | "REJECTED"; rejectReason?: string }
+) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/doctors/approvals/${requestId}/action`,
+    body
+  );
+  return res?.data ?? res;
+}
+
+export async function staffDoctorInvite(branchId: string, data: Record<string, unknown>) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/invite`, data);
+  return res?.data ?? res;
+}
+
+export async function staffDoctorAssignExisting(branchId: string, data: { userId: number; roleInClinic?: string; defaultConsultationFee?: number }) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/assign-existing`, data);
+  return res?.data ?? res;
+}
+
+export async function staffDoctorInviteSearch(branchId: string, query: string) {
+  const res = await apiGet<{ success?: boolean; data?: any[] }>(`${clinicBase(branchId)}/doctors/invite-search?q=${encodeURIComponent(query)}`);
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export async function staffDoctorPutServices(branchId: string, memberId: number, body: any) {
+  const res = await apiPut<{ success?: boolean; data?: any[] }>(`${clinicBase(branchId)}/doctors/${memberId}/services`, body);
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export async function staffDoctorDeleteServiceMapping(branchId: string, memberId: number, mappingId: number): Promise<void> {
+  await apiDelete(`${clinicBase(branchId)}/doctors/${memberId}/services/${mappingId}`);
+}
+
+export async function staffDoctorDeletePackageMapping(branchId: string, memberId: number, mappingId: number): Promise<void> {
+  await apiDelete(`${clinicBase(branchId)}/doctors/${memberId}/packages/${mappingId}`);
+}
+
+export async function staffDoctorPutPackages(branchId: string, memberId: number, body: any) {
+  const res = await apiPut<{ success?: boolean; data?: any[] }>(`${clinicBase(branchId)}/doctors/${memberId}/packages`, body);
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export async function staffDoctorProposeFee(branchId: string, memberId: number, body: any) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/${memberId}/fees/propose`, body);
+  return res?.data ?? res;
+}
+
+export async function staffDoctorPostLeave(branchId: string, memberId: number, body: any) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/${memberId}/leave`, body);
+  return res?.data ?? res;
+}
+
+export async function staffDoctorPostSchedule(branchId: string, memberId: number, body: any) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/${memberId}/schedule`, body);
+  return res?.data ?? res;
+}
+
+export async function staffDoctorPutSchedule(branchId: string, memberId: number, scheduleId: number, body: any) {
+  const res = await apiPut<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/${memberId}/schedule/${scheduleId}`, body);
+  return res?.data ?? res;
+}
+
+export async function staffDoctorDeleteSchedule(branchId: string, memberId: number, scheduleId: number) {
+  await apiDelete(`${clinicBase(branchId)}/doctors/${memberId}/schedule/${scheduleId}`);
+}
+
+export async function staffDoctorPostScheduleException(
+  branchId: string,
+  memberId: number,
+  body: { date: string; type: string; startTime?: string; endTime?: string; note?: string }
+) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/doctors/${memberId}/schedule/exceptions`,
+    body
+  );
+  return res?.data ?? res;
+}
+
+export async function staffDoctorPutScheduleException(
+  branchId: string,
+  memberId: number,
+  exceptionId: number,
+  body: { type?: string; startTime?: string; endTime?: string; note?: string }
+) {
+  const res = await apiPut<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/doctors/${memberId}/schedule/exceptions/${exceptionId}`,
+    body
+  );
+  return res?.data ?? res;
+}
+
+export async function staffDoctorDeleteScheduleException(branchId: string, memberId: number, exceptionId: number) {
+  await apiDelete(`${clinicBase(branchId)}/doctors/${memberId}/schedule/exceptions/${exceptionId}`);
+}
+
+export async function staffDoctorsPutServiceMatrix(branchId: string, body: { bulkAssign?: boolean; assignments?: any[] }) {
+  const res = await apiPut<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/service-matrix`, body);
+  return res?.data ?? res;
 }
 
 export async function staffClinicItemSearch(branchId: string, params?: { q?: string; limit?: number }): Promise<unknown[]> {
@@ -1402,10 +1881,57 @@ export async function staffClinicSupplyRequestLowStockSuggestions(branchId: stri
 
 export async function staffClinicSupplyRequestCreate(
   branchId: string,
-  body: { items: { clinicalItemId: number; variantId?: number; requestedQty: number; note?: string }[]; priority?: string; note?: string }
+  body: {
+    items: Array<
+      | { clinicalItemId: number; variantId?: number; requestedQty: number; note?: string; lineNote?: string }
+      | { sourceType: "CUSTOM"; itemNameSnapshot: string; unitSnapshot: string; requestedQty: number; lineNote?: string }
+    >;
+    priority?: string;
+    note?: string;
+    department?: string;
+    requestType?: string;
+    neededBy?: string;
+    reason?: string;
+  }
 ): Promise<unknown> {
   const res = await apiPost<{ data?: unknown }>(`${clinicBase(branchId)}/supply-requests`, body);
   return res?.data ?? res;
+}
+
+export async function staffClinicSupplyRequestUpdateDraft(
+  branchId: string,
+  requestId: number,
+  body: {
+    department?: string | null;
+    requestType?: string;
+    priority?: string;
+    neededBy?: string | null;
+    reason?: string | null;
+    note?: string | null;
+    items?: Array<
+      | { clinicalItemId: number; variantId?: number; requestedQty: number; note?: string; lineNote?: string }
+      | { sourceType: "CUSTOM"; itemNameSnapshot: string; unitSnapshot: string; requestedQty: number; lineNote?: string }
+    >;
+  }
+): Promise<unknown> {
+  const res = await apiPatch<{ data?: unknown }>(`${clinicBase(branchId)}/supply-requests/${requestId}`, body);
+  return res?.data ?? res;
+}
+
+export async function staffClinicSupplyRequestCancel(branchId: string, requestId: number): Promise<unknown> {
+  const res = await apiPost<{ data?: unknown }>(`${clinicBase(branchId)}/supply-requests/${requestId}/cancel`, {});
+  return res?.data ?? res;
+}
+
+export async function staffClinicSupplyRequestItemSearch(
+  branchId: string,
+  params?: { q?: string; limit?: number }
+): Promise<unknown[]> {
+  const q = new URLSearchParams();
+  if (params?.q) q.set("q", params.q);
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  const res = await apiGet<{ data?: unknown[] }>(`${clinicBase(branchId)}/supply-requests/items/search${q.toString() ? `?${q}` : ""}`);
+  return Array.isArray(res?.data) ? res.data : [];
 }
 
 export async function staffClinicSupplyRequestSubmit(branchId: string, requestId: number): Promise<unknown> {
@@ -1684,6 +2210,11 @@ export async function staffClinicAppointmentCreateV2(
     paymentMethod?: string;
     paidAmount?: number;
     tokenNo?: string;
+    appointmentType?: string;
+    surgeryPackageId?: number;
+    durationMinutes?: number;
+    specialInstructions?: string;
+    roomId?: number | null;
   }
 ) {
   const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/appointments`, body);
@@ -1697,6 +2228,7 @@ export async function staffClinicQuickAppointmentCreate(
     petId?: number | null;
     doctorId?: number | null;
     serviceId: number;
+    surgeryPackageId?: number | null;
     scheduledStartAt: string;
     scheduledEndAt: string;
     status?: "DRAFT" | "PRE_BOOKED";
@@ -1739,19 +2271,51 @@ export async function staffClinicCheckDuplicate(
 // ========== Staff Clinic Enterprise: Packages, Cases, Consumption, Vial Returns ==========
 const clinicApiBase = "/api/v1/clinic";
 
-/** Available surgery packages for a service (for package selection in appointment/billing) */
+/** List surgery packages for branch (for booking wizard / Quick Appointment) */
+export async function staffClinicPackagesList(branchId: string): Promise<{ id: number; serviceId: number; packageCode: string; packageName: string; baseSellingPrice: number; status?: string; packageType?: string; description?: string }[]> {
+  try {
+    const res = await apiGet<{ success?: boolean; data?: { items?: any[] } }>(`${clinicBase(branchId)}/packages?limit=100`);
+    const raw = res?.data?.items ?? (Array.isArray(res?.data) ? res.data : null);
+    if (!Array.isArray(raw)) return [];
+    return raw.map((p: any) => ({
+      id: Number(p.id),
+      serviceId: Number(p.serviceId ?? p.service?.id ?? 0),
+      packageCode: p.packageCode ?? "",
+      packageName: p.packageName ?? p.name ?? "",
+      baseSellingPrice: Number(p.baseSellingPrice ?? p.basePrice ?? 0),
+      status: p.status,
+      packageType: p.packageType,
+      description: p.description,
+    }));
+  } catch {
+    return [];
+  }
+}
+
+/** Available surgery packages for a service (for package selection in appointment/billing).
+ * Backend returns { success, data: array }; normalize to { id, name, code, basePrice, packageType? } for UI. */
 export async function staffClinicAvailablePackages(
   branchId: string,
   serviceId: number,
   params?: { species?: string }
-): Promise<{ id: number; name: string; code?: string; basePrice?: number }[]> {
+): Promise<{ id: number; name: string; code?: string; basePrice?: number; packageType?: string }[]> {
   const q = new URLSearchParams();
   if (params?.species) q.set("species", params.species);
-  const res = await apiGet<{ success?: boolean; data?: any[] }>(
+  const res = await apiGet<{ success?: boolean; data?: any }>(
     `${clinicBase(branchId)}/services/${serviceId}/available-packages${q.toString() ? `?${q}` : ""}`
   );
-  const raw = Array.isArray(res?.data) ? res.data : [];
-  return raw.map((p: any) => ({ id: Number(p.id), name: p.name ?? "", code: p.code, basePrice: p.basePrice != null ? Number(p.basePrice) : undefined }));
+  const raw = Array.isArray(res?.data)
+    ? res.data
+    : Array.isArray((res?.data as any)?.items)
+      ? (res?.data as any).items
+      : [];
+  return raw.map((p: any) => ({
+    id: Number(p.id),
+    name: p.packageName ?? p.name ?? "",
+    code: p.packageCode ?? p.code,
+    basePrice: p.baseSellingPrice != null ? Number(p.baseSellingPrice) : (p.basePrice != null ? Number(p.basePrice) : undefined),
+    packageType: p.packageType ?? undefined,
+  }));
 }
 
 /** List clinical cases for branch */
@@ -1888,17 +2452,217 @@ export async function staffClinicVialReturnMarkReturned(branchId: string, contro
 // ---------- Medicine Control (CCMLPA) ----------
 export async function staffClinicDispenseRequestsList(
   branchId: string,
-  params?: { status?: string; take?: number; skip?: number }
+  params?: { status?: string; requestType?: string; take?: number; skip?: number }
 ): Promise<any[]> {
   const q = new URLSearchParams();
   if (params?.status) q.set("status", params.status);
+  if (params?.requestType) q.set("requestType", params.requestType);
   if (params?.take != null) q.set("take", String(params.take));
   if (params?.skip != null) q.set("skip", String(params.skip));
-  const res = await apiGet<{ success?: boolean; data?: any[] }>(
+  const res = await apiGet<{ success?: boolean; data?: any }>(
     `${clinicBase(branchId)}/medicine-control/dispense-requests${q.toString() ? `?${q}` : ""}`
   );
   const d = res?.data;
   return Array.isArray(d) ? d : (d?.list ?? d?.items ?? []);
+}
+
+/** Internal Order + Vial Workflow: treatment course, billing, internal orders */
+
+export async function staffClinicTreatmentCoursesList(
+  branchId: string,
+  params?: { patientId?: number; status?: string; skip?: number; take?: number }
+): Promise<{ list: any[]; total: number }> {
+  const q = new URLSearchParams();
+  if (params?.patientId != null) q.set("patientId", String(params.patientId));
+  if (params?.status) q.set("status", params.status);
+  if (params?.skip != null) q.set("skip", String(params.skip));
+  if (params?.take != null) q.set("take", String(params.take));
+  const res = await apiGet<{ success?: boolean; data?: { list: any[]; total: number } }>(
+    `${clinicBase(branchId)}/medicine-control/treatment-courses${q.toString() ? `?${q}` : ""}`
+  );
+  const d = res?.data;
+  return d && typeof d === "object" && Array.isArray(d.list) ? { list: d.list, total: d.total ?? d.list.length } : { list: [], total: 0 };
+}
+
+export async function staffClinicTreatmentCourseCreateFull(
+  branchId: string,
+  body: {
+    patientId: number;
+    visitId?: number | null;
+    branchId?: number;
+    prescribedByDoctorId?: number | null;
+    treatmentBranchId?: number | null;
+    crossBranchAllowed?: boolean;
+    durationDays: number;
+    days: { dayNumber: number; scheduledDate: string; items: { variantId: number; medicineName: string; dosageMl: number; route?: string; frequency?: string; expectedNote?: string }[] }[];
+  }
+): Promise<any> {
+  const res = await apiPost<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/treatment-course/full`,
+    body
+  );
+  return res?.data;
+}
+
+export async function staffClinicTreatmentCourseSchedule(branchId: string, courseId: number): Promise<any> {
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/treatment-course/${courseId}/schedule`
+  );
+  return res?.data;
+}
+
+export async function staffClinicTreatmentCourseTodayDue(branchId: string, courseId: number): Promise<any> {
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/treatment-course/${courseId}/today-due`
+  );
+  return res?.data;
+}
+
+export async function staffClinicTreatmentCourseRevisions(branchId: string, courseId: number, limit?: number): Promise<any[]> {
+  const q = limit != null ? `?limit=${limit}` : "";
+  const res = await apiGet<{ success?: boolean; data?: any[] }>(
+    `${clinicBase(branchId)}/medicine-control/treatment-course/${courseId}/revisions${q}`
+  );
+  const d = res?.data;
+  return Array.isArray(d) ? d : [];
+}
+
+export async function staffClinicTreatmentCourseHold(branchId: string, courseId: number, reason?: string): Promise<any> {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/treatment-course/${courseId}/hold`,
+    { reason: reason ?? null }
+  );
+  return res?.data;
+}
+
+export async function staffClinicTreatmentCourseResume(branchId: string, courseId: number): Promise<any> {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/treatment-course/${courseId}/resume`,
+    {}
+  );
+  return res?.data;
+}
+
+export async function staffClinicTreatmentCourseStop(branchId: string, courseId: number): Promise<any> {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/treatment-course/${courseId}/stop`,
+    {}
+  );
+  return res?.data;
+}
+
+export async function staffClinicTreatmentDayItemUpdate(
+  branchId: string,
+  itemId: number,
+  body: { status?: string; dosageMl?: number; route?: string; expectedNote?: string }
+): Promise<any> {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/treatment-course/day-item/${itemId}`,
+    body
+  );
+  return res?.data;
+}
+
+export async function staffClinicTreatmentBillingSummary(branchId: string, courseId: number): Promise<any> {
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/treatment-billing/${courseId}/summary`
+  );
+  return res?.data;
+}
+
+export async function staffClinicTreatmentDayBillCreate(
+  branchId: string,
+  courseId: number,
+  body: { customerId: number; treatmentDayId: number; serviceFee?: number; visitId?: number | null; paymentMethod?: string; notes?: string }
+): Promise<any> {
+  const res = await apiPost<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/treatment-billing/${courseId}/create-bill`,
+    body
+  );
+  return res?.data;
+}
+
+export async function staffClinicOpenVialAvailability(
+  branchId: string,
+  variantId: number,
+  requiredMl?: number
+): Promise<any> {
+  const q = requiredMl != null ? `?requiredMl=${requiredMl}` : "";
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/open-vial-availability/${variantId}${q}`
+  );
+  return res?.data;
+}
+
+export async function staffClinicInternalOrderCreate(
+  branchId: string,
+  body: {
+    patientId?: number | null;
+    visitId?: number | null;
+    treatmentCourseId?: number | null;
+    tokenId?: number | null;
+    treatmentDayItemId?: number | null;
+    requestReason?: string | null;
+    items: { variantId: number; requestedQty: number; unit?: string; reason?: string }[];
+  }
+): Promise<any> {
+  const res = await apiPost<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/internal-order`,
+    body
+  );
+  return res?.data;
+}
+
+export async function staffClinicInternalOrdersDashboard(
+  branchId: string,
+  params?: { requestType?: string }
+): Promise<{ pending: number; approved: number; rejected: number; issued: number; activated: number; closed: number; byRequestType: Record<string, number> }> {
+  const q = params?.requestType ? `?requestType=${encodeURIComponent(params.requestType)}` : "";
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/internal-orders/dashboard${q}`
+  );
+  return res?.data ?? {};
+}
+
+export async function staffClinicPatientDueMedicines(branchId: string, patientId: number): Promise<any> {
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/patient/${patientId}/due-medicines`
+  );
+  return res?.data;
+}
+
+export async function staffClinicTreatmentDayComplete(branchId: string, treatmentDayId: number): Promise<any> {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/treatment-day/${treatmentDayId}/complete`,
+    {}
+  );
+  return res?.data;
+}
+
+export async function staffClinicExceptionOverrideRequest(
+  branchId: string,
+  body: { action: string; reason: string; relatedEntityType?: string; relatedEntityId?: string; evidenceUrls?: string[] }
+): Promise<any> {
+  const res = await apiPost<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/exception/override-request`,
+    body
+  );
+  return res?.data;
+}
+
+export async function staffClinicExceptionOverrideApprove(branchId: string, overrideId: number): Promise<any> {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/exception/override/${overrideId}/approve`,
+    {}
+  );
+  return res?.data;
+}
+
+export async function staffClinicInjectionTokenWithContext(branchId: string, tokenId: number): Promise<any> {
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/injection-token/${tokenId}/context`
+  );
+  return res?.data;
 }
 
 export async function staffClinicDispenseRequestApprove(branchId: string, requestId: number): Promise<any> {
@@ -1917,14 +2681,24 @@ export async function staffClinicDispenseRequestIssue(branchId: string, requestI
   return res?.data;
 }
 
-export async function staffClinicVialSessionsList(branchId: string, params?: { status?: string }): Promise<any[]> {
+export async function staffClinicVialSessionsList(
+  branchId: string,
+  params?: { status?: string; variantId?: number; take?: number; skip?: number }
+): Promise<{ list: any[]; total: number }> {
   const q = new URLSearchParams();
   if (params?.status) q.set("status", params.status);
-  const res = await apiGet<{ success?: boolean; data?: any[] }>(
+  if (params?.variantId != null) q.set("variantId", String(params.variantId));
+  if (params?.take != null) q.set("take", String(params.take));
+  if (params?.skip != null) q.set("skip", String(params.skip));
+  const res = await apiGet<{ success?: boolean; data?: { list?: any[]; total?: number } | any[] }>(
     `${clinicBase(branchId)}/medicine-control/vial-sessions${q.toString() ? `?${q}` : ""}`
   );
   const d = res?.data;
-  return Array.isArray(d) ? d : (d?.list ?? d?.items ?? []);
+  if (d && typeof d === "object" && "list" in d && "total" in d) {
+    return { list: Array.isArray(d.list) ? d.list : [], total: Number(d.total ?? 0) };
+  }
+  const arr = Array.isArray(d) ? d : (d?.list ?? d?.items ?? []);
+  return { list: arr, total: arr.length };
 }
 
 export async function staffClinicAuditBinsList(branchId: string): Promise<any[]> {
@@ -1937,6 +2711,210 @@ export async function staffClinicMedicinePoliciesList(branchId: string): Promise
   const res = await apiGet<{ success?: boolean; data?: any[] }>(`${clinicBase(branchId)}/medicine-control/policies`);
   const d = res?.data;
   return Array.isArray(d) ? d : (d?.list ?? d?.items ?? []);
+}
+
+export async function staffClinicGenerateInjectionToken(
+  branchId: string,
+  body: {
+    visitId: number;
+    variantId: number;
+    expectedDose: number;
+    prescriptionId?: number | null;
+    orderId?: number | null;
+    patientId?: number | null;
+    petId?: number | null;
+    unit?: string | null;
+    medicineSource?: "INTERNAL" | "EXTERNAL" | "OUTSIDE";
+    expiresInHours?: number;
+    treatmentCourseId?: number | null;
+    treatmentDayId?: number | null;
+    selectedVialSessionId?: number | null;
+  }
+): Promise<any> {
+  const res = await apiPost<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/injection-token`,
+    body
+  );
+  return res?.data;
+}
+
+export async function staffClinicValidateInjectionToken(branchId: string, tokenCode: string): Promise<any> {
+  const q = new URLSearchParams();
+  q.set("tokenCode", tokenCode);
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/injection-token/validate?${q.toString()}`
+  );
+  return res?.data;
+}
+
+export async function staffClinicInjectionTokensList(
+  branchId: string,
+  params?: {
+    status?: string;
+    visitId?: number;
+    patientId?: number;
+    tokenCode?: string;
+    fromDate?: string;
+    toDate?: string;
+    take?: number;
+    skip?: number;
+    /** Server resolves to current user id when true (operator accountability). */
+    validatedByMe?: boolean;
+    /** Server resolves to current user id when true (operator accountability). */
+    generatedByMe?: boolean;
+  }
+): Promise<{ list: any[]; total: number }> {
+  const q = new URLSearchParams();
+  if (params?.status) q.set("status", params.status);
+  if (params?.visitId != null) q.set("visitId", String(params.visitId));
+  if (params?.patientId != null) q.set("patientId", String(params.patientId));
+  if (params?.tokenCode) q.set("tokenCode", params.tokenCode);
+  if (params?.fromDate) q.set("fromDate", params.fromDate);
+  if (params?.toDate) q.set("toDate", params.toDate);
+  if (params?.take != null) q.set("take", String(params.take));
+  if (params?.skip != null) q.set("skip", String(params.skip));
+  if (params?.validatedByMe === true) q.set("validatedByMe", "true");
+  if (params?.generatedByMe === true) q.set("generatedByMe", "true");
+  const res = await apiGet<{ success?: boolean; data?: { list?: any[]; total?: number } }>(
+    `${clinicBase(branchId)}/medicine-control/injection-tokens${q.toString() ? `?${q.toString()}` : ""}`
+  );
+  const data = res?.data ?? {};
+  return {
+    list: Array.isArray(data?.list) ? data.list : [],
+    total: Number(data?.total ?? 0),
+  };
+}
+
+export async function staffClinicCancelInjectionToken(
+  branchId: string,
+  tokenId: number,
+  body?: { reason?: string | null }
+): Promise<any> {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/injection-token/${tokenId}/cancel`,
+    body ?? {}
+  );
+  return res?.data;
+}
+
+export async function staffClinicRecordDose(
+  branchId: string,
+  body: {
+    patientId: number;
+    variantId: number;
+    administeredDose: number;
+    visitId?: number | null;
+    surgeryCaseId?: number | null;
+    vialSessionId?: number | null;
+    injectionTokenId?: number | null;
+    medicineSource?: "INTERNAL" | "EXTERNAL" | "OUTSIDE";
+    prescribedDose?: number | null;
+    unit?: string | null;
+    route?: string | null;
+    witnessedByUserId?: number | null;
+    emergencyBypass?: boolean;
+    emergencyBypassReason?: string | null;
+    medicineApprovalRequestId?: number | null;
+  }
+): Promise<any> {
+  const res = await apiPost<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/dose`,
+    body
+  );
+  return res?.data;
+}
+
+/** GET dose history by visit (for injection room dose history drawer). */
+export async function staffClinicDoseByVisit(branchId: string, visitId: number): Promise<any[]> {
+  const res = await apiGet<{ success?: boolean; data?: { list?: any[] } }>(
+    `${clinicBase(branchId)}/medicine-control/dose/visit/${visitId}`
+  );
+  const list = res?.data?.list;
+  return Array.isArray(list) ? list : [];
+}
+
+export async function staffClinicInjectionMonitor(branchId: string, date?: string): Promise<any> {
+  const q = new URLSearchParams();
+  if (date) q.set("date", date);
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/dashboard/injection-monitor${q.toString() ? `?${q.toString()}` : ""}`
+  );
+  return res?.data;
+}
+
+/** GET injection room operations board: pending, unassigned (no vial), completed today, bypass, expired/problem. Optional roomId, validatedByMe, administeredByMe. */
+export async function staffClinicInjectionRoomBoard(
+  branchId: string,
+  params?: { date?: string; roomId?: number | null; validatedByMe?: boolean; administeredByMe?: boolean }
+): Promise<{
+  date: string;
+  pendingTokens: any[];
+  unassignedTokens: any[];
+  completedToday: any[];
+  bypassToday: any[];
+  expiredOrProblemToday: any[];
+}> {
+  const q = new URLSearchParams();
+  if (params?.date) q.set("date", params.date);
+  if (params?.roomId != null) q.set("roomId", String(params.roomId));
+  if (params?.validatedByMe === true) q.set("validatedByMe", "true");
+  if (params?.administeredByMe === true) q.set("administeredByMe", "true");
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/injection-room/board${q.toString() ? `?${q.toString()}` : ""}`
+  );
+  const d = res?.data;
+  return d ?? { date: "", pendingTokens: [], unassignedTokens: [], completedToday: [], bypassToday: [], expiredOrProblemToday: [] };
+}
+
+export async function staffClinicRunDailyReconciliation(branchId: string, date?: string): Promise<any> {
+  const res = await apiPost<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/reconciliation/run`,
+    date ? { date } : {}
+  );
+  return res?.data;
+}
+
+export async function staffClinicDailyReconciliations(
+  branchId: string,
+  params?: {
+    date?: string;
+    fromDate?: string;
+    toDate?: string;
+    status?: string;
+    hasMismatch?: boolean;
+    take?: number;
+    skip?: number;
+  }
+): Promise<{ list: any[]; total: number; row?: any | null }> {
+  const q = new URLSearchParams();
+  if (params?.date) q.set("date", params.date);
+  if (params?.fromDate) q.set("fromDate", params.fromDate);
+  if (params?.toDate) q.set("toDate", params.toDate);
+  if (params?.status) q.set("status", params.status);
+  if (params?.hasMismatch != null) q.set("hasMismatch", String(params.hasMismatch));
+  if (params?.take != null) q.set("take", String(params.take));
+  if (params?.skip != null) q.set("skip", String(params.skip));
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/reconciliation${q.toString() ? `?${q.toString()}` : ""}`
+  );
+  const data = res?.data ?? {};
+  if (data?.row) return { list: data.row ? [data.row] : [], total: data.row ? 1 : 0, row: data.row };
+  return {
+    list: Array.isArray(data?.list) ? data.list : [],
+    total: Number(data?.total ?? 0),
+  };
+}
+
+export async function staffClinicAcknowledgeDailyReconciliation(
+  branchId: string,
+  reconciliationId: number,
+  note?: string
+): Promise<any> {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/reconciliation/${reconciliationId}/acknowledge`,
+    { note: note ?? undefined }
+  );
+  return res?.data;
 }
 
 /** Search appointments by ID, token, phone, owner name, pet name */
@@ -2151,12 +3129,28 @@ export async function staffClinicQueueSessionClose(branchId: string, sessionId: 
 }
 
 // ========== Visits (EMR) ==========
-export async function staffClinicVisitsList(branchId: string, params?: { petId?: number; patientId?: number; limit?: number; offset?: number }) {
+export async function staffClinicVisitsList(
+  branchId: string,
+  params?: {
+    petId?: number;
+    patientId?: number;
+    limit?: number;
+    offset?: number;
+    treatmentCode?: string;
+    fromDate?: string;
+    toDate?: string;
+    search?: string;
+  }
+) {
   const q = new URLSearchParams();
   if (params?.petId != null) q.set("petId", String(params.petId));
   if (params?.patientId != null) q.set("patientId", String(params.patientId));
   if (params?.limit != null) q.set("limit", String(params.limit));
   if (params?.offset != null) q.set("offset", String(params.offset));
+  if (params?.treatmentCode) q.set("treatmentCode", params.treatmentCode);
+  if (params?.fromDate) q.set("fromDate", params.fromDate);
+  if (params?.toDate) q.set("toDate", params.toDate);
+  if (params?.search) q.set("search", params.search);
   const res = await apiGet<{ success?: boolean; data?: { visits: any[]; total: number } }>(`${clinicBase(branchId)}/visits${q.toString() ? `?${q}` : ""}`);
   return res?.data ?? { visits: [], total: 0 };
 }
@@ -2354,6 +3348,142 @@ export async function staffClinicDashboardSummary(branchId: string, params?: { d
   if (params?.dateTo) q.set("dateTo", params.dateTo);
   const res = await apiGet<{ success?: boolean; data?: { visitCount: number; orderCount: number; revenue: number } }>(`${clinicBase(branchId)}/reports/dashboard${q.toString() ? `?${q}` : ""}`);
   return res?.data ?? { visitCount: 0, orderCount: 0, revenue: 0 };
+}
+
+// ========== Settlement (staff clinic) ==========
+/** GET /api/v1/clinic/branches/:branchId/settlement-batches */
+export async function staffClinicSettlementBatchesList(branchId: string, params?: { limit?: number; page?: number; status?: string }) {
+  const q = new URLSearchParams();
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.page != null) q.set("page", String(params.page));
+  if (params?.status) q.set("status", params.status);
+  const res = await apiGet<{ success?: boolean; data?: { items?: any[]; pagination?: { total: number; page: number; totalPages: number } } }>(
+    `${clinicBase(branchId)}/settlement-batches${q.toString() ? `?${q}` : ""}`
+  );
+  const data = res?.data;
+  const items = data?.items ?? [];
+  const total = data?.pagination?.total ?? 0;
+  return { batches: items, total };
+}
+
+/** GET /api/v1/clinic/settlement-batches/:batchId */
+export async function staffClinicSettlementBatchGet(batchId: number) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`/api/v1/clinic/settlement-batches/${batchId}`);
+  return res?.data ?? null;
+}
+
+/** POST /api/v1/clinic/branches/:branchId/settlement-batches/generate */
+export async function staffClinicSettlementBatchesGenerate(branchId: string, body?: { periodStart?: string; periodEnd?: string }) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/settlement-batches/generate`, body ?? {});
+  return res?.data ?? null;
+}
+
+/** PUT /api/v1/clinic/settlement-batches/:batchId/review */
+export async function staffClinicSettlementBatchReview(batchId: number, body: { notes?: string }) {
+  const res = await apiPut<{ success?: boolean; data?: any }>(`/api/v1/clinic/settlement-batches/${batchId}/review`, body);
+  return res?.data ?? null;
+}
+
+/** PUT /api/v1/clinic/settlement-batches/:batchId/approve */
+export async function staffClinicSettlementBatchApprove(batchId: number) {
+  const res = await apiPut<{ success?: boolean; data?: any }>(`/api/v1/clinic/settlement-batches/${batchId}/approve`, {});
+  return res?.data ?? null;
+}
+
+/** POST /api/v1/clinic/settlement-batches/:batchId/pay */
+export async function staffClinicSettlementBatchPay(batchId: number, body?: { paidAt?: string; reference?: string }) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`/api/v1/clinic/settlement-batches/${batchId}/pay`, body ?? {});
+  return res?.data ?? null;
+}
+
+// ========== Clinic reports (analytics) ==========
+export async function staffClinicReportProfitability(branchId: string, params?: { dateFrom?: string; dateTo?: string }) {
+  const q = new URLSearchParams();
+  if (params?.dateFrom) q.set("dateFrom", params.dateFrom);
+  if (params?.dateTo) q.set("dateTo", params.dateTo);
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/reports/profitability${q.toString() ? `?${q}` : ""}`);
+  return res?.data ?? null;
+}
+
+export async function staffClinicReportSettlementSummary(branchId: string, params?: { dateFrom?: string; dateTo?: string }) {
+  const q = new URLSearchParams();
+  if (params?.dateFrom) q.set("dateFrom", params.dateFrom);
+  if (params?.dateTo) q.set("dateTo", params.dateTo);
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/reports/settlement-summary${q.toString() ? `?${q}` : ""}`);
+  return res?.data ?? null;
+}
+
+export async function staffClinicReportDiscountAnalysis(branchId: string, params?: { dateFrom?: string; dateTo?: string }) {
+  const q = new URLSearchParams();
+  if (params?.dateFrom) q.set("dateFrom", params.dateFrom);
+  if (params?.dateTo) q.set("dateTo", params.dateTo);
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/reports/discount-analysis${q.toString() ? `?${q}` : ""}`);
+  return res?.data ?? null;
+}
+
+export async function staffClinicReportInventoryVariance(branchId: string, params?: { dateFrom?: string; dateTo?: string }) {
+  const q = new URLSearchParams();
+  if (params?.dateFrom) q.set("dateFrom", params.dateFrom);
+  if (params?.dateTo) q.set("dateTo", params.dateTo);
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/reports/inventory-variance${q.toString() ? `?${q}` : ""}`);
+  return res?.data ?? null;
+}
+
+export async function staffClinicReportDoctorContribution(branchId: string, params?: { dateFrom?: string; dateTo?: string }) {
+  const q = new URLSearchParams();
+  if (params?.dateFrom) q.set("dateFrom", params.dateFrom);
+  if (params?.dateTo) q.set("dateTo", params.dateTo);
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/reports/doctor-contribution${q.toString() ? `?${q}` : ""}`);
+  return res?.data ?? null;
+}
+
+// ========== Clinic rooms (staff) ==========
+/** GET /api/v1/clinic/branches/:branchId/rooms */
+export async function staffClinicRoomsList(branchId: string, params?: { summary?: boolean; roomType?: string; operationalStatus?: string }) {
+  const q = new URLSearchParams();
+  if (params?.summary) q.set("summary", "1");
+  if (params?.roomType) q.set("roomType", params.roomType);
+  if (params?.operationalStatus) q.set("operationalStatus", params.operationalStatus);
+  const url = `${clinicBase(branchId)}/rooms${q.toString() ? `?${q.toString()}` : ""}`;
+  const res = await apiGet<{ success?: boolean; data?: any[] | { items: any[]; summary: any } }>(url);
+  const data = res?.data;
+  if (data && typeof data === "object" && "items" in data && Array.isArray(data.items))
+    return { items: data.items, summary: (data as { summary?: any }).summary };
+  return { items: Array.isArray(data) ? data : [], summary: null };
+}
+
+/** GET /api/v1/clinic/branches/:branchId/rooms/:roomId */
+export async function staffClinicRoomDetail(branchId: string, roomId: string | number) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/rooms/${roomId}`);
+  return res?.data ?? null;
+}
+
+/** PATCH /api/v1/clinic/branches/:branchId/rooms/:roomId (e.g. operationalStatus) */
+export async function staffClinicRoomPatch(branchId: string, roomId: string | number, data: { operationalStatus?: string }) {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/rooms/${roomId}`, data);
+  return res?.data ?? res;
+}
+
+/** GET schedule board: appointments in date range with conflicts */
+export async function staffClinicScheduleBoard(
+  branchId: string,
+  params?: { dateFrom?: string; dateTo?: string; roomId?: number; doctorId?: number; serviceId?: number }
+) {
+  const q = new URLSearchParams();
+  if (params?.dateFrom) q.set("dateFrom", params.dateFrom);
+  if (params?.dateTo) q.set("dateTo", params.dateTo);
+  if (params?.roomId != null) q.set("roomId", String(params.roomId));
+  if (params?.doctorId != null) q.set("doctorId", String(params.doctorId));
+  if (params?.serviceId != null) q.set("serviceId", String(params.serviceId));
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/schedule-board${q.toString() ? `?${q.toString()}` : ""}`);
+  return res?.data ?? null;
+}
+
+/** GET room schedule for a date (e.g. today) */
+export async function staffClinicRoomSchedule(branchId: string, roomId: string | number, date?: string) {
+  const q = date ? `?date=${encodeURIComponent(date)}` : "";
+  const res = await apiGet<{ success?: boolean; data?: any[] }>(`${clinicBase(branchId)}/rooms/${roomId}/schedule${q}`);
+  return Array.isArray(res?.data) ? res.data : [];
 }
 
 // ========== Staff Branch Staff & Shifts (Phase 5D) ==========

@@ -3,6 +3,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { ownerGet, ownerPut } from "@/app/owner/_lib/ownerApi";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
+import { formatValueForDisplay } from "@/src/lib/displayFormatters";
 
 type EscalationItem = {
   id: number;
@@ -190,7 +191,7 @@ export default function OwnerEscalationsPage() {
                       {expandedId === e.id && (
                         <tr>
                           <td colSpan={6} className="bg-light small">
-                            <pre className="mb-0 p-2">{JSON.stringify(e.payload, null, 2)}</pre>
+                            <div className="p-2 mb-0">{formatValueForDisplay(e.payload)}</div>
                           </td>
                         </tr>
                       )}

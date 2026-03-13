@@ -24,7 +24,7 @@ export default function ActiveVialsPage() {
     if (!branchId) return;
     setLoading(true);
     staffClinicVialSessionsList(branchId)
-      .then(setItems)
+      .then((r) => setItems(Array.isArray(r?.list) ? r.list : []))
       .catch(() => setItems([]))
       .finally(() => setLoading(false));
   }, [branchId]);

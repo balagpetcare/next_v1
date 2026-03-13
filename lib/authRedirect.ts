@@ -40,11 +40,27 @@ export const PANEL_CONFIG: Record<string, { port: number; basePath: string; labe
  */
 export function getAuthBaseUrl(): string {
   if (typeof window !== 'undefined') {
-    return (window as any).__NEXT_PUBLIC_AUTH_BASE_URL || 
-           process.env.NEXT_PUBLIC_AUTH_BASE_URL || 
+    return (window as any).__NEXT_PUBLIC_AUTH_BASE_URL ||
+           process.env.NEXT_PUBLIC_AUTH_BASE_URL ||
            'http://localhost:3000';
   }
   return process.env.NEXT_PUBLIC_AUTH_BASE_URL || 'http://localhost:3000';
+}
+
+/**
+ * Base URL for API calls that must send cookies (login, /auth/me).
+ * In the browser: use same-origin ("") so the cookie set by login on this origin is sent.
+ * On the server: use the configured backend URL.
+ * Use this for auth-sensitive requests; do not use hardcoded localhost:3000 in browser code.
+ */
+export function getBrowserSafeApiBase(): string {
+  if (typeof window !== 'undefined') return '';
+  return (process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000').replace(/\/+$/, '');
+}
+
+/** Alias for cookie-based auth/me and login calls. Same as getBrowserSafeApiBase(). */
+export function getAuthMeBase(): string {
+  return getBrowserSafeApiBase();
 }
 
 /**
@@ -146,9 +162,10 @@ export function buildAuthUrl(
   params.set('app', appName);
   params.set('returnTo', returnTo);
 
-  // Admin/Doctor: use same-origin /login so cookie is set on panel port (avoids cross-origin cookie loss)
-  if (useSameOriginForAdmin && (appName === 'admin' || appName === 'doctor') && typeof window !== 'undefined') {
-    return `${window.location.origin}/login?${params.toString()}`;
+  // Admin, Doctor, Staff: use same-origin /login so cookie is set on panel port (path-only for reliable router.replace).
+  const sameOriginPanels = ['admin', 'doctor', 'staff'];
+  if (useSameOriginForAdmin && sameOriginPanels.includes(appName) && typeof window !== 'undefined') {
+    return `/login?${params.toString()}`;
   }
 
   const authBase = getAuthBaseUrl();
@@ -216,8 +233,9 @@ export function getAuthRedirectUrl(
   defaultLandingPath?: string
 ): string {
   const returnTo = parseReturnToFromQuery(searchParams ?? null, panelName, defaultLandingPath);
-  // Admin and doctor use same-origin /login so cookie is set on panel port
-  return buildAuthUrl(action, panelName, returnTo, panelName === 'admin' || panelName === 'doctor');
+  // Admin, doctor, staff: same-origin /login so cookie is set on panel port (avoids unauthorized after returnTo)
+  const useSameOrigin = ['admin', 'doctor', 'staff'].includes(panelName);
+  return buildAuthUrl(action, panelName, returnTo, useSameOrigin);
 }
 
 /**
@@ -256,6 +274,86 @@ export type PanelsFromMe = {
   partner?: boolean;
   doctor?: boolean;
 };
+
+/** Path prefix -> panel key for validation (order matters for longest match) */
+const PATH_TO_PANEL: Array<{ prefix: string; panel: keyof PanelsFromMe }> = [
+  { prefix: "/owner", panel: "owner" },
+  { prefix: "/admin", panel: "admin" },
+  { prefix: "/staff", panel: "staff" },
+  { prefix: "/doctor", panel: "doctor" },
+  { prefix: "/country", panel: "country" },
+  { prefix: "/producer", panel: "partner" },
+  { prefix: "/mother", panel: "partner" },
+  { prefix: "/shop", panel: "partner" },
+  { prefix: "/clinic", panel: "partner" },
+];
+
+/**
+ * Resolve panel key from a path (e.g. /staff/branch/1 -> staff, /owner/dashboard -> owner).
+ * Used to validate redirect targets against allowedPanels.
+ */
+export function pathToPanelKey(path: string): keyof PanelsFromMe | null {
+  if (!path || !path.startsWith("/")) return null;
+  for (const { prefix, panel } of PATH_TO_PANEL) {
+    if (path === prefix || path.startsWith(prefix + "/")) return panel;
+  }
+  return null;
+}
+
+/**
+ * Check if a redirect path is allowed for the user based on auth/me allowedPanels.
+ * Prevents cross-panel redirects (e.g. owner-only user sent to /staff) that cause loops.
+ */
+export function isPathAllowedForPanels(
+  path: string,
+  allowedPanels: string[] | null | undefined
+): boolean {
+  if (!path || path === "/" || path === POST_AUTH_LANDING_PATH || path === CHOOSE_ACTIVITY_PATH) {
+    return true;
+  }
+  const panel = pathToPanelKey(path);
+  if (!panel) return true; // non-panel path
+  return Array.isArray(allowedPanels) && allowedPanels.includes(panel);
+}
+
+/**
+ * Resolve a safe landing path from auth/me routing.
+ * - Only uses selectedPanel if it is in allowedPanels.
+ * - Only uses default_redirect if its panel is in allowedPanels; otherwise uses first allowed panel path.
+ * - Never redirects to a panel the user cannot access.
+ */
+export function resolveLandingPathFromMe(params: {
+  default_redirect: string;
+  allowedPanels: string[];
+  selectedPanel: string | null;
+  intendedPanel: string | null;
+  panelPaths: Record<string, string>;
+}): string {
+  const { default_redirect, allowedPanels, selectedPanel, intendedPanel, panelPaths } = params;
+  const allowed = allowedPanels ?? [];
+  const defaultPath = default_redirect?.startsWith("/") ? default_redirect : `/${default_redirect || "choose-activity"}`;
+
+  // If default_redirect is a panel path, validate it
+  if (isPathAllowedForPanels(defaultPath, allowed)) {
+    return defaultPath;
+  }
+
+  // Use selectedPanel only if it's in allowedPanels
+  if (selectedPanel && allowed.includes(selectedPanel) && panelPaths[selectedPanel]) {
+    return panelPaths[selectedPanel];
+  }
+  if (intendedPanel && allowed.includes(intendedPanel) && panelPaths[intendedPanel]) {
+    return panelPaths[intendedPanel];
+  }
+
+  // First allowed panel as fallback
+  for (const p of allowed) {
+    if (panelPaths[p]) return panelPaths[p];
+  }
+
+  // Safe fallback: choose-activity so user can pick
+  return CHOOSE_ACTIVITY_PATH;
+}
 
 const COMMON_PORT = 3100;
 const FALLBACK_ORDER: Array<{ key: keyof PanelsFromMe; port: number; path: string }> = [

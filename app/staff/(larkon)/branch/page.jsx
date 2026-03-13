@@ -3,11 +3,11 @@
 import { useEffect, useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { getMeBranchAccess } from "@/lib/api";
+import { LAST_ACTIVE_BRANCH_KEY } from "@/lib/logoutState";
 import Card from "@/src/bpa/components/ui/Card";
 import PageHeader from "@/src/bpa/components/ui/PageHeader";
 
 const POLL_INTERVAL_MS = 10000;
-const LAST_ACTIVE_BRANCH_KEY = "lastActiveBranchId";
 
 function StatusBadge({ status }) {
   const map = {
@@ -41,6 +41,9 @@ export default function StaffBranchSelectorPage() {
       if (mountedRef.current) {
         setError(e?.message ?? "Failed to load branch access");
         setBranches([]);
+        try {
+          if (typeof window !== "undefined") window.localStorage.removeItem(LAST_ACTIVE_BRANCH_KEY);
+        } catch (_) {}
       }
       return [];
     } finally {
@@ -62,6 +65,16 @@ export default function StaffBranchSelectorPage() {
         const validLast = approved.some((b) => b.branchId === lastIdNum);
         if (validLast && lastIdNum) {
           router.replace(`/staff/branch/${lastIdNum}`);
+          return;
+        }
+        if (approved.length === 1) {
+          const targetId = approved[0].branchId;
+          if (typeof window !== "undefined") {
+            try {
+              localStorage.setItem(LAST_ACTIVE_BRANCH_KEY, String(targetId));
+            } catch (_) {}
+          }
+          router.replace(`/staff/branch/${targetId}`);
           return;
         }
       }

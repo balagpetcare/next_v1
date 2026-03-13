@@ -36,6 +36,7 @@ const PUBLIC_PATH_PREFIXES = [
   "/admin/register",
   "/country/login",
   "/staff/login",
+  "/staff/logout",
   "/producer/login",
   "/shop/login",
   "/clinic/login",

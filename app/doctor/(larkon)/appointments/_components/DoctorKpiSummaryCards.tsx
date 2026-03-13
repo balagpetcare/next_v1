@@ -1,6 +1,6 @@
 "use client";
 
-export type TabId = "waiting" | "upcoming" | "in_consult" | "completed" | "follow_up" | "emergency" | "all";
+export type TabId = "waiting" | "upcoming" | "in_consult" | "completed" | "follow_up" | "emergency" | "package" | "pending" | "all";
 
 export interface DoctorKpiSummaryCardsStats {
   total: number;
@@ -13,10 +13,12 @@ export interface DoctorKpiSummaryCardsStats {
 export interface DoctorKpiSummaryCardsProps {
   stats: DoctorKpiSummaryCardsStats | null;
   loading: boolean;
+  /** Count of appointments in current list (filtered view). */
+  inViewCount?: number;
   onFilter: (tab: TabId) => void;
 }
 
-export function DoctorKpiSummaryCards({ stats, loading, onFilter }: DoctorKpiSummaryCardsProps) {
+export function DoctorKpiSummaryCards({ stats, loading, inViewCount, onFilter }: DoctorKpiSummaryCardsProps) {
   const sc = stats?.statusCounts ?? {};
   const waiting = (sc.CHECKED_IN ?? 0) + (sc.IN_QUEUE ?? 0) + (sc.CALLED ?? 0);
   const inConsult = sc.IN_CONSULT ?? 0;
@@ -25,10 +27,11 @@ export function DoctorKpiSummaryCards({ stats, loading, onFilter }: DoctorKpiSum
   const paymentPending = stats?.paymentPendingCount ?? 0;
 
   const cards: { label: string; value: number; tab?: TabId }[] = [
-    { label: "Today's Total", value: stats?.total ?? 0, tab: "all" },
+    { label: "Total", value: stats?.total ?? 0, tab: "all" },
+    { label: "In View", value: inViewCount ?? 0 },
     { label: "Waiting Now", value: waiting, tab: "waiting" },
     { label: "In Consultation", value: inConsult, tab: "in_consult" },
-    { label: "Follow-up Today", value: stats?.followUpCount ?? 0, tab: "follow_up" },
+    { label: "Follow-up", value: stats?.followUpCount ?? 0, tab: "follow_up" },
     { label: "Emergency", value: stats?.emergencyCount ?? 0, tab: "emergency" },
     { label: "Completed", value: completed, tab: "completed" },
     { label: "No-show / Cancelled", value: noShowCancelled },

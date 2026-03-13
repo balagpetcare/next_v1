@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { apiPost } from "@/lib/api";
+import { clearLogoutState } from "@/lib/logoutState";
 
 export default function Page() {
   const [msg, setMsg] = useState("Signing out...");
@@ -9,30 +10,30 @@ export default function Page() {
   useEffect(() => {
     (async () => {
       try {
-        // 1) Backend logout (best-effort)
         try {
           await apiPost("/api/v1/auth/logout", {});
         } catch {
           try {
-            await apiPost("/api/logout", {});
+            await apiPost("/api/logout", {}).catch(() => {});
           } catch {}
         }
 
-        // 2) Clear client hints just in case (cookie is HttpOnly so JS can't clear it reliably)
         try {
-          localStorage.removeItem("access_token");
-          sessionStorage.clear();
+          await fetch("/api/logout", { method: "POST", credentials: "include" });
         } catch {}
+
+        clearLogoutState();
 
         setMsg("Signed out. Redirecting...");
         setTimeout(() => {
           window.location.href = "/owner/login";
-        }, 600);
-      } catch (e) {
-        setMsg("Could not fully sign out. Redirecting...");
+        }, 400);
+      } catch {
+        setMsg("Signed out. Redirecting...");
+        clearLogoutState();
         setTimeout(() => {
           window.location.href = "/owner/login";
-        }, 900);
+        }, 600);
       }
     })();
   }, []);

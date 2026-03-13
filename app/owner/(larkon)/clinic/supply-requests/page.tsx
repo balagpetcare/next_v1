@@ -6,6 +6,8 @@ import {
   ownerClinicSupplyRequestsList,
   ownerClinicSupplyRequestById,
   ownerClinicSupplyRequestReview,
+  ownerClinicSupplyRequestMarkOrdered,
+  ownerClinicSupplyRequestMarkReceived,
   ownerClinicTransferFromRequest,
   ownerClinicTransfersList,
   ownerClinicTransferById,
@@ -83,6 +85,7 @@ export default function OwnerClinicSupplyRequestsPage() {
   const [reviewNote, setReviewNote] = useState("");
   const [approvedQtys, setApprovedQtys] = useState<Record<number, number>>({});
   const [fromBranchId, setFromBranchId] = useState<number | "">("");
+  const [receivedQtys, setReceivedQtys] = useState<Record<number, number>>({});
   const [saving, setSaving] = useState(false);
   const [actionError, setActionError] = useState("");
   const [actionSuccess, setActionSuccess] = useState("");
@@ -235,9 +238,50 @@ export default function OwnerClinicSupplyRequestsPage() {
     }
   };
 
+  const handleMarkOrdered = async () => {
+    if (!detailRequest) return;
+    setSaving(true);
+    setActionError("");
+    try {
+      await ownerClinicSupplyRequestMarkOrdered(detailRequest.id);
+      setActionSuccess("Request marked as ordered.");
+      setDetailRequest(null);
+      loadRequests();
+    } catch (e) {
+      setActionError((e as Error)?.message ?? "Mark ordered failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleMarkReceived = async () => {
+    if (!detailRequest?.items?.length) return;
+    setSaving(true);
+    setActionError("");
+    try {
+      const items = detailRequest.items.map((i) => ({
+        requestItemId: i.id,
+        receivedQty: receivedQtys[i.id] ?? i.approvedQty ?? i.requestedQty ?? 0,
+      }));
+      await ownerClinicSupplyRequestMarkReceived(detailRequest.id, { items, postToInventory: true });
+      setActionSuccess("Receipt recorded.");
+      setReceivedQtys({});
+      setDetailRequest(null);
+      loadRequests();
+    } catch (e) {
+      setActionError((e as Error)?.message ?? "Mark received failed");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const canReview = (r: SupplyRequestRow) => r.status === "OWNER_REVIEW";
+  const canMarkOrdered = (r: SupplyRequestRow) =>
+    r.status === "APPROVED" || r.status === "PARTIAL_APPROVED" || r.status === "PARTIALLY_APPROVED";
+  const canMarkReceived = (r: SupplyRequestRow) =>
+    r.status === "ORDERED" || r.status === "PARTIALLY_RECEIVED";
   const canCreateTransfer = (r: SupplyRequestRow) =>
-    (r.status === "APPROVED" || r.status === "PARTIAL_APPROVED") && (r.items?.length ?? 0) > 0;
+    (r.status === "APPROVED" || r.status === "PARTIAL_APPROVED" || r.status === "PARTIALLY_APPROVED") && (r.items?.length ?? 0) > 0;
   const canDispatch = (t: TransferRow) => t.status === "CREATED";
 
   return (
@@ -302,10 +346,15 @@ export default function OwnerClinicSupplyRequestsPage() {
               {tab === "requests" && (
                 <>
                   <option value="DRAFT">Draft</option>
-                  <option value="OWNER_REVIEW">Owner review</option>
+                  <option value="OWNER_REVIEW">Under review</option>
                   <option value="APPROVED">Approved</option>
-                  <option value="PARTIAL_APPROVED">Partial</option>
+                  <option value="PARTIAL_APPROVED">Partially approved</option>
+                  <option value="PARTIALLY_APPROVED">Partially approved</option>
                   <option value="REJECTED">Rejected</option>
+                  <option value="ORDERED">Ordered</option>
+                  <option value="PARTIALLY_RECEIVED">Partially received</option>
+                  <option value="RECEIVED">Received</option>
+                  <option value="CANCELLED">Cancelled</option>
                 </>
               )}
               {tab === "transfers" && (
@@ -472,6 +521,43 @@ export default function OwnerClinicSupplyRequestsPage() {
                     />
                   </>
                 )}
+                {canMarkReceived(detailRequest) && (detailRequest.items?.length ?? 0) > 0 && (
+                  <>
+                    <label className="form-label mt-2">Record receipt (qty received per line)</label>
+                    <table className="table table-sm mt-1">
+                      <thead>
+                        <tr>
+                          <th>Item</th>
+                          <th>Approved</th>
+                          <th>Received qty</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(detailRequest.items || []).map((i) => (
+                          <tr key={i.id}>
+                            <td>{i.clinicalItem?.name ?? i.clinicalItemId}</td>
+                            <td>{i.approvedQty ?? "—"}</td>
+                            <td>
+                              <input
+                                type="number"
+                                className="form-control form-control-sm w-80"
+                                min={0}
+                                max={i.approvedQty ?? i.requestedQty}
+                                value={receivedQtys[i.id] ?? i.approvedQty ?? i.requestedQty ?? 0}
+                                onChange={(e) =>
+                                  setReceivedQtys((prev) => ({
+                                    ...prev,
+                                    [i.id]: parseInt(e.target.value, 10) || 0,
+                                  }))
+                                }
+                              />
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </>
+                )}
                 {canCreateTransfer(detailRequest) && (
                   <>
                     <label className="form-label mt-2">Create transfer from branch</label>
@@ -496,6 +582,16 @@ export default function OwnerClinicSupplyRequestsPage() {
                 {canReview(detailRequest) && (
                   <button type="button" className="btn btn-primary" disabled={saving} onClick={handleReview}>
                     {saving ? "Saving…" : "Submit review"}
+                  </button>
+                )}
+                {canMarkOrdered(detailRequest) && (
+                  <button type="button" className="btn btn-outline-primary" disabled={saving} onClick={handleMarkOrdered}>
+                    {saving ? "Saving…" : "Mark ordered"}
+                  </button>
+                )}
+                {canMarkReceived(detailRequest) && (
+                  <button type="button" className="btn btn-outline-success" disabled={saving} onClick={handleMarkReceived}>
+                    {saving ? "Saving…" : "Mark received"}
                   </button>
                 )}
                 {canCreateTransfer(detailRequest) && (

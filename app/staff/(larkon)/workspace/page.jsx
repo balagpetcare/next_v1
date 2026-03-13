@@ -105,10 +105,21 @@ export default function StaffWorkspacePage() {
   if (!workspaceMe) {
     return (
       <div className="container-fluid py-4">
-        <div className="alert alert-warning">
-          No workspace access. You need branch access to see your tasks.
+        <div className="d-flex align-items-center justify-content-between mb-4">
+          <h4 className="mb-0">My Workspace</h4>
+          <Link href="/staff/branch" className="btn btn-outline-secondary btn-sm">← Branches</Link>
         </div>
-        <Link href="/staff/branches" className="btn btn-outline-primary">← Branches</Link>
+        <p className="text-muted small mb-3">Your personal dashboard. Open a branch to see tasks, approvals, and appointments.</p>
+        <div className="card border radius-12">
+          <div className="card-body">
+            <h6 className="fw-semibold mb-2">Quick links</h6>
+            <ul className="mb-0">
+              <li><Link href="/staff/branch">Select a branch</Link> — then use <strong>Tasks</strong> for operational tasks.</li>
+              <li><Link href="/staff/branch">Select a branch</Link> — then use <strong>Approvals</strong> for pending approval requests.</li>
+              <li><Link href="/staff/branch">Select a branch</Link> — then use <strong>Clinic → Appointments</strong> for today&apos;s appointments.</li>
+            </ul>
+          </div>
+        </div>
       </div>
     );
   }

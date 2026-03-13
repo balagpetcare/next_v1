@@ -132,6 +132,18 @@ export default function ClinicBranchDashboardPage() {
                     View Reports
                   </Link>
                 </div>
+                <div className="col-12 col-md-6 col-lg-4">
+                  <Link href={`/owner/clinic/${branchId}/injection-monitor`} className="btn btn-outline-primary w-100 radius-12">
+                    <i className="ri-pulse-line me-1" />
+                    Injection Monitor
+                  </Link>
+                </div>
+                <div className="col-12 col-md-6 col-lg-4">
+                  <Link href={`/owner/clinic/${branchId}/reconciliation`} className="btn btn-outline-primary w-100 radius-12">
+                    <i className="ri-shield-check-line me-1" />
+                    Reconciliation
+                  </Link>
+                </div>
               </div>
             </div>
           </div>

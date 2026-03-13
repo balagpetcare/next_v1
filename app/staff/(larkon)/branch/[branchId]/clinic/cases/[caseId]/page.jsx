@@ -17,6 +17,7 @@ import {
 } from "@/lib/api";
 import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
+import { ReportDataDisplay } from "@/src/components/dashboard";
 import { toast } from "react-toastify";
 
 export default function StaffClinicCaseDetailPage() {
@@ -191,6 +192,16 @@ export default function StaffClinicCaseDetailPage() {
         <Link href={`/staff/branch/${branchId}/clinic/cases`} className="btn btn-outline-secondary btn-sm">
           ← Cases
         </Link>
+        {caseData.visitId && (
+          <>
+            <Link href={`/staff/branch/${branchId}/clinic/visits/${caseData.visitId}`} className="btn btn-outline-secondary btn-sm">
+              Visit
+            </Link>
+            <Link href={`/staff/branch/${branchId}/clinic/billing?visitId=${caseData.visitId}`} className="btn btn-outline-primary btn-sm">
+              Billing
+            </Link>
+          </>
+        )}
         <h5 className="mb-0">Case #{caseData.id}</h5>
         <span className={`badge radius-8 ${caseData.status === "COMPLETED" ? "bg-success" : "bg-primary"}`}>{caseData.status}</span>
       </div>
@@ -407,7 +418,7 @@ export default function StaffClinicCaseDetailPage() {
             <h6 className="mb-0">Variance summary</h6>
           </div>
           <div className="card-body">
-            <pre className="small mb-0 bg-light p-3 rounded">{JSON.stringify(variance.summary ?? variance, null, 2)}</pre>
+            <ReportDataDisplay data={variance.summary ?? variance} className="mb-0" />
           </div>
         </div>
       )}

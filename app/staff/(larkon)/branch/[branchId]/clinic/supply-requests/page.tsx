@@ -7,12 +7,16 @@ import {
   staffClinicSupplyRequestsList,
   staffClinicSupplyRequestSubmit,
 } from "@/lib/api";
+import StatusBadge from "@/src/components/dashboard/StatusBadge";
+import EmptyState from "@/src/components/dashboard/EmptyState";
 
 type RequestRow = {
   id: number;
   requestNo: string;
   status: string;
   priority: string;
+  department?: string | null;
+  neededBy?: string | null;
   branch?: { name: string };
   items?: Array<{ clinicalItem?: { name: string }; variant?: { variantName: string }; requestedQty: number; approvedQty?: number }>;
   requestedAt?: string;
@@ -21,33 +25,15 @@ type RequestRow = {
 const STATUS_FILTERS: { value: string; label: string }[] = [
   { value: "", label: "All" },
   { value: "DRAFT", label: "Draft" },
-  { value: "OWNER_REVIEW", label: "Pending review" },
+  { value: "OWNER_REVIEW", label: "Under review" },
   { value: "APPROVED", label: "Approved" },
-  { value: "PARTIAL_APPROVED", label: "Partial" },
+  { value: "PARTIALLY_APPROVED", label: "Partially approved" },
   { value: "REJECTED", label: "Rejected" },
+  { value: "ORDERED", label: "Ordered" },
+  { value: "PARTIALLY_RECEIVED", label: "Partially received" },
+  { value: "RECEIVED", label: "Received" },
+  { value: "CANCELLED", label: "Cancelled" },
 ];
-
-function statusBadgeClass(status: string): string {
-  switch (status) {
-    case "DRAFT":
-      return "bg-secondary";
-    case "OWNER_REVIEW":
-      return "bg-warning text-dark";
-    case "APPROVED":
-      return "bg-success";
-    case "PARTIAL_APPROVED":
-      return "bg-info";
-    case "REJECTED":
-      return "bg-danger";
-    case "DISPATCHED":
-      return "bg-primary";
-    case "RECEIVED":
-    case "CLOSED":
-      return "bg-dark";
-    default:
-      return "bg-secondary";
-  }
-}
 
 export default function StaffClinicSupplyRequestsPage() {
   const params = useParams();
@@ -120,7 +106,7 @@ export default function StaffClinicSupplyRequestsPage() {
         <h1 className="h5 mb-0">Supply requests</h1>
         <div className="d-flex gap-2">
           <Link
-            href={`/staff/branch/${branchId}/clinic/supply-requests/new`}
+            href={`/staff/branch/${branchId}/clinic/supply-request-create`}
             className="btn btn-primary btn-sm radius-8"
           >
             <i className="ri-add-line me-1" /> New request
@@ -161,23 +147,27 @@ export default function StaffClinicSupplyRequestsPage() {
               <p className="text-muted mt-2 mb-0">Loading…</p>
             </div>
           ) : list.items.length === 0 ? (
-            <div className="text-center py-5">
-              <p className="text-muted mb-3">No supply requests yet.</p>
-              <div className="d-flex flex-wrap justify-content-center gap-2">
-                <Link
-                  href={`/staff/branch/${branchId}/clinic/supply-requests/new`}
-                  className="btn btn-primary radius-8"
-                >
-                  Create new request
-                </Link>
-                <Link
-                  href={`/staff/branch/${branchId}/clinic/supply-requests/new`}
-                  className="btn btn-outline-secondary radius-8"
-                >
-                  View low-stock items
-                </Link>
-              </div>
-            </div>
+            <EmptyState
+              icon="ri:file-list-3-line"
+              title="No supply requests yet"
+              description="Create a new request or add items from low-stock suggestions."
+              action={
+                <div className="d-flex flex-wrap justify-content-center gap-2">
+                  <Link
+                    href={`/staff/branch/${branchId}/clinic/supply-request-create`}
+                    className="btn btn-primary radius-8"
+                  >
+                    <i className="ri-add-line me-1" /> New request
+                  </Link>
+                  <Link
+                    href={`/staff/branch/${branchId}/clinic/supply-request-create?tab=low-stock`}
+                    className="btn btn-outline-secondary radius-8"
+                  >
+                    View low-stock suggestions
+                  </Link>
+                </div>
+              }
+            />
           ) : (
             <div className="table-responsive">
               <table className="table table-sm table-hover mb-0">
@@ -186,6 +176,8 @@ export default function StaffClinicSupplyRequestsPage() {
                     <th>Request #</th>
                     <th>Status</th>
                     <th>Priority</th>
+                    <th>Department</th>
+                    <th>Needed by</th>
                     <th>Items</th>
                     <th>Requested</th>
                     <th className="text-end">Action</th>
@@ -209,9 +201,11 @@ export default function StaffClinicSupplyRequestsPage() {
                     >
                       <td>{r.requestNo}</td>
                       <td>
-                        <span className={`badge ${statusBadgeClass(r.status)}`}>{r.status}</span>
+                        <StatusBadge status={r.status} />
                       </td>
-                      <td>{r.priority}</td>
+                      <td>{r.priority ?? "—"}</td>
+                      <td>{r.department ?? "—"}</td>
+                      <td>{r.neededBy ? new Date(r.neededBy).toLocaleDateString() : "—"}</td>
                       <td>{(r.items?.length ?? 0)} line(s)</td>
                       <td>{r.requestedAt ? new Date(r.requestedAt).toLocaleString() : "—"}</td>
                       <td className="text-end" onClick={(e) => e.stopPropagation()}>

@@ -1,23 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
-  ownerClinicRooms,
+  ownerClinicRoomsWithSummary,
   ownerClinicRoomCreate,
   ownerClinicRoomUpdate,
   ownerClinicRoomDelete,
   type ClinicRoom,
+  type RoomSummary,
 } from "@/app/owner/_lib/ownerApi";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
+import { humanizeEnum } from "@/src/lib/displayFormatters";
 
-const ROOM_TYPES = ["GENERAL", "CONSULTATION", "PROCEDURE", "RECOVERY", "LAB", "GROOMING", "OTHER"];
+const ROOM_TYPES = ["GENERAL", "CONSULTATION", "PROCEDURE", "RECOVERY", "LAB", "GROOMING", "IMAGING", "VACCINATION", "ISOLATION", "MULTIPURPOSE", "SURGERY", "OTHER"];
+const OPERATIONAL_STATUSES = ["AVAILABLE", "RESERVED", "OCCUPIED", "CLEANING", "MAINTENANCE", "BLOCKED"];
 
 export default function ClinicRoomsPage() {
   const params = useParams();
   const branchId = params?.branchId as string | undefined;
   const [rooms, setRooms] = useState<ClinicRoom[]>([]);
+  const [summary, setSummary] = useState<RoomSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -28,24 +32,37 @@ export default function ClinicRoomsPage() {
   const [formCapacity, setFormCapacity] = useState<string>("");
   const [formNotes, setFormNotes] = useState("");
   const [saving, setSaving] = useState(false);
+  const [filterType, setFilterType] = useState("");
+  const [filterOperational, setFilterOperational] = useState("");
 
-  const load = async () => {
+  const load = useCallback(async () => {
     if (!branchId) return;
     try {
       setLoading(true);
       setError("");
-      const data = await ownerClinicRooms(branchId);
-      setRooms(Array.isArray(data) ? data : []);
+      const result = await ownerClinicRoomsWithSummary(branchId, {
+        roomType: filterType || undefined,
+        operationalStatus: filterOperational || undefined,
+      });
+      if (result) {
+        setRooms(result.rooms);
+        setSummary(result.summary);
+      } else {
+        setRooms([]);
+        setSummary(null);
+      }
     } catch (e) {
       setError((e as Error)?.message || "Failed to load rooms");
+      setRooms([]);
+      setSummary(null);
     } finally {
       setLoading(false);
     }
-  };
+  }, [branchId, filterType, filterOperational]);
 
   useEffect(() => {
     load();
-  }, [branchId]);
+  }, [load]);
 
   const resetForm = () => {
     setFormName("");
@@ -148,6 +165,9 @@ export default function ClinicRoomsPage() {
           { label: "Rooms", href: `/owner/clinic/${branchId}/rooms` },
         ]}
         actions={[
+          <Link key="schedule-board" href={`/owner/clinic/${branchId}/schedule-board`} className="btn btn-outline-primary radius-12">
+            Schedule board
+          </Link>,
           <button
             key="add"
             type="button"
@@ -173,6 +193,86 @@ export default function ClinicRoomsPage() {
         <div className="alert alert-success radius-12 mb-24">
           <i className="ri-check-line me-2" />
           {success}
+        </div>
+      )}
+
+      {summary != null && (
+        <div className="row g-3 mb-4">
+          <div className="col-6 col-md-4 col-lg-2">
+            <div className="card radius-12 border-0 bg-light">
+              <div className="card-body py-3">
+                <div className="text-muted small">Total rooms</div>
+                <div className="fw-semibold fs-5">{summary.total}</div>
+              </div>
+            </div>
+          </div>
+          <div className="col-6 col-md-4 col-lg-2">
+            <div className="card radius-12 border-0 bg-light">
+              <div className="card-body py-3">
+                <div className="text-muted small">Available now</div>
+                <div className="fw-semibold fs-5 text-success">{summary.availableNow}</div>
+              </div>
+            </div>
+          </div>
+          <div className="col-6 col-md-4 col-lg-2">
+            <div className="card radius-12 border-0 bg-light">
+              <div className="card-body py-3">
+                <div className="text-muted small">Occupied</div>
+                <div className="fw-semibold fs-5">{summary.occupiedNow}</div>
+              </div>
+            </div>
+          </div>
+          <div className="col-6 col-md-4 col-lg-2">
+            <div className="card radius-12 border-0 bg-light">
+              <div className="card-body py-3">
+                <div className="text-muted small">Cleaning</div>
+                <div className="fw-semibold fs-5">{summary.cleaning}</div>
+              </div>
+            </div>
+          </div>
+          <div className="col-6 col-md-4 col-lg-2">
+            <div className="card radius-12 border-0 bg-light">
+              <div className="card-body py-3">
+                <div className="text-muted small">Maintenance</div>
+                <div className="fw-semibold fs-5">{summary.maintenance}</div>
+              </div>
+            </div>
+          </div>
+          <div className="col-6 col-md-4 col-lg-2">
+            <div className="card radius-12 border-0 bg-light">
+              <div className="card-body py-3">
+                <div className="text-muted small">Today bookings</div>
+                <div className="fw-semibold fs-5">{summary.todayBookings}</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {!loading && rooms.length > 0 && (
+        <div className="d-flex flex-wrap gap-2 mb-3">
+          <select
+            className="form-select form-select-sm radius-8"
+            style={{ width: "auto" }}
+            value={filterType}
+            onChange={(e) => setFilterType(e.target.value)}
+          >
+            <option value="">All types</option>
+            {ROOM_TYPES.map((t) => (
+              <option key={t} value={t}>{humanizeEnum(t)}</option>
+            ))}
+          </select>
+          <select
+            className="form-select form-select-sm radius-8"
+            style={{ width: "auto" }}
+            value={filterOperational}
+            onChange={(e) => setFilterOperational(e.target.value)}
+          >
+            <option value="">All status</option>
+            {OPERATIONAL_STATUSES.map((s) => (
+              <option key={s} value={s}>{humanizeEnum(s)}</option>
+            ))}
+          </select>
         </div>
       )}
 
@@ -281,7 +381,8 @@ export default function ClinicRoomsPage() {
                     <th>Name</th>
                     <th>Type</th>
                     <th>Capacity</th>
-                    <th>Status</th>
+                    <th>Lifecycle</th>
+                    <th>Operational</th>
                     <th>Notes</th>
                     <th>Actions</th>
                   </tr>
@@ -289,8 +390,13 @@ export default function ClinicRoomsPage() {
                 <tbody>
                   {rooms.map((r) => (
                     <tr key={r.id}>
-                      <td className="fw-semibold">{r.name}</td>
-                      <td>{r.roomType}</td>
+                      <td className="fw-semibold">
+                        <Link href={`/owner/clinic/${branchId}/rooms/${r.id}`} className="text-dark text-decoration-none">
+                          {r.name}
+                          {r.code ? ` (${r.code})` : ""}
+                        </Link>
+                      </td>
+                      <td>{humanizeEnum(r.roomType)}</td>
                       <td>{r.capacity != null ? r.capacity : "—"}</td>
                       <td>
                         <span
@@ -298,12 +404,30 @@ export default function ClinicRoomsPage() {
                             r.status === "ACTIVE" ? "bg-success" : "bg-secondary"
                           }`}
                         >
-                          {r.status}
+                          {humanizeEnum(r.status)}
+                        </span>
+                      </td>
+                      <td>
+                        <span
+                          className={`badge radius-8 ${
+                            r.operationalStatus === "AVAILABLE" ? "bg-success" :
+                            r.operationalStatus === "OCCUPIED" ? "bg-primary" :
+                            r.operationalStatus === "CLEANING" ? "bg-info" :
+                            r.operationalStatus === "MAINTENANCE" || r.operationalStatus === "BLOCKED" ? "bg-warning text-dark" : "bg-secondary"
+                          }`}
+                        >
+                          {humanizeEnum(r.operationalStatus ?? "AVAILABLE")}
                         </span>
                       </td>
                       <td className="text-muted small">{r.notes || "—"}</td>
                       <td>
-                        <div className="d-flex gap-2">
+                        <div className="d-flex flex-wrap gap-2">
+                          <Link
+                            href={`/owner/clinic/${branchId}/rooms/${r.id}`}
+                            className="btn btn-sm btn-outline-secondary radius-12"
+                          >
+                            View
+                          </Link>
                           {r.status === "ACTIVE" && (
                             <button
                               type="button"

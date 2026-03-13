@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import {
   staffClinicQuickAppointmentCreate,
@@ -10,7 +10,7 @@ import {
   staffClinicServices,
   staffClinicDoctorsWithFees,
   staffClinicCheckDuplicate,
-  staffClinicAvailablePackages,
+  staffClinicPackagesList,
 } from "@/lib/api";
 import { toast } from "react-toastify";
 
@@ -38,7 +38,6 @@ export default function QuickAppointmentDrawer({ open, onClose }) {
   const [patients, setPatients] = useState([]);
   const [doctorsWithFees, setDoctorsWithFees] = useState([]);
   const [doctorsWithFeesLoading, setDoctorsWithFeesLoading] = useState(false);
-  const [packages, setPackages] = useState([]);
   const [packagesLoading, setPackagesLoading] = useState(false);
   const [services, setServices] = useState([]);
   const ownerLookupDebounceRef = useRef(null);
@@ -101,17 +100,36 @@ export default function QuickAppointmentDrawer({ open, onClose }) {
       .finally(() => setDoctorsWithFeesLoading(false));
   }, [open, branchId, form.serviceId]);
 
+  // Load all branch packages when drawer opens; dropdown filters by selected service
+  const [branchPackages, setBranchPackages] = useState([]);
   useEffect(() => {
-    if (!open || !branchId || !form.serviceId) {
-      setPackages([]);
+    if (!open || !branchId) {
+      setBranchPackages([]);
       return;
     }
     setPackagesLoading(true);
-    staffClinicAvailablePackages(branchId, Number(form.serviceId))
-      .then((list) => setPackages(Array.isArray(list) ? list : []))
-      .catch(() => setPackages([]))
+    staffClinicPackagesList(branchId)
+      .then((list) => setBranchPackages(Array.isArray(list) ? list : []))
+      .catch(() => {
+        setBranchPackages([]);
+        toast.error("Could not load packages.");
+      })
       .finally(() => setPackagesLoading(false));
-  }, [open, branchId, form.serviceId]);
+  }, [open, branchId]);
+
+  // Surgery package dropdown: show ACTIVE packages for the selected service (from branch list)
+  const packages = useMemo(() => {
+    if (!form.serviceId) return [];
+    const sid = Number(form.serviceId);
+    return branchPackages
+      .filter((p) => p.serviceId === sid && (p.status === "ACTIVE" || !p.status))
+      .map((p) => ({
+        id: p.id,
+        name: p.packageName || `Package #${p.id}`,
+        basePrice: p.baseSellingPrice,
+        packageType: p.packageType,
+      }));
+  }, [branchPackages, form.serviceId]);
 
   useEffect(() => {
     if (!open || !branchId) return;
@@ -167,7 +185,7 @@ export default function QuickAppointmentDrawer({ open, onClose }) {
   }, [branchId, form.date, form.doctorId, form.serviceId]);
 
   const checkDuplicate = useCallback(async () => {
-    const mobile = (form.mobileSnapshot || owner?.auth?.phone).trim();
+    const mobile = (form.mobileSnapshot || owner?.auth?.phone || "").trim();
     if (!mobile || !form.date) return null;
     const result = await staffClinicCheckDuplicate(branchId, {
       mobile,
@@ -179,7 +197,7 @@ export default function QuickAppointmentDrawer({ open, onClose }) {
 
   const handleSaveDraft = useCallback(async () => {
     if (!branchId) return;
-    const mobile = (form.mobileSnapshot || owner?.auth?.phone).trim();
+    const mobile = (form.mobileSnapshot || owner?.auth?.phone || "").trim();
     const ownerName = (form.ownerName || owner?.profile?.displayName || "").trim();
     if (!mobile) {
       toast.error("Mobile number is required.");
@@ -200,6 +218,7 @@ export default function QuickAppointmentDrawer({ open, onClose }) {
         petId: form.petId && form.petId !== "" ? Number(form.petId) : null,
         doctorId: form.doctorId ? Number(form.doctorId) : null,
         serviceId: Number(form.serviceId),
+        surgeryPackageId: form.packageId && form.packageId !== "" ? Number(form.packageId) : null,
         scheduledStartAt: form.slotStart,
         scheduledEndAt: form.slotEnd,
         status: "DRAFT",
@@ -222,7 +241,7 @@ export default function QuickAppointmentDrawer({ open, onClose }) {
 
   const handleSaveAndBook = useCallback(async () => {
     if (!branchId) return;
-    const mobile = (form.mobileSnapshot || owner?.auth?.phone).trim();
+    const mobile = (form.mobileSnapshot || owner?.auth?.phone || "").trim();
     const ownerName = (form.ownerName || owner?.profile?.displayName || "").trim();
     if (!mobile) {
       toast.error("Mobile number is required.");
@@ -252,6 +271,7 @@ export default function QuickAppointmentDrawer({ open, onClose }) {
         petId: form.petId && form.petId !== "" ? Number(form.petId) : null,
         doctorId: form.doctorId ? Number(form.doctorId) : null,
         serviceId: Number(form.serviceId),
+        surgeryPackageId: form.packageId && form.packageId !== "" ? Number(form.packageId) : null,
         scheduledStartAt: form.slotStart,
         scheduledEndAt: form.slotEnd,
         status: "PRE_BOOKED",
@@ -446,11 +466,27 @@ export default function QuickAppointmentDrawer({ open, onClose }) {
                           onChange={(e) => setForm((f) => ({ ...f, packageId: e.target.value }))}
                           disabled={!form.serviceId || packagesLoading}
                         >
-                          <option value="">{packagesLoading ? "Loading…" : "— None —"}</option>
+                          <option value="">
+                            {packagesLoading
+                              ? "Loading packages…"
+                              : !form.serviceId
+                                ? "Select service first"
+                                : "— None —"}
+                          </option>
                           {packages.map((p) => (
-                            <option key={p.id} value={p.id}>{p.name}{p.basePrice != null ? ` — ${Number(p.basePrice)}` : ""}</option>
+                            <option key={p.id} value={p.id}>
+                              {p.name || `Package #${p.id}`}
+                              {p.basePrice != null ? ` — ${Number(p.basePrice)}` : ""}
+                              {p.packageType ? ` (${p.packageType})` : ""}
+                            </option>
                           ))}
                         </select>
+                        {!packagesLoading && form.serviceId && packages.length === 0 && (
+                          <small className="text-muted d-block mt-1">No active packages available for this service.</small>
+                        )}
+                        {!form.serviceId && (
+                          <small className="text-muted d-block mt-1">Select a service to see linked packages.</small>
+                        )}
                       </div>
                       <div className="col-md-6">
                         <label className="form-label small fw-medium mb-1">Preferred doctor</label>
@@ -508,10 +544,10 @@ export default function QuickAppointmentDrawer({ open, onClose }) {
                           disabled={slotsLoading}
                         >
                           <option value="">{slotsLoading ? "Loading…" : "Select time"}</option>
-                          {slotsFiltered.map((s) => {
+                          {slotsFiltered.map((s, i) => {
                             const iso = s.start ? new Date(s.start).toISOString() : "";
                             return (
-                              <option key={iso || Math.random()} value={iso}>
+                              <option key={`slot-${i}-${iso}`} value={iso}>
                                 {s.start && new Date(s.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
                               </option>
                             );

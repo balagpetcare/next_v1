@@ -6,6 +6,7 @@ import PageHeader from "@/app/owner/_components/shared/PageHeader";
 import StatusBadge from "@/app/owner/_components/StatusBadge";
 import ActionDropdown from "@/app/owner/_components/shared/ActionDropdown";
 import { ownerGet, ownerPatch, ownerPost } from "@/app/owner/_lib/ownerApi";
+import { formatValueForDisplay } from "@/src/lib/displayFormatters";
 
 const API_BASE = "/api/v1/owner";
 
@@ -219,7 +220,7 @@ function ManagerDetailDrawer({ managerUserId, open, onClose, onUpdated, initialT
                       {access.map((a) => (
                         <div key={a.id}>
                           {a.branch?.name} — {a.status}
-                          {a.permissionOverrides && ` · Overrides: ${JSON.stringify(a.permissionOverrides)}`}
+                          {a.permissionOverrides && ` · Overrides: ${formatValueForDisplay(a.permissionOverrides)}`}
                         </div>
                       ))}
                     </div>

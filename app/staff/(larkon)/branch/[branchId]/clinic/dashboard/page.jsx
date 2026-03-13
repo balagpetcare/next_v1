@@ -8,6 +8,7 @@ import { staffClinicDashboardSummary } from "@/lib/api";
 import Card from "@/src/bpa/components/ui/Card";
 import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
+import { OperationalAlertStrip } from "@/src/components/dashboard";
 
 const DASHBOARD_PERMS = ["clinic.overview.read", "clinic.overview.manage"];
 
@@ -63,6 +64,8 @@ export default function StaffBranchClinicDashboardPage() {
         </Link>
         <h5 className="mb-0">Clinic</h5>
       </div>
+
+      <OperationalAlertStrip branchId={branchId} className="mb-3" />
 
       {summaryLoading && (
         <div className="mb-24 text-center text-secondary-light">Loading today&apos;s summary...</div>

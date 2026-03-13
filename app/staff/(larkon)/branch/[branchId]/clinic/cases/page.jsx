@@ -7,6 +7,8 @@ import { useBranchContext } from "@/lib/useBranchContext";
 import { staffClinicCasesList } from "@/lib/api";
 import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
+import EmptyState from "@/src/components/dashboard/EmptyState";
+import StatusBadge from "@/src/components/dashboard/StatusBadge";
 
 export default function StaffClinicCasesPage() {
   const params = useParams();
@@ -109,7 +111,16 @@ export default function StaffClinicCasesPage() {
               <span className="spinner-border spinner-border-sm text-primary" />
             </div>
           ) : items.length === 0 ? (
-            <p className="text-muted mb-0">No cases found. Use filters and click Apply.</p>
+            <EmptyState
+              icon="ri:folder-open-line"
+              title="No cases found"
+              description="Try a different status or date range and click Apply, or cases will appear when clinical cases are created from packages."
+              action={
+                <button type="button" className="btn btn-outline-primary btn-sm radius-8" onClick={load} disabled={loading}>
+                  Apply filters
+                </button>
+              }
+            />
           ) : (
             <div className="table-responsive">
               <table className="table table-sm mb-0">
@@ -133,9 +144,7 @@ export default function StaffClinicCasesPage() {
                       </td>
                       <td>{c.surgeryPackage?.packageName ?? "—"}</td>
                       <td>
-                        <span className={`badge radius-8 ${c.status === "COMPLETED" ? "bg-success" : c.status === "OPEN" ? "bg-primary" : "bg-secondary"}`}>
-                          {c.status}
-                        </span>
+                        <StatusBadge status={c.status} />
                       </td>
                       <td>{c._count?.procedureOrders ?? 0}</td>
                       <td>{c.openedAt ? new Date(c.openedAt).toLocaleDateString() : "—"}</td>

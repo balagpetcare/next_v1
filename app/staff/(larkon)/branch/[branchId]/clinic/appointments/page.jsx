@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useCallback } from "react";
 import Link from "next/link";
+import { toast } from "react-toastify";
 import { useParams, useRouter } from "next/navigation";
 import { useBranchContext } from "@/lib/useBranchContext";
 import {
@@ -40,25 +41,10 @@ import AppointmentFilterBar from "@/src/components/clinic/AppointmentFilterBar";
 import AppointmentDetailDrawer from "@/src/components/clinic/AppointmentDetailDrawer";
 import DoctorWorkloadPanel from "@/src/components/clinic/DoctorWorkloadPanel";
 import ServiceBreakdownPanel from "@/src/components/clinic/ServiceBreakdownPanel";
+import CreateAppointmentWizard from "./_components/CreateAppointmentWizard";
+import StatusBadge from "@/src/components/dashboard/StatusBadge";
 
 const APPOINTMENTS_PERMS = ["clinic.appointments.read", "clinic.appointments.manage"];
-const STATUS_BADGES = {
-  DRAFT: "light",
-  PRE_BOOKED: "info",
-  BOOKED: "primary",
-  CONFIRMED: "info",
-  CHECKED_IN: "warning",
-  IN_QUEUE: "secondary",
-  CALLED: "secondary",
-  IN_CONSULT: "secondary",
-  COMPLETED: "success",
-  CANCELLED: "danger",
-  NO_SHOW: "dark",
-};
-
-function statusBadgeClass(s) {
-  return STATUS_BADGES[s?.toUpperCase()] ?? "bg-light text-dark";
-}
 
 function todayYMD() {
   return new Date().toISOString().split("T")[0];
@@ -107,6 +93,7 @@ export default function StaffBranchClinicAppointmentsPage() {
   const [actioningId, setActioningId] = useState(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createModalSource, setCreateModalSource] = useState(undefined);
+  const [showWizard, setShowWizard] = useState(false);
   const [rescheduleApt, setRescheduleApt] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [searchResults, setSearchResults] = useState(null);
@@ -397,6 +384,7 @@ export default function StaffBranchClinicAppointmentsPage() {
               onCreateWalkIn={() => { setCreateModalSource("COUNTER"); setShowCreateModal(true); }}
               onCreatePhone={() => { setCreateModalSource("PHONE"); setShowCreateModal(true); }}
               onCreateOnline={() => { setCreateModalSource("ONLINE"); setShowCreateModal(true); }}
+              onOpenWizard={canManage ? () => setShowWizard(true) : undefined}
               onExport={async () => {
                 try {
                   const csv = await staffClinicAppointmentExport(branchId, listParams);
@@ -497,7 +485,7 @@ export default function StaffBranchClinicAppointmentsPage() {
                               </span>
                             </td>
                             <td>
-                              <span className={`badge bg-${statusBadgeClass(status)}`}>{status}</span>
+                              <StatusBadge status={status} />
                               {a.appointmentMode === "QUICK_CALL" && (
                                 <span className="badge bg-light text-dark ms-1">Phone</span>
                               )}
@@ -570,6 +558,7 @@ export default function StaffBranchClinicAppointmentsPage() {
         onClose={() => setDetailAppointmentId(null)}
         appointment={detailAppointment}
         loading={detailLoading}
+        branchId={branchId}
       />
 
       <p className="text-secondary-light text-sm mt-16">
@@ -587,6 +576,30 @@ export default function StaffBranchClinicAppointmentsPage() {
             loadAppointments();
           }}
         />
+      )}
+
+      {showWizard && (
+        <div className="modal d-block" style={{ backgroundColor: "rgba(0,0,0,0.5)" }} role="dialog">
+          <div className="modal-dialog modal-lg modal-dialog-scrollable" style={{ maxWidth: 640 }}>
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Booking wizard</h5>
+                <button type="button" className="btn-close" aria-label="Close" onClick={() => setShowWizard(false)} />
+              </div>
+              <div className="modal-body">
+                <CreateAppointmentWizard
+                  branchId={branchId}
+                  onSuccess={() => {
+                    setShowWizard(false);
+                    loadAppointments();
+                    toast.success("Appointment created.");
+                  }}
+                  onClose={() => setShowWizard(false)}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {rescheduleApt && (
@@ -735,7 +748,16 @@ function PetSelectWithQuickCreate({ owner, patients, setPatients, form, setForm,
       </select>
       {showQuickCreate && ownerFound && (
         <div className="border rounded p-2 mt-2 bg-light">
-          <div className="small fw-medium mb-2">Add new pet</div>
+          <div className="small fw-medium mb-2 d-flex justify-content-between align-items-center flex-wrap gap-1">
+            <span>Add new pet</span>
+            <button
+              type="button"
+              className="btn btn-link btn-sm p-0 text-muted"
+              onClick={() => setForm((f) => ({ ...f, petId: "" }))}
+            >
+              No pet / choose existing
+            </button>
+          </div>
           <input
             type="text"
             className="form-control form-control-sm mb-2"
@@ -882,11 +904,13 @@ function CreateAppointmentModal({ branchId, onClose, onSuccess, initialChannel }
   }
 
   function buildPayload(source, channel, visitType, isInstant, isAnyDoctor, paymentStatus, paymentMethod, paidAmount) {
-    const isAnyDoctorVal = !form.doctorId || form.doctorId === "any";
+    const rawDoctorId = form.doctorId ? Number(form.doctorId) : null;
+    const isAnyDoctorVal = !form.doctorId || form.doctorId === "any" || rawDoctorId === 0 || Number.isNaN(rawDoctorId);
+    const effectiveDoctorId = isAnyDoctorVal ? null : rawDoctorId;
     return {
       patientId: Number(form.patientId),
       petId: form.petId ? Number(form.petId) : undefined,
-      doctorId: isAnyDoctorVal ? null : Number(form.doctorId),
+      doctorId: effectiveDoctorId,
       serviceId: Number(form.serviceId),
       scheduledStartAt: form.slotStart,
       scheduledEndAt: form.slotEnd,
@@ -894,7 +918,7 @@ function CreateAppointmentModal({ branchId, onClose, onSuccess, initialChannel }
       notes: form.notes || undefined,
       visitType: visitType || form.visitType,
       isInstant: !!isInstant,
-      isAnyDoctor: !!isAnyDoctorVal,
+      isAnyDoctor: effectiveDoctorId == null,
       channel: channel || form.channel,
       paymentStatus: paymentStatus ?? (form.payNow ? "PAID" : "UNPAID"),
       paymentMethod: form.payNow ? form.paymentMethod : undefined,
@@ -1107,7 +1131,7 @@ function PhoneQuickForm({
       return;
     }
     if (form.petId === PET_ID_NEW) {
-      setFormError("Complete quick pet creation or choose another option.");
+      setFormError("Complete quick pet creation (name + type + Add Pet) or use “No pet / choose existing” in the Pet section.");
       return;
     }
     if (!form.serviceId || !form.date || !form.slotStart || !form.slotEnd) {
@@ -1262,7 +1286,7 @@ function WalkInForm({
       return;
     }
     if (form.petId === PET_ID_NEW) {
-      setFormError("Complete quick pet creation or choose another option.");
+      setFormError("Complete quick pet creation (name + type + Add Pet) or use “No pet / choose existing” in the Pet section.");
       return;
     }
     if (!form.serviceId || !form.date || !form.slotStart || !form.slotEnd) {
@@ -1452,7 +1476,7 @@ function FullBookingForm({
       return;
     }
     if (form.petId === PET_ID_NEW) {
-      setFormError("Complete quick pet creation or choose another option.");
+      setFormError("Complete quick pet creation (name + type + Add Pet) or use “No pet / choose existing” in the Pet section.");
       return;
     }
     if (!form.serviceId || (!isAnyDoctor && !form.doctorId) || !form.date || !form.slotStart || !form.slotEnd) {

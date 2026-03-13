@@ -8,6 +8,7 @@ export interface QuickActionBarProps {
   onCall: (id: number) => void;
   onStartConsult: (id: number) => void;
   onComplete: (id: number) => void;
+  onConfirm?: (id: number) => void;
   onReschedule: (id: number, data: { scheduledStartAt: string; scheduledEndAt: string }) => void;
   onCancel: (id: number, reason: string) => void;
   onRefresh?: () => void;
@@ -21,6 +22,7 @@ export function QuickActionBar({
   onCall,
   onStartConsult,
   onComplete,
+  onConfirm,
   onReschedule,
   onCancel,
   onRefresh,
@@ -52,6 +54,16 @@ export function QuickActionBar({
 
   return (
     <div className="d-flex flex-wrap gap-1 mb-2">
+      {status === "BOOKED" && onConfirm && (
+        <button
+          type="button"
+          className="btn btn-sm btn-success"
+          disabled={actioning}
+          onClick={() => onConfirm(appointmentId)}
+        >
+          Confirm
+        </button>
+      )}
       {["IN_QUEUE", "CHECKED_IN"].includes(status) && (
         <button
           type="button"

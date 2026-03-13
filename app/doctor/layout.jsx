@@ -52,14 +52,15 @@ export default function DoctorLayout({ children }) {
           }
         }
 
-        if (!cancelled && hasDoctorAccess && pathname?.startsWith("/doctor") && !pathname?.startsWith("/doctor/onboarding/") && !pathname?.startsWith("/doctor/login") && !pathname?.startsWith("/doctor/verification")) {
+        // Profile-level onboarding only; per-clinic onboarding must NOT trigger redirect.
+        if (!cancelled && hasDoctorAccess && pathname?.startsWith("/doctor") && !pathname?.startsWith("/doctor/onboarding") && !pathname?.startsWith("/doctor/login") && !pathname?.startsWith("/doctor/verification")) {
           const doctorRes = await fetch(`${API_BASE}/api/v1/doctor/me`, { method: "GET", credentials: "include", headers: { Accept: "application/json" } });
           if (doctorRes.ok) {
             const doctorJson = await doctorRes.json().catch(() => null);
-            const branches = doctorJson?.data?.branches ?? [];
-            const pendingBranch = branches.find((b) => b?.onboardingStatus === "PENDING");
-            if (pendingBranch?.branchId && !cancelled) {
-              router.replace(`/doctor/onboarding/${pendingBranch.branchId}`);
+            const data = doctorJson?.data;
+            const onboardingCompleted = data?.onboardingCompleted === true;
+            if (!onboardingCompleted && !cancelled) {
+              router.replace("/doctor/verification");
             }
           }
         }

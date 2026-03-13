@@ -20,6 +20,7 @@ import {
   type DoctorAuditLogRow,
 } from "@/app/owner/_lib/ownerApi";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
+import { formatAuditDetails, humanizeFieldLabel } from "@/src/lib/displayFormatters";
 
 type ServiceFeeRow = {
   id: number;
@@ -875,12 +876,20 @@ export default function ClinicDoctorDetailPage() {
                           <tr key={row.id}>
                             <td>{row.createdAt ? new Date(row.createdAt).toLocaleString() : "—"}</td>
                             <td><span className="badge bg-secondary radius-8">{row.action}</span></td>
-                            <td>{row.field ?? "—"}</td>
+                            <td>{row.field ? humanizeFieldLabel(row.field) : "—"}</td>
                             <td>{row.changedByRole ?? "—"}</td>
                             <td className="small">
-                              {row.oldValue != null && <span className="text-muted">Old: {typeof row.oldValue === "object" ? JSON.stringify(row.oldValue).slice(0, 60) : String(row.oldValue)} </span>}
-                              {row.newValue != null && <span>New: {typeof row.newValue === "object" ? JSON.stringify(row.newValue).slice(0, 80) : String(row.newValue)}</span>}
-                              {row.oldValue == null && row.newValue == null && "—"}
+                              {(() => {
+                                const lines = formatAuditDetails({ field: row.field, oldValue: row.oldValue, newValue: row.newValue });
+                                if (lines.length === 0) return "—";
+                                return (
+                                  <ul className="list-unstyled mb-0 small">
+                                    {lines.map((line, i) => (
+                                      <li key={i}>{line}</li>
+                                    ))}
+                                  </ul>
+                                );
+                              })()}
                             </td>
                           </tr>
                         ))}

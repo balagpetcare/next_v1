@@ -1,0 +1,10 @@
+export { default as OverviewTab } from "./OverviewTab";
+export { default as CredentialsTab } from "./CredentialsTab";
+export { default as ServicesTab } from "./ServicesTab";
+export { default as PackagesTab } from "./PackagesTab";
+export { default as ScheduleTab } from "./ScheduleTab";
+export { default as FeesTab } from "./FeesTab";
+export { default as PerformanceTab } from "./PerformanceTab";
+export { default as LeaveTab } from "./LeaveTab";
+export { default as ApprovalsTab } from "./ApprovalsTab";
+export { default as AuditTab } from "./AuditTab";

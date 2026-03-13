@@ -106,7 +106,9 @@ const LayoutProvider = ({ children }: ChildrenType) => {
 
   // toggle backdrop
   const toggleBackdrop = useCallback(() => {
+    if (typeof document === 'undefined') return
     const htmlTag = document.getElementsByTagName('html')[0]
+    if (!htmlTag) return
     if (offcanvasStates.showBackdrop) htmlTag.classList.remove('sidebar-enable')
     else htmlTag.classList.add('sidebar-enable')
     setOffcanvasStates({ ...offcanvasStates, showBackdrop: !offcanvasStates.showBackdrop })

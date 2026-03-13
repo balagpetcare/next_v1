@@ -6,7 +6,11 @@ import Link from "next/link";
 import {
   ownerClinicDoctors,
   ownerClinicDoctorInvite,
+  listOwnerInvitations,
+  ownerResendInvitation,
+  ownerCancelInvitation,
   type ClinicDoctorListItem,
+  type StaffInviteRow,
 } from "@/app/owner/_lib/ownerApi";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 
@@ -32,6 +36,9 @@ export default function ClinicDoctorsPage() {
     scheduleEditPolicy: "",
     message: "",
   });
+  const [invitations, setInvitations] = useState<StaffInviteRow[]>([]);
+  const [invitationsLoading, setInvitationsLoading] = useState(false);
+  const [actionInviteId, setActionInviteId] = useState<number | null>(null);
 
   const loadDoctors = useCallback(async () => {
     if (!branchId) return;
@@ -52,6 +59,44 @@ export default function ClinicDoctorsPage() {
     loadDoctors();
   }, [loadDoctors]);
 
+  const loadInvitations = useCallback(async () => {
+    if (!branchId) return;
+    setInvitationsLoading(true);
+    try {
+      const res = await listOwnerInvitations({ branchId: Number(branchId), status: "PENDING" });
+      setInvitations(Array.isArray(res?.data) ? res.data : []);
+    } catch {
+      setInvitations([]);
+    } finally {
+      setInvitationsLoading(false);
+    }
+  }, [branchId]);
+
+  useEffect(() => {
+    loadInvitations();
+  }, [loadInvitations]);
+
+  const handleResendInvitation = async (inviteId: number) => {
+    setActionInviteId(inviteId);
+    try {
+      await ownerResendInvitation(inviteId);
+      await loadInvitations();
+    } finally {
+      setActionInviteId(null);
+    }
+  };
+
+  const handleCancelInvitation = async (inviteId: number) => {
+    if (!confirm("Cancel this invitation? The invitee will no longer be able to accept.")) return;
+    setActionInviteId(inviteId);
+    try {
+      await ownerCancelInvitation(inviteId);
+      await loadInvitations();
+    } finally {
+      setActionInviteId(null);
+    }
+  };
+
   const handleInviteSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!branchId) return;
@@ -71,6 +116,7 @@ export default function ClinicDoctorsPage() {
       setInviteSuccess(true);
       setInviteForm({ email: "", phone: "", displayName: "", roleInClinic: "", defaultConsultationFee: "", scheduleEditPolicy: "", message: "" });
       await loadDoctors();
+      await loadInvitations();
       setTimeout(() => {
         setInviteOpen(false);
         setInviteSuccess(false);
@@ -110,6 +156,66 @@ export default function ClinicDoctorsPage() {
         </div>
       )}
 
+      {invitations.length > 0 && (
+        <div className="card radius-12 mb-3">
+          <div className="card-header bg-transparent border-0 d-flex justify-content-between align-items-center">
+            <h6 className="mb-0">Pending invitations</h6>
+            <span className="badge bg-warning text-dark">{invitations.length}</span>
+          </div>
+          <div className="card-body p-24">
+            {invitationsLoading ? (
+              <p className="text-muted small mb-0">Loading…</p>
+            ) : (
+              <div className="table-responsive">
+                <table className="table table-sm table-hover mb-0">
+                  <thead>
+                    <tr>
+                      <th>Email / Phone</th>
+                      <th>Role</th>
+                      <th>Doctor</th>
+                      <th>Expires</th>
+                      <th>Invited by</th>
+                      <th>Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {invitations.map((inv) => (
+                      <tr key={inv.id}>
+                        <td className="small">{inv.email || inv.phone || "—"}</td>
+                        <td className="small">{inv.role ?? "—"}</td>
+                        <td>{inv.inviteAsDoctor ? "Yes" : "—"}</td>
+                        <td className="small text-muted">
+                          {inv.expiresAt ? new Date(inv.expiresAt).toLocaleDateString(undefined, { dateStyle: "short" }) : "—"}
+                        </td>
+                        <td className="small">{inv.invitedBy?.profile?.displayName ?? inv.invitedBy?.auth?.email ?? "—"}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-primary radius-8 me-1"
+                            disabled={actionInviteId !== null}
+                            onClick={() => handleResendInvitation(inv.id)}
+                          >
+                            {actionInviteId === inv.id ? "…" : "Resend"}
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-danger radius-8"
+                            disabled={actionInviteId !== null}
+                            onClick={() => handleCancelInvitation(inv.id)}
+                          >
+                            Cancel
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
         <select
           className="form-select form-select-sm w-auto radius-12"
@@ -131,6 +237,13 @@ export default function ClinicDoctorsPage() {
           <option value="SUSPENDED">Suspended</option>
           <option value="ENDED">Ended</option>
         </select>
+        <Link
+          href={`/owner/clinic/${branchId}/doctor-requests`}
+          className="btn btn-outline-primary radius-12"
+        >
+          <i className="ri-checkbox-multiple-line me-1" />
+          Doctor requests
+        </Link>
         <button
           type="button"
           className="btn btn-primary radius-12"
