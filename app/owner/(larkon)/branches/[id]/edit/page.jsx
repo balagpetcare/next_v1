@@ -88,6 +88,7 @@ export default function EditBranchPage() {
               mode="edit"
               organizationId={orgId}
               branchId={branchId}
+              initialBranch={branch}
               onDone={() => {
                 router.replace(base);
                 router.refresh();

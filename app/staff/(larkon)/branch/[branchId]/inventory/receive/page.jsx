@@ -12,18 +12,20 @@ import {
   staffInventoryLocations,
   staffCreateOpeningStock,
   staffInventoryList,
-  staffGetIncomingDispatches,
+  staffGetIncomingInboundUnified,
 } from "@/lib/api";
 import Card from "@/src/bpa/components/ui/Card";
 import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
 import DispatchReceiveDrawer from "./_components/DispatchReceiveDrawer";
+import TransferReceiveDrawer from "./_components/TransferReceiveDrawer";
 
 const REQUIRED_PERM = "inventory.receive";
 
 function statusBadge(status) {
   const map = {
     IN_TRANSIT: "bg-info",
+    SENT: "bg-info",
     DELIVERED: "bg-success",
     CREATED: "bg-secondary",
     PACKED: "bg-warning text-dark",
@@ -38,10 +40,11 @@ export default function StaffBranchInventoryReceivePage() {
   const { branch, myAccess, isLoading: ctxLoading, errorCode, hasViewPermission } = useBranchContext(branchId);
 
   const [tab, setTab] = useState("incoming");
-  const [dispatches, setDispatches] = useState([]);
+  const [inboundRows, setInboundRows] = useState([]);
   const [dispatchesLoading, setDispatchesLoading] = useState(true);
   const [dispatchesError, setDispatchesError] = useState("");
   const [drawerDispatchId, setDrawerDispatchId] = useState(null);
+  const [drawerTransferId, setDrawerTransferId] = useState(null);
 
   const [locations, setLocations] = useState([]);
   const [variants, setVariants] = useState([]);
@@ -63,18 +66,18 @@ export default function StaffBranchInventoryReceivePage() {
     if (errorCode === "unauthorized") router.replace("/staff/login");
   }, [errorCode, router]);
 
-  const loadDispatches = () => {
+  const loadInbound = () => {
     if (!branchId) return;
     setDispatchesLoading(true);
     setDispatchesError("");
-    staffGetIncomingDispatches(branchId)
-      .then((list) => setDispatches(Array.isArray(list) ? list : []))
-      .catch((e) => setDispatchesError(e?.message ?? "Failed to load incoming dispatches"))
+    staffGetIncomingInboundUnified(branchId)
+      .then((list) => setInboundRows(Array.isArray(list) ? list : []))
+      .catch((e) => setDispatchesError(e?.message ?? "Failed to load incoming shipments"))
       .finally(() => setDispatchesLoading(false));
   };
 
   useEffect(() => {
-    if (branchId && canReceive) loadDispatches();
+    if (branchId && canReceive) loadInbound();
   }, [branchId, canReceive]);
 
   useEffect(() => {
@@ -133,8 +136,18 @@ export default function StaffBranchInventoryReceivePage() {
     }
   };
 
-  const pendingCount = dispatches.length;
-  const pendingQty = dispatches.reduce((s, d) => s + (d.items ?? []).reduce((t, i) => t + (i.quantityDispatched ?? 0), 0), 0);
+  const receivableRows = inboundRows.filter((r) => r.receivable);
+  const pendingCount = receivableRows.length;
+  const pendingQty = inboundRows.reduce((s, r) => {
+    const lines = r.items ?? [];
+    return (
+      s +
+      lines.reduce((t, i) => {
+        const q = i.quantity ?? i.quantityDispatched ?? 0;
+        return t + (typeof q === "number" ? q : 0);
+      }, 0)
+    );
+  }, 0);
 
   if (ctxLoading) {
     return (
@@ -171,7 +184,7 @@ export default function StaffBranchInventoryReceivePage() {
       <Tab.Container activeKey={tab} onSelect={(k) => setTab(k ?? "incoming")}>
         <Nav variant="tabs" className="mb-24" role="tablist" aria-label="Receive Center tabs">
           <Nav.Item>
-            <Nav.Link eventKey="incoming" role="tab" aria-selected={tab === "incoming"}>Incoming dispatches</Nav.Link>
+            <Nav.Link eventKey="incoming" role="tab" aria-selected={tab === "incoming"}>Incoming shipments</Nav.Link>
           </Nav.Item>
           <Nav.Item>
             <Nav.Link eventKey="opening" role="tab" aria-selected={tab === "opening"}>Opening stock</Nav.Link>
@@ -180,7 +193,10 @@ export default function StaffBranchInventoryReceivePage() {
 
         <Tab.Content>
           <Tab.Pane eventKey="incoming">
-          <Card title="Incoming dispatches" subtitle="Dispatches in transit to this branch. Click View to see details and receive.">
+          <Card
+            title="Incoming shipments"
+            subtitle="Warehouse dispatches (challan) and stock-request transfers in transit or packed. Receive when status is in transit (or SENT for transfers). If you also manage transfers elsewhere, use Inventory → Transfers."
+          >
             {dispatchesError && (
               <div className="alert alert-danger d-flex align-items-center justify-content-between">
                 <span>{dispatchesError}</span>
@@ -189,12 +205,15 @@ export default function StaffBranchInventoryReceivePage() {
             )}
             {dispatchesLoading ? (
               <p className="text-secondary-light">Loading…</p>
-            ) : dispatches.length === 0 ? (
+            ) : inboundRows.length === 0 ? (
               <div className="text-center py-4">
-                <p className="text-secondary-light mb-2">No incoming dispatches.</p>
+                <p className="text-secondary-light mb-2">No incoming shipments.</p>
                 <p className="small text-muted mb-0">
-                  Dispatches are created when central warehouse fulfills stock requests.{" "}
+                  Owner fulfillment from central warehouse usually creates an <strong>in-transit transfer</strong> (shown here).
+                  Dispatch challans appear after pick handoff or direct dispatch and are marked in transit when sent.{" "}
                   <Link href={`/staff/branch/${branchId}/inventory/stock-requests`}>Stock Requests</Link>
+                  {" · "}
+                  <Link href={`/staff/branch/${branchId}/inventory/transfers`}>Transfers</Link>
                 </p>
               </div>
             ) : (
@@ -202,7 +221,8 @@ export default function StaffBranchInventoryReceivePage() {
                 <table className="table table-sm table-hover">
                   <thead>
                     <tr>
-                      <th>Dispatch</th>
+                      <th>Type</th>
+                      <th>ID</th>
                       <th>From</th>
                       <th>To</th>
                       <th>Status</th>
@@ -211,32 +231,50 @@ export default function StaffBranchInventoryReceivePage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {dispatches.map((d) => {
-                      const fromName = d.fromLocation?.name ?? "—";
-                      const toName = d.toLocation?.name ?? "—";
-                      const itemCount = (d.items ?? []).length;
-                      const totalQty = (d.items ?? []).reduce((s, i) => s + (i.quantityDispatched ?? 0), 0);
+                    {inboundRows.map((row) => {
+                      const fromName = row.fromLocation?.name ?? "—";
+                      const toName = row.toLocation?.name ?? "—";
+                      const itemCount = (row.items ?? []).length;
+                      const totalQty = (row.items ?? []).reduce((s, i) => {
+                        const q = i.quantity ?? i.quantityDispatched ?? 0;
+                        return s + (typeof q === "number" ? q : 0);
+                      }, 0);
+                      const isDispatch = row.kind === "DISPATCH";
+                      const key = `${row.kind}-${row.id}`;
+                      const openDrawer = () => {
+                        if (isDispatch) {
+                          setDrawerTransferId(null);
+                          setDrawerDispatchId(row.id);
+                        } else {
+                          setDrawerDispatchId(null);
+                          setDrawerTransferId(row.id);
+                        }
+                      };
                       return (
-                        <tr key={d.id}>
-                          <td>#{d.id}</td>
+                        <tr key={key}>
+                          <td>
+                            <span className="badge bg-light text-dark">{isDispatch ? "Dispatch" : "Transfer"}</span>
+                          </td>
+                          <td>#{row.id}</td>
                           <td>{fromName}</td>
                           <td>{toName}</td>
                           <td>
-                            <span className={`badge ${statusBadge(d.status)}`}>{d.status}</span>
+                            <span className={`badge ${statusBadge(row.status)}`}>{row.status}</span>
+                            {!row.receivable && (
+                              <span className="small text-muted ms-1 d-block">Not receivable yet</span>
+                            )}
                           </td>
                           <td>{itemCount} line(s), {totalQty} unit(s)</td>
                           <td>
-                            <button
-                              type="button"
-                              className="btn btn-outline-primary btn-sm me-1"
-                              onClick={() => setDrawerDispatchId(d.id)}
-                            >
+                            <button type="button" className="btn btn-outline-primary btn-sm me-1" onClick={openDrawer}>
                               View
                             </button>
                             <button
                               type="button"
                               className="btn btn-primary btn-sm"
-                              onClick={() => setDrawerDispatchId(d.id)}
+                              disabled={!row.receivable}
+                              title={!row.receivable ? "Wait until dispatch is in transit (or transfer is sent)" : ""}
+                              onClick={openDrawer}
                             >
                               Receive
                             </button>
@@ -253,7 +291,7 @@ export default function StaffBranchInventoryReceivePage() {
 
         <Tab.Pane eventKey="opening">
           <div className="alert alert-info small mb-3">
-            Opening stock is for initial setup. For transfers from warehouse, use <strong>Incoming dispatches</strong>.
+            Opening stock is for initial setup. For warehouse inbound, use <strong>Incoming shipments</strong>.
           </div>
           {success && <div className="alert alert-success">Received successfully. Redirecting...</div>}
           {error && <div className="alert alert-danger">{error}</div>}
@@ -357,7 +395,14 @@ export default function StaffBranchInventoryReceivePage() {
         onHide={() => setDrawerDispatchId(null)}
         dispatchId={drawerDispatchId ?? 0}
         branchId={branchId}
-        onSuccess={loadDispatches}
+        onSuccess={loadInbound}
+      />
+      <TransferReceiveDrawer
+        show={drawerTransferId != null}
+        onHide={() => setDrawerTransferId(null)}
+        transferId={drawerTransferId ?? 0}
+        branchId={branchId}
+        onSuccess={loadInbound}
       />
     </div>
   );

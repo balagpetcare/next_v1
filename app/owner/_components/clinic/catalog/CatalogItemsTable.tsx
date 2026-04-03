@@ -102,11 +102,41 @@ export default function CatalogItemsTable({
                     { label: "View details", onClick: () => onRowClick(row), icon: "ri-eye-line" },
                     { label: "Full edit", href: `${base}/${row.id}`, icon: "ri-edit-line", onClick: () => onActionSuccess() },
                     { divider: true },
-                    { label: "Duplicate", onClick: (_e, it) => it && onDuplicate(it as ClinicalItemRow), icon: "ri-file-copy-line" },
+                    {
+                      label: "Duplicate",
+                      onClick: (_e: unknown, it: unknown) => {
+                        const r = it as ClinicalItemRow | undefined;
+                        if (r) onDuplicate(r);
+                      },
+                      icon: "ri-file-copy-line",
+                    },
                     row.isActive !== false
-                      ? { label: "Deactivate", onClick: (_e, it) => it && onDeactivate(it as ClinicalItemRow), icon: "ri-close-circle-line", variant: "warning" }
-                      : { label: "Activate", onClick: (_e, it) => it && onActivate(it as ClinicalItemRow), icon: "ri-checkbox-circle-line" },
-                    { label: "Archive", onClick: (_e, it) => it && onDeactivate(it as ClinicalItemRow), icon: "ri-archive-line", variant: "danger" },
+                      ? {
+                          label: "Deactivate",
+                          onClick: (_e: unknown, it: unknown) => {
+                            const r = it as ClinicalItemRow | undefined;
+                            if (r) onDeactivate(r);
+                          },
+                          icon: "ri-close-circle-line",
+                          variant: "warning",
+                        }
+                      : {
+                          label: "Activate",
+                          onClick: (_e: unknown, it: unknown) => {
+                            const r = it as ClinicalItemRow | undefined;
+                            if (r) onActivate(r);
+                          },
+                          icon: "ri-checkbox-circle-line",
+                        },
+                    {
+                      label: "Archive",
+                      onClick: (_e: unknown, it: unknown) => {
+                        const r = it as ClinicalItemRow | undefined;
+                        if (r) onDeactivate(r);
+                      },
+                      icon: "ri-archive-line",
+                      variant: "danger",
+                    },
                     { divider: true },
                     { label: "Link to package", href: `${base.replace(/\/catalog\/?$/, "")}/packages`, icon: "ri-link" },
                   ]}

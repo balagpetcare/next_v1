@@ -4,7 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { useBranchContext } from "@/lib/useBranchContext";
-import { staffGetIncomingDispatches } from "@/lib/api";
+import { staffGetIncomingInboundUnified } from "@/lib/api";
 import Card from "@/src/bpa/components/ui/Card";
 import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
@@ -14,6 +14,7 @@ const REQUIRED_PERM = "inventory.receive";
 function statusBadge(status) {
   const map = {
     IN_TRANSIT: "bg-info",
+    SENT: "bg-info",
     DELIVERED: "bg-success",
     CREATED: "bg-secondary",
     PACKED: "bg-warning text-dark",
@@ -27,7 +28,7 @@ export default function StaffIncomingDispatchesPage() {
   const branchId = useMemo(() => String(params?.branchId ?? ""), [params]);
   const { branch, myAccess, isLoading: ctxLoading, errorCode, hasViewPermission } = useBranchContext(branchId);
 
-  const [dispatches, setDispatches] = useState([]);
+  const [inboundRows, setInboundRows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const permissions = myAccess?.permissions ?? [];
@@ -42,12 +43,12 @@ export default function StaffIncomingDispatchesPage() {
     let cancelled = false;
     setLoading(true);
     setError("");
-    staffGetIncomingDispatches(branchId)
+    staffGetIncomingInboundUnified(branchId)
       .then((list) => {
-        if (!cancelled) setDispatches(Array.isArray(list) ? list : []);
+        if (!cancelled) setInboundRows(Array.isArray(list) ? list : []);
       })
       .catch((e) => {
-        if (!cancelled) setError(e?.message ?? "Failed to load incoming dispatches");
+        if (!cancelled) setError(e?.message ?? "Failed to load incoming shipments");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -77,7 +78,7 @@ export default function StaffIncomingDispatchesPage() {
       <BranchHeader branch={branch} myAccess={myAccess} branchId={branchId} />
 
       <div className="d-flex flex-wrap align-items-center justify-content-between gap-16 mb-24">
-        <h5 className="mb-0">Incoming Dispatches</h5>
+        <h5 className="mb-0">Incoming shipments</h5>
         <Link href={`/staff/branch/${branchId}/inventory`} className="btn btn-outline-primary btn-sm">
           Back to Inventory
         </Link>
@@ -90,17 +91,21 @@ export default function StaffIncomingDispatchesPage() {
         </div>
       )}
 
-      <Card title="Incoming" subtitle="Dispatches in transit to this branch">
+      <Card
+        title="Incoming"
+        subtitle="Dispatches and in-transit transfers. Full receive UI: Receive Center."
+      >
         {loading ? (
           <p className="text-secondary-light">Loading...</p>
-        ) : dispatches.length === 0 ? (
-          <p className="text-secondary-light mb-0">No incoming dispatches.</p>
+        ) : inboundRows.length === 0 ? (
+          <p className="text-secondary-light mb-0">No incoming shipments.</p>
         ) : (
           <div className="table-responsive">
             <table className="table table-sm">
               <thead>
                 <tr>
-                  <th>Dispatch</th>
+                  <th>Type</th>
+                  <th>ID</th>
                   <th>From</th>
                   <th>To</th>
                   <th>Status</th>
@@ -109,24 +114,36 @@ export default function StaffIncomingDispatchesPage() {
                 </tr>
               </thead>
               <tbody>
-                {dispatches.map((d) => {
-                  const fromName = d.fromLocation?.name ?? "—";
-                  const toName = d.toLocation?.name ?? "—";
-                  const itemCount = (d.items ?? []).length;
-                  const totalQty = (d.items ?? []).reduce((s, i) => s + (i.quantityDispatched ?? 0), 0);
+                {inboundRows.map((row) => {
+                  const fromName = row.fromLocation?.name ?? "—";
+                  const toName = row.toLocation?.name ?? "—";
+                  const itemCount = (row.items ?? []).length;
+                  const totalQty = (row.items ?? []).reduce((s, i) => {
+                    const q = i.quantity ?? i.quantityDispatched ?? 0;
+                    return s + (typeof q === "number" ? q : 0);
+                  }, 0);
+                  const isDispatch = row.kind === "DISPATCH";
+                  const key = `${row.kind}-${row.id}`;
                   return (
-                    <tr key={d.id}>
-                      <td>#{d.id}</td>
+                    <tr key={key}>
+                      <td>{isDispatch ? "Dispatch" : "Transfer"}</td>
+                      <td>#{row.id}</td>
                       <td>{fromName}</td>
                       <td>{toName}</td>
                       <td>
-                        <span className={`badge ${statusBadge(d.status)}`}>{d.status}</span>
+                        <span className={`badge ${statusBadge(row.status)}`}>{row.status}</span>
                       </td>
                       <td>{itemCount} line(s), {totalQty} unit(s)</td>
                       <td>
-                        <Link href={`/staff/branch/${branchId}/inventory/incoming/${d.id}`} className="btn btn-primary btn-sm">
-                          Receive
-                        </Link>
+                        {isDispatch && row.receivable ? (
+                          <Link href={`/staff/branch/${branchId}/inventory/incoming/${row.id}`} className="btn btn-primary btn-sm">
+                            Receive
+                          </Link>
+                        ) : (
+                          <Link href={`/staff/branch/${branchId}/inventory/receive`} className="btn btn-outline-primary btn-sm">
+                            Receive Center
+                          </Link>
+                        )}
                       </td>
                     </tr>
                   );

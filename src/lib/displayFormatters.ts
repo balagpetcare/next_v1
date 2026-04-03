@@ -164,9 +164,17 @@ const ENUM_LABELS: Record<string, string> = {
   EMERGENCY_UNAVAILABLE: "Emergency unavailable",
   // Injection token / medicine
   USED: "Used",
-  INTERNAL: "Internal",
-  EXTERNAL: "External",
-  OUTSIDE: "Outside",
+  INTERNAL: "Internal (legacy)",
+  EXTERNAL: "External (legacy)",
+  OUTSIDE: "Outside (legacy)",
+  INTERNAL_CLINIC: "Clinic stock (vial)",
+  CLINIC_PROVIDED_MEDICINE: "Clinic-provided medicine",
+  OUTSIDE_PRESCRIPTION_PATIENT_BROUGHT: "Patient-brought (outside Rx)",
+  CREATED: "Created",
+  VALIDATED_IN_QUEUE: "Validated / in queue",
+  ADMINISTERED: "Administered",
+  INTERNAL_VISIT: "Internal visit",
+  EXTERNAL_WALK_IN: "External / walk-in",
 };
 
 /**
@@ -307,12 +315,12 @@ export function getAuditRiskLevel(action: string | null | undefined): "low" | "m
  */
 export function formatAuditDetails(entry: {
   action?: string;
-  field?: string;
+  field?: string | null;
   oldValue?: unknown;
   newValue?: unknown;
 }): string[] {
   const { action, field, oldValue, newValue } = entry;
-  const lines = formatAuditChangeLines(oldValue, newValue, { action, field });
+  const lines = formatAuditChangeLines(oldValue, newValue, { action, field: field ?? undefined });
   if (lines.length > 0) return lines;
   if (oldValue != null || newValue != null) {
     return [formatValueForDisplay(newValue ?? oldValue)];

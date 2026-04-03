@@ -35,12 +35,14 @@ export default function ClinicStaffProfilePage() {
   });
 
   useEffect(() => {
-    if (!branchId || !memberId) return;
+    if (typeof branchId !== "string" || branchId === "" || typeof memberId !== "string" || memberId === "") return;
+    const bid = branchId;
+    const mid = memberId;
     async function load() {
       try {
         setLoading(true);
         setError("");
-        const data = await ownerClinicStaffProfileGet(branchId, memberId);
+        const data = await ownerClinicStaffProfileGet(bid, mid);
         setProfile(data ?? null);
         if (data) {
           setForm({

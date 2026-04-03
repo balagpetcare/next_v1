@@ -6,6 +6,7 @@ import Link from "next/link";
 import LkFormGroup from "@larkon-ui/components/LkFormGroup";
 import LkSelect from "@larkon-ui/components/LkSelect";
 import { useBranchContext } from "@/lib/useBranchContext";
+import { staffStockRequestCreatePath, staffStockRequestDetailPath } from "@/lib/staffInventoryRoutes";
 import { staffStockRequestsList } from "@/lib/api";
 import Card from "@/src/bpa/components/ui/Card";
 import BranchHeader from "@/src/components/branch/BranchHeader";
@@ -96,16 +97,32 @@ export default function StaffBranchStockRequestsPage() {
   return (
     <div className="container py-24">
       <BranchHeader branch={branch} myAccess={myAccess} branchId={branchId} />
-      <div className="d-flex flex-wrap align-items-center justify-content-between gap-16 mb-24">
-        <h5 className="mb-0">Stock Requests</h5>
+      
+      {/* Page Header with Breadcrumbs */}
+      <nav aria-label="breadcrumb" className="mb-2">
+        <ol className="breadcrumb mb-0 small">
+          <li className="breadcrumb-item"><Link href="/staff">Staff</Link></li>
+          <li className="breadcrumb-item"><Link href="/staff/branch">Branches</Link></li>
+          <li className="breadcrumb-item"><Link href={`/staff/branch/${branchId}`}>{branch?.name || `Branch #${branchId}`}</Link></li>
+          <li className="breadcrumb-item"><Link href={`/staff/branch/${branchId}/inventory`}>Inventory</Link></li>
+          <li className="breadcrumb-item active">Stock Requests</li>
+        </ol>
+      </nav>
+      
+      <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+        <div>
+          <h5 className="mb-0">Stock Requests</h5>
+          <p className="text-muted small mb-0">Request stock from warehouse or owner</p>
+        </div>
         {canCreate && (
-          <Link href={`/staff/branch/${branchId}/inventory/stock-requests/new`} className="btn btn-primary btn-sm">
+          <Link href={staffStockRequestCreatePath(branchId)} className="btn btn-primary btn-sm radius-12">
+            <i className="ri-add-line me-1" aria-hidden />
             New Request
           </Link>
         )}
       </div>
       {error && (
-        <div className="alert alert-danger d-flex align-items-center justify-content-between">
+        <div className="alert alert-danger d-flex align-items-center justify-content-between mb-3 radius-12">
           <span>{error}</span>
           <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => setError("")}>Dismiss</button>
         </div>
@@ -127,9 +144,26 @@ export default function StaffBranchStockRequestsPage() {
           </LkFormGroup>
         </div>
         {loading ? (
-          <p className="text-secondary-light">Loading...</p>
+          <div className="text-center py-5">
+            <div className="spinner-border text-primary" role="status" aria-label="Loading" />
+            <p className="mt-2 text-secondary small">Loading requests...</p>
+          </div>
         ) : requests.length === 0 ? (
-          <p className="text-secondary-light mb-0">No stock requests. Create one to request stock from owner.</p>
+          <div className="text-center py-5 px-3">
+            <div className="mb-3 text-muted">
+              <i className="ri-file-list-3-line display-4" aria-hidden />
+            </div>
+            <h6 className="fw-semibold mb-2">No stock requests found</h6>
+            <p className="text-muted small mb-4">
+              {statusFilter ? "Try adjusting your filters" : "Create a stock request to order products from warehouse or owner"}
+            </p>
+            {canCreate && !statusFilter && (
+              <Link href={staffStockRequestCreatePath(branchId)} className="btn btn-primary btn-sm radius-12">
+                <i className="ri-add-line me-1" aria-hidden />
+                Create Stock Request
+              </Link>
+            )}
+          </div>
         ) : (
           <div className="table-responsive">
             <table className="table table-sm table-hover">
@@ -139,23 +173,31 @@ export default function StaffBranchStockRequestsPage() {
                   <th>Date</th>
                   <th>Status</th>
                   <th>Items</th>
+                  <th>Total Qty</th>
                   <th>Requester</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
-                {requests.map((r) => (
-                  <tr key={r.id}>
-                    <td>{r.id}</td>
-                    <td>{formatDate(r.createdAt)}</td>
-                    <td><span className={`badge ${statusBadgeClass(r.status)}`}>{r.status}</span></td>
-                    <td>{r.items?.length ?? 0}</td>
-                    <td>{r.requester?.profile?.displayName ?? `User ${r.requesterUserId}`}</td>
-                    <td>
-                      <Link href={`/staff/branch/${branchId}/inventory/stock-requests/${r.id}`} className="btn btn-sm btn-outline-primary">View</Link>
-                    </td>
-                  </tr>
-                ))}
+                {requests.map((r) => {
+                  const totalQty = (r.items || []).reduce((sum, item) => sum + (item.requestedQty || 0), 0);
+                  return (
+                    <tr key={r.id}>
+                      <td>#{r.id}</td>
+                      <td>{formatDate(r.createdAt)}</td>
+                      <td><span className={`badge ${statusBadgeClass(r.status)}`}>{r.status}</span></td>
+                      <td>{r.items?.length ?? 0}</td>
+                      <td className="fw-semibold">{totalQty}</td>
+                      <td>{r.requester?.profile?.displayName ?? `User ${r.requesterUserId}`}</td>
+                      <td>
+                        <Link href={staffStockRequestDetailPath(branchId, r.id)} className="btn btn-sm btn-outline-primary radius-12">
+                          <i className="ri-eye-line me-1" aria-hidden />
+                          View
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>

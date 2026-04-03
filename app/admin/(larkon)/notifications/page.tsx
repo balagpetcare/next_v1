@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { apiGet, apiPost } from "@/lib/api";
-import { formatDistanceToNow } from "date-fns";
-import { enUS } from "date-fns/locale";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
+import { enUS } from "date-fns/locale/en-US";
 
 function getViewHref(item: { actionUrl?: string | null; type?: string; meta?: any }) {
   if (item?.actionUrl) return item.actionUrl;

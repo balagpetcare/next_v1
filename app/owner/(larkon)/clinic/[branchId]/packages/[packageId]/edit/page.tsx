@@ -204,7 +204,22 @@ export default function PackageWorkspaceEditPage() {
         ownerClinicPackageImpact(branchId, packageId).catch(() => null),
         ownerClinicPackageItemsList(branchId, packageId),
         ownerClinicPackagePriceRulesList(branchId, packageId),
-        ownerClinicServices(branchId).then((r: { items?: Array<{ id: number; name: string; category?: string }> }) => r?.items ?? []),
+        ownerClinicServices(branchId).then((r) => {
+          const items = (r as { items?: unknown }).items;
+          if (!Array.isArray(items)) return [];
+          const out: Array<{ id: number; name: string; category?: string }> = [];
+          for (const el of items) {
+            if (!el || typeof el !== "object") continue;
+            const o = el as Record<string, unknown>;
+            const id = typeof o.id === "number" ? o.id : Number(o.id);
+            if (!Number.isFinite(id)) continue;
+            const name = typeof o.name === "string" ? o.name : String(o.name ?? "");
+            if (!name.trim()) continue;
+            const category = typeof o.category === "string" ? o.category : undefined;
+            out.push({ id, name, category });
+          }
+          return out;
+        }),
       ]);
       const data = detailRes as PackageDetail | null;
       setPkg(data);

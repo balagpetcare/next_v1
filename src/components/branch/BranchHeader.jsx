@@ -17,8 +17,8 @@ export default function BranchHeader({ branch, myAccess, branchId }) {
         <div className="d-flex flex-wrap align-items-center justify-content-between gap-16">
           <div className="d-flex flex-wrap align-items-center gap-12">
             <h5 className="mb-0 fw-semibold">{name}</h5>
-            <span className="badge bg-primary-100 text-primary-600">{typeLabel}</span>
-            <span className="badge bg-secondary-100 text-secondary-600">{role}</span>
+            <span className=" bg-primary-100 text-primary-600">{typeLabel}</span>
+            <span className=" bg-secondary-100 text-secondary-600">{role}</span>
           </div>
           <div>
             <Link

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import {
@@ -14,6 +14,12 @@ import {
   staffClinicDischargeAdd,
   staffClinicVisitPaymentStatus,
 } from "@/lib/api";
+import { formatPetTaxonomyLine } from "@/lib/formatPetTaxonomy";
+import { PRIMARY_NOT_FOUND } from "@/lib/clinicNotFoundHelpers";
+import {
+  formatTempFValueFromCelsius,
+  fahrenheitInputToStoredCelsiusOptional,
+} from "@/lib/temperature";
 
 export default function ClinicVisitDetailPage() {
   const params = useParams();
@@ -21,28 +27,19 @@ export default function ClinicVisitDetailPage() {
   const visitId = params?.visitId ? Number(params.visitId) : null;
   const branchId = searchParams?.get("branchId") || "";
   const [visit, setVisit] = useState(null);
+  const [paymentStatus, setPaymentStatus] = useState([]);
   const [templates, setTemplates] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [actioning, setActioning] = useState(null);
 
   // Form state for add vital
-  const [vitalForm, setVitalForm] = useState({ weightKg: "", tempC: "", heartRate: "", respRate: "", notes: "" });
+  const [vitalForm, setVitalForm] = useState({ weightKg: "", tempF: "", heartRate: "", respRate: "", notes: "" });
   const [noteForm, setNoteForm] = useState({ noteType: "SOAP", contentJson: "{}" });
   const [attachmentForm, setAttachmentForm] = useState({ fileUrl: "", fileName: "", note: "" });
   const [dischargeForm, setDischargeForm] = useState({ contentJson: "{}" });
 
-  useEffect(() => {
-    if (!branchId || !visitId) return;
-    loadVisit();
-  }, [branchId, visitId]);
-
-  useEffect(() => {
-    if (!branchId) return;
-    loadTemplates();
-  }, [branchId]);
-
-  async function loadVisit() {
+  const loadVisit = useCallback(async () => {
     if (!branchId || !visitId) return;
     setLoading(true);
     setError("");
@@ -53,13 +50,22 @@ export default function ClinicVisitDetailPage() {
       ]);
       setVisit(data ?? null);
       setPaymentStatus(Array.isArray(statusList) ? statusList : []);
-    } catch (e) {
-      setError((e && e.message) || "Failed to load visit");
+    } catch {
       setVisit(null);
+      setError(PRIMARY_NOT_FOUND.visit);
     } finally {
       setLoading(false);
     }
-  }
+  }, [branchId, visitId]);
+
+  useEffect(() => {
+    loadVisit();
+  }, [loadVisit]);
+
+  useEffect(() => {
+    if (!branchId) return;
+    loadTemplates();
+  }, [branchId]);
 
   async function loadTemplates() {
     if (!branchId) return;
@@ -79,13 +85,13 @@ export default function ClinicVisitDetailPage() {
     try {
       const body = {
         weightKg: vitalForm.weightKg ? Number(vitalForm.weightKg) : undefined,
-        tempC: vitalForm.tempC ? Number(vitalForm.tempC) : undefined,
+        tempC: fahrenheitInputToStoredCelsiusOptional(vitalForm.tempF),
         heartRate: vitalForm.heartRate ? Number(vitalForm.heartRate) : undefined,
         respRate: vitalForm.respRate ? Number(vitalForm.respRate) : undefined,
         notes: vitalForm.notes || undefined,
       };
       await staffClinicVitalAdd(branchId, visitId, body);
-      setVitalForm({ weightKg: "", tempC: "", heartRate: "", respRate: "", notes: "" });
+      setVitalForm({ weightKg: "", tempF: "", heartRate: "", respRate: "", notes: "" });
       await loadVisit();
     } catch (e) {
       setError((e && e.message) || "Add vital failed");
@@ -201,8 +207,11 @@ export default function ClinicVisitDetailPage() {
       <div className="dashboard-main-body">
         <div className="card radius-12">
           <div className="card-body text-center py-5">
-            <p className="text-muted mb-0">Visit not found.</p>
-            <Link href={`/clinic/visits${q}`} className="btn btn-sm btn-outline-primary mt-2">Back to Visits</Link>
+            <p className="text-danger mb-2">{error || PRIMARY_NOT_FOUND.visit}</p>
+            <div className="d-flex flex-wrap gap-2 justify-content-center">
+              <button type="button" className="btn btn-sm btn-outline-primary" onClick={loadVisit}>Retry</button>
+              <Link href={`/clinic/visits${q}`} className="btn btn-sm btn-outline-secondary">Back to Visits</Link>
+            </div>
           </div>
         </div>
       </div>
@@ -243,14 +252,16 @@ export default function ClinicVisitDetailPage() {
           </div>
           <div className="card-body">
             <p className="mb-1"><strong>Owner:</strong> {ownerName}{ownerPhone ? ` · ${ownerPhone}` : ""}</p>
-            <p className="mb-1"><strong>Pet:</strong> {petName}{visit.pet?.animalType?.name ? ` (${visit.pet.animalType.name})` : ""}{visit.pet?.breed?.name ? ` · ${visit.pet.breed.name}` : ""}</p>
+            <p className="mb-1"><strong>Pet:</strong> {petName}{visit.pet ? ` (${formatPetTaxonomyLine(visit.pet) || visit.pet.animalType?.name || "—"})` : ""}</p>
             {intake?.chiefComplaint && (
               <p className="mb-1"><strong>Chief complaint:</strong> {intake.chiefComplaint}{intake.complaintDuration ? ` · ${intake.complaintDuration}` : ""}{intake.complaintOnset ? ` · ${intake.complaintOnset}` : ""}</p>
             )}
             {(intake?.weightKg != null || intake?.tempC != null || intake?.heartRate != null || intake?.respRate != null || intake?.hydrationStatus) && (
               <p className="mb-1"><strong>Vitals (intake):</strong>{" "}
                 {intake.weightKg != null && <span className="me-2">Wt: {intake.weightKg} kg</span>}
-                {intake.tempC != null && <span className="me-2">Temp: {intake.tempC} °C</span>}
+                {intake.tempC != null && (
+                  <span className="me-2">Temp: {formatTempFValueFromCelsius(intake.tempC)} °F</span>
+                )}
                 {intake.heartRate != null && <span className="me-2">HR: {intake.heartRate}</span>}
                 {intake.respRate != null && <span className="me-2">RR: {intake.respRate}</span>}
                 {intake.hydrationStatus && <span>Hydration: {intake.hydrationStatus}</span>}
@@ -316,7 +327,9 @@ export default function ClinicVisitDetailPage() {
             {(visit.vitals || []).map((v) => (
               <li key={v.id} className="mb-2">
                 {v.weightKg != null && <span className="me-2">Weight: {v.weightKg} kg</span>}
-                {v.tempC != null && <span className="me-2">Temp: {v.tempC} °C</span>}
+                {v.tempC != null && (
+                  <span className="me-2">Temp: {formatTempFValueFromCelsius(v.tempC)} °F</span>
+                )}
                 {v.heartRate != null && <span className="me-2">HR: {v.heartRate}</span>}
                 {v.respRate != null && <span className="me-2">RR: {v.respRate}</span>}
                 {v.notes && <span className="text-muted">{v.notes}</span>}
@@ -326,7 +339,7 @@ export default function ClinicVisitDetailPage() {
           </ul>
           <form onSubmit={handleAddVital} className="row g-2 align-items-end">
             <div className="col-auto"><input type="number" step="0.1" className="form-control form-control-sm" placeholder="Weight (kg)" value={vitalForm.weightKg} onChange={(e) => setVitalForm((f) => ({ ...f, weightKg: e.target.value }))} /></div>
-            <div className="col-auto"><input type="number" step="0.1" className="form-control form-control-sm" placeholder="Temp (°C)" value={vitalForm.tempC} onChange={(e) => setVitalForm((f) => ({ ...f, tempC: e.target.value }))} /></div>
+            <div className="col-auto"><input type="number" step="0.1" className="form-control form-control-sm" placeholder="Temp (°F)" value={vitalForm.tempF} onChange={(e) => setVitalForm((f) => ({ ...f, tempF: e.target.value }))} /></div>
             <div className="col-auto"><input type="number" className="form-control form-control-sm" placeholder="HR" value={vitalForm.heartRate} onChange={(e) => setVitalForm((f) => ({ ...f, heartRate: e.target.value }))} /></div>
             <div className="col-auto"><input type="number" className="form-control form-control-sm" placeholder="RR" value={vitalForm.respRate} onChange={(e) => setVitalForm((f) => ({ ...f, respRate: e.target.value }))} /></div>
             <div className="col-auto"><input type="text" className="form-control form-control-sm" placeholder="Notes" value={vitalForm.notes} onChange={(e) => setVitalForm((f) => ({ ...f, notes: e.target.value }))} /></div>

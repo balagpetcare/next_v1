@@ -1,14 +1,20 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useParams } from "next/navigation";
 import Link from "next/link";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
-import { ownerGet, ownerPost } from "@/app/owner/_lib/ownerApi";
+import { ownerGet, ownerPatch, ownerPost } from "@/app/owner/_lib/ownerApi";
 
 function formatDate(d: string | null | undefined) {
   if (!d) return "—";
-  return new Date(d).toLocaleDateString("en-BD", { year: "numeric", month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+  return new Date(d).toLocaleDateString("en-BD", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function statusClass(s: string) {
@@ -21,20 +27,79 @@ function statusClass(s: string) {
   return "bg-light text-dark";
 }
 
-type FulfillRow = { variantId: number; lotId: number; quantity: number; lotCode?: string; expDate?: string; onHandQty?: number };
+/** Prefer hub / warehouse-like locations for default "from" selection (deterministic). */
+const SOURCE_LOCATION_TYPE_PRIORITY: Record<string, number> = {
+  CENTRAL_WAREHOUSE: 0,
+  ONLINE_HUB: 1,
+  STAGING: 2,
+  PHARMACY: 3,
+  CLINIC_STORE: 4,
+  BRANCH_STORE: 5,
+  SHOP: 6,
+  CLINIC: 7,
+  DAMAGE_AREA: 99,
+  RETURN_AREA: 99,
+  QUARANTINE: 99,
+};
+
+function sortLocationsForDefaultSource(locs: any[]): any[] {
+  return [...locs].sort((a, b) => {
+    const ta = String(a.type ?? "");
+    const tb = String(b.type ?? "");
+    const pa = SOURCE_LOCATION_TYPE_PRIORITY[ta] ?? 50;
+    const pb = SOURCE_LOCATION_TYPE_PRIORITY[tb] ?? 50;
+    if (pa !== pb) return pa - pb;
+    const an = `${a.branch?.name ?? ""} ${a.name ?? ""}`.trim();
+    const bn = `${b.branch?.name ?? ""} ${b.name ?? ""}`.trim();
+    return an.localeCompare(bn);
+  });
+}
+
+type ExtraLine = {
+  key: string;
+  productId: number;
+  variantId: number;
+  productName: string;
+  variantLabel: string;
+  fulfillQty: number;
+  /** From picker / server max at source; used to clamp fulfill qty client-side. */
+  maxDispatchableHint?: number;
+};
+
+type ExtraPickerRow = {
+  productId: number;
+  productName: string;
+  variantId: number;
+  variantLabel: string;
+  bookQty: number;
+  lotFefoQty: number;
+  maxDispatchable: number;
+  availableQty: number;
+  rawLotOnHandQty?: number;
+};
 
 export default function OwnerStockRequestDetailPage() {
   const params = useParams();
-  const router = useRouter();
   const id = params?.id as string;
   const [request, setRequest] = useState<any>(null);
   const [locations, setLocations] = useState<any[]>([]);
   const [fromLocationId, setFromLocationId] = useState("");
-  const [fulfillRows, setFulfillRows] = useState<FulfillRow[]>([]);
-  const [extraFulfillRows, setExtraFulfillRows] = useState<FulfillRow[]>([]);
-  const [addExtraVariantId, setAddExtraVariantId] = useState("");
-  const [addExtraLots, setAddExtraLots] = useState<Array<{ lotId: number; lotCode?: string; expDate?: string; onHandQty: number; quantity: number }>>([]);
-  const [addExtraLoading, setAddExtraLoading] = useState(false);
+  const [fulfillByItemId, setFulfillByItemId] = useState<Record<number, number>>({});
+  const [manualMode, setManualMode] = useState(false);
+  const [extraLines, setExtraLines] = useState<ExtraLine[]>([]);
+  const [pickerSearch, setPickerSearch] = useState("");
+  const [pickerLoading, setPickerLoading] = useState(false);
+  const [pickerError, setPickerError] = useState("");
+  const [pickerResults, setPickerResults] = useState<ExtraPickerRow[]>([]);
+  const [pickerPage, setPickerPage] = useState(1);
+  const [pickerPagination, setPickerPagination] = useState<{
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  } | null>(null);
+  const [pickerMeta, setPickerMeta] = useState<{ candidateTruncated?: boolean } | null>(null);
+  const [includeZeroStock, setIncludeZeroStock] = useState(false);
   const [loading, setLoading] = useState(true);
   const [lotsLoading, setLotsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -44,6 +109,15 @@ export default function OwnerStockRequestDetailPage() {
   const [declineSource, setDeclineSource] = useState("");
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [fulfillmentWarnings, setFulfillmentWarnings] = useState<Array<{ code: string; message: string }>>([]);
+  const [fulfillmentLineErrors, setFulfillmentLineErrors] = useState<
+    Array<{ code?: string; message?: string; variantId?: number; fulfillQty?: number; availableQty?: number }>
+  >([]);
+  const [enterpriseFulfillment, setEnterpriseFulfillment] = useState<any>(null);
+  const [enterpriseLoading, setEnterpriseLoading] = useState(false);
+  const [enterpriseActionLoading, setEnterpriseActionLoading] = useState(false);
+
+  const prevFromLocationIdRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (!id) return;
@@ -51,20 +125,16 @@ export default function OwnerStockRequestDetailPage() {
     setLoading(true);
     setError("");
     setSuccess("");
+    setExtraLines([]);
+    setFromLocationId("");
+    setLocations([]);
+    prevFromLocationIdRef.current = undefined;
     (async () => {
       try {
-        const [locRes, reqRes] = await Promise.all([
-          ownerGet("/api/v1/inventory/locations").catch(() => ({ data: [] })),
-          ownerGet(`/api/v1/stock-requests/${id}`).catch(() => null),
-        ]);
+        const reqRes = await ownerGet(`/api/v1/stock-requests/${id}`).catch(() => null);
         if (cancelled) return;
-        const locs = (locRes as any)?.data ?? [];
-        setLocations(Array.isArray(locs) ? locs : []);
         const req = (reqRes as any)?.data ?? reqRes;
         setRequest(req);
-        if (locs?.length && !fromLocationId) {
-          setFromLocationId(String(locs[0]?.id ?? ""));
-        }
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? "Failed to load");
       } finally {
@@ -77,27 +147,67 @@ export default function OwnerStockRequestDetailPage() {
   }, [id]);
 
   useEffect(() => {
-    if (!request?.availableLotsByVariant || !fromLocationId) return;
-    const byVariant = request.availableLotsByVariant as Record<number, Array<{ lotId: number; lotCode: string; expDate: string; onHandQty: number }>>;
-    const rows: FulfillRow[] = [];
-    for (const item of request.items ?? []) {
-      const vid = item.variantId;
-      const lots = byVariant[vid] ?? [];
-      for (const lot of lots) {
-        if (lot.onHandQty > 0) {
-          rows.push({
-            variantId: vid,
-            lotId: lot.lotId,
-            quantity: 0,
-            lotCode: lot.lotCode,
-            expDate: lot.expDate,
-            onHandQty: lot.onHandQty,
-          });
-        }
+    if (!id || request?.orgId == null || String(request.id) !== String(id)) return;
+    const orgId = request.orgId;
+    let cancelled = false;
+    (async () => {
+      try {
+        const locRes: any = await ownerGet(`/api/v1/inventory/locations?orgId=${encodeURIComponent(String(orgId))}`);
+        if (cancelled) return;
+        const raw = locRes?.data ?? [];
+        const locs = Array.isArray(raw) ? raw : [];
+        const sorted = sortLocationsForDefaultSource(locs);
+        setLocations(sorted);
+        setFromLocationId((prev) => {
+          if (prev) return prev;
+          return sorted.length ? String(sorted[0].id) : "";
+        });
+      } catch (e: any) {
+        if (!cancelled) setError(e?.message ?? "Failed to load source locations for this organization");
       }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, request?.id, request?.orgId]);
+
+  useEffect(() => {
+    if (!id || request?.orgId == null) return;
+    let cancelled = false;
+    setEnterpriseLoading(true);
+    (async () => {
+      try {
+        const res = await ownerGet(
+          `/api/v1/fulfillment/stock-requests/${encodeURIComponent(id)}/status?orgId=${encodeURIComponent(String(request.orgId))}`
+        );
+        if (cancelled) return;
+        const data = (res as any)?.data ?? res;
+        setEnterpriseFulfillment(data);
+      } catch {
+        if (!cancelled) setEnterpriseFulfillment(null);
+      } finally {
+        if (!cancelled) setEnterpriseLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [id, request?.orgId, request?.status]);
+
+  /** Changing source invalidates picker-derived caps; clear extras to avoid stale max hints. */
+  useEffect(() => {
+    const prev = prevFromLocationIdRef.current;
+    prevFromLocationIdRef.current = fromLocationId;
+    if (prev === undefined) return;
+    if (prev !== fromLocationId) {
+      setExtraLines([]);
+      setPickerResults([]);
+      setPickerPagination(null);
+      setPickerMeta(null);
+      setPickerError("");
+      setPickerLoading(Boolean(fromLocationId));
     }
-    setFulfillRows(rows.length ? rows : []);
-  }, [request?.availableLotsByVariant, request?.items, fromLocationId]);
+  }, [fromLocationId]);
 
   const loadDetailWithLots = async (locId: string) => {
     if (!id || !locId) return;
@@ -117,74 +227,152 @@ export default function OwnerStockRequestDetailPage() {
     loadDetailWithLots(String(fromLocationId));
   }, [id, fromLocationId]);
 
-  const setFulfillQty = (idx: number, qty: number) => {
-    setFulfillRows((r) => r.map((row, i) => (i === idx ? { ...row, quantity: Math.max(0, qty) } : row)));
-  };
-
-  const setExtraFulfillQty = (idx: number, qty: number) => {
-    setExtraFulfillRows((r) => r.map((row, i) => (i === idx ? { ...row, quantity: Math.max(0, qty) } : row)));
-  };
-
-  const loadFefoLotsForExtra = async () => {
-    const vid = Number(addExtraVariantId);
-    const locId = fromLocationId;
-    if (!vid || !locId) {
-      setError("Select from location and enter a variant ID.");
-      return;
-    }
-    setAddExtraLoading(true);
-    setError("");
-    try {
-      const res: any = await ownerGet(`/api/v1/inventory/fefo?locationId=${locId}&variantId=${vid}`);
-      const data = res?.data ?? [];
-      setAddExtraLots(
-        (Array.isArray(data) ? data : []).map((x: any) => ({
-          lotId: x.lotId ?? x.lot?.id,
-          lotCode: x.lot?.lotCode ?? x.lotCode,
-          expDate: x.lot?.expDate ?? x.expDate,
-          onHandQty: x.availableQty ?? x.onHandQty ?? 0,
-          quantity: 0,
-        }))
-      );
-    } catch (e: any) {
-      setError(e?.message ?? "Failed to load FEFO lots");
-      setAddExtraLots([]);
-    } finally {
-      setAddExtraLoading(false);
-    }
-  };
-
-  const addExtraToDispatch = () => {
-    const vid = Number(addExtraVariantId);
-    if (!vid) return;
-    const toAdd = addExtraLots.filter((r) => r.quantity > 0).map((r) => ({
-      variantId: vid,
-      lotId: r.lotId,
-      quantity: r.quantity,
-      lotCode: r.lotCode,
-      expDate: r.expDate,
-      onHandQty: r.onHandQty,
-    }));
-    if (toAdd.length === 0) return;
-    setExtraFulfillRows((prev) => [...prev, ...toAdd]);
-    setAddExtraLots([]);
-    setAddExtraVariantId("");
-  };
-
-  const setAddExtraLotQty = (idx: number, qty: number) => {
-    setAddExtraLots((r) => r.map((row, i) => (i === idx ? { ...row, quantity: Math.max(0, qty) } : row)));
-  };
-
   const branchLocations = request?.branch?.inventoryLocations ?? [];
   const toLocationId = branchLocations[0]?.id ?? "";
-  const selectedQty = useMemo(
-    () =>
-      fulfillRows.reduce((sum, row) => sum + (row.quantity || 0), 0) +
-      extraFulfillRows.reduce((sum, row) => sum + (row.quantity || 0), 0),
-    [fulfillRows, extraFulfillRows]
-  );
-  const canDispatch = ["SUBMITTED", "OWNER_REVIEW"].includes(request?.status);
-  const canDecline = canDispatch;
+
+  const requestedRows = useMemo(() => {
+    const items = request?.items ?? [];
+    return items.filter((i: any) => i.lineKind !== "EXTRA");
+  }, [request?.items]);
+
+  useEffect(() => {
+    if (!requestedRows.length) return;
+    setFulfillByItemId((prev) => {
+      const next = { ...prev };
+      for (const row of requestedRows) {
+        const itemId = Number(row.id);
+        if (next[itemId] === undefined) {
+          next[itemId] = row.requestedQty ?? 0;
+        }
+      }
+      return next;
+    });
+  }, [requestedRows]);
+
+  const loadPicker = useCallback(async () => {
+    if (!id || !fromLocationId) return;
+    setPickerLoading(true);
+    setPickerError("");
+    try {
+      const q = pickerSearch.trim() ? `&search=${encodeURIComponent(pickerSearch.trim())}` : "";
+      const iz = includeZeroStock ? `&includeZeroStock=true` : "";
+      const res: any = await ownerGet(
+        `/api/v1/inventory/stock-request-extra-picker?stockRequestId=${encodeURIComponent(String(id))}&fromLocationId=${encodeURIComponent(String(fromLocationId))}&page=${pickerPage}&limit=20${q}${iz}`
+      );
+      const list = res?.data ?? [];
+      setPickerResults(Array.isArray(list) ? list : []);
+      const pag = res?.pagination;
+      if (pag && typeof pag.page === "number") {
+        setPickerPagination({
+          page: pag.page,
+          limit: pag.limit ?? 20,
+          total: pag.total ?? 0,
+          totalPages: pag.totalPages ?? 1,
+        });
+      } else {
+        setPickerPagination(null);
+      }
+      setPickerMeta(res?.meta ?? null);
+    } catch (e: any) {
+      setPickerError(e?.message ?? "Failed to load inventory at this source");
+      setPickerResults([]);
+      setPickerPagination(null);
+      setPickerMeta(null);
+    } finally {
+      setPickerLoading(false);
+    }
+  }, [id, fromLocationId, pickerSearch, pickerPage, includeZeroStock]);
+
+  useEffect(() => {
+    setPickerPage(1);
+  }, [fromLocationId, includeZeroStock, pickerSearch]);
+
+  useEffect(() => {
+    if (!id || !fromLocationId) return;
+    const t = setTimeout(() => loadPicker(), 350);
+    return () => clearTimeout(t);
+  }, [id, fromLocationId, pickerSearch, pickerPage, includeZeroStock, loadPicker]);
+
+  const addExtraFromPicker = (row: ExtraPickerRow) => {
+    const key = `extra-${row.productId}-${row.variantId}`;
+    if (extraLines.some((e) => e.key === key)) return;
+    if (row.maxDispatchable <= 0) return;
+    const fulfillQty = Math.min(1, Math.max(0, row.maxDispatchable));
+    setExtraLines((prev) => [
+      ...prev,
+      {
+        key,
+        productId: row.productId,
+        variantId: row.variantId,
+        productName: row.productName ?? "",
+        variantLabel: row.variantLabel ?? String(row.variantId),
+        fulfillQty,
+        maxDispatchableHint: row.maxDispatchable,
+      },
+    ]);
+  };
+
+  const setExtraQty = (key: string, qty: number) => {
+    setExtraLines((rows) =>
+      rows.map((r) => {
+        if (r.key !== key) return r;
+        let q = Math.max(0, qty);
+        const m = (request as any)?.maxDispatchableByVariant ?? {};
+        const fromDetail = (m as Record<number | string, number | undefined>)[r.variantId] ??
+          (m as Record<number | string, number | undefined>)[String(r.variantId)];
+        const cap = typeof fromDetail === "number" ? fromDetail : r.maxDispatchableHint;
+        if (cap != null && cap >= 0) q = Math.min(q, cap);
+        return { ...r, fulfillQty: q };
+      })
+    );
+  };
+
+  const removeExtra = (key: string) => {
+    setExtraLines((rows) => rows.filter((r) => r.key !== key));
+  };
+
+  const aggregateByVariant = (request as any)?.aggregateStockByVariant ?? {};
+  const maxDispatchByVariant = (request as any)?.maxDispatchableByVariant ?? {};
+  const maxDispatchByItemId = (request as any)?.maxDispatchableByItemId ?? {};
+  const lotsByVariant = (request as any)?.availableLotsByVariant ?? {};
+  const availabilityDiagnosticsByVariant = (request as any)?.availabilityDiagnosticsByVariant ?? {};
+
+  const totalLotAvailable = (variantId: number) => {
+    const lots = mapByVariantId(lotsByVariant, variantId) ?? [];
+    return lots.reduce((s: number, l: { onHandQty?: number }) => s + (l.onHandQty ?? 0), 0);
+  };
+
+  const availabilityHintForVariant = (variantId: number, maxDisp: number) => {
+    if (maxDisp > 0) return null;
+    const d =
+      availabilityDiagnosticsByVariant[variantId] ??
+      (availabilityDiagnosticsByVariant as Record<string, { hint?: string }>)[String(variantId)];
+    return d?.hint as string | null | undefined;
+  };
+
+  const mapByVariantId = <T,>(m: Record<number, T> | undefined, vid: number): T | undefined => {
+    if (!m) return undefined;
+    return (m as Record<number | string, T>)[vid] ?? (m as Record<number | string, T>)[String(vid)];
+  };
+
+  /** Same `fromLocationId` as GET stock-request detail + picker; used for display only. */
+  const fromLocationLabel = useMemo(() => {
+    if (!fromLocationId) return "";
+    const loc = locations.find((l: any) => String(l.id) === String(fromLocationId));
+    if (!loc) return `Location #${fromLocationId}`;
+    const br = loc.branch?.name ? `${loc.branch.name} — ` : "";
+    return `${br}${loc.name ?? loc.type ?? loc.id}`;
+  }, [locations, fromLocationId]);
+
+  /** Aligns with fulfill grid "Max dispatch": detail payload when variant is on request, else picker hint. */
+  const maxAtSourceForExtraLine = (ex: ExtraLine) => {
+    const fromDetail = mapByVariantId(maxDispatchByVariant, ex.variantId);
+    if (fromDetail != null) return fromDetail;
+    return ex.maxDispatchableHint ?? null;
+  };
+
+  const canDispatch = ["SUBMITTED", "OWNER_REVIEW", "FULFILLED_PARTIAL"].includes(request?.status);
+  const canDecline = ["SUBMITTED", "OWNER_REVIEW"].includes(request?.status);
 
   const handleDecline = async () => {
     if (!request?.id) return;
@@ -219,30 +407,95 @@ export default function OwnerStockRequestDetailPage() {
       setError("Select from and to locations");
       return;
     }
-    const requestedItems = fulfillRows.filter((r) => r.quantity > 0).map((r) => ({ variantId: r.variantId, lotId: r.lotId, quantity: r.quantity }));
-    const extraItems = extraFulfillRows.filter((r) => r.quantity > 0).map((r) => ({ variantId: r.variantId, lotId: r.lotId, quantity: r.quantity }));
-    const items = [...requestedItems, ...extraItems];
-    if (!items.length) {
-      setError("Add at least one quantity to fulfill");
+    const items = requestedRows
+      .map((row: any) => {
+        const itemId = Number(row.id);
+        return {
+          stockRequestItemId: itemId,
+          fulfillQty: Number(fulfillByItemId[itemId] ?? 0),
+        };
+      })
+      .filter((x: { fulfillQty: number }) => x.fulfillQty > 0);
+    const extras = extraLines
+      .filter((e) => e.fulfillQty > 0)
+      .map((e) => ({
+        productId: e.productId,
+        variantId: e.variantId,
+        fulfillQty: e.fulfillQty,
+      }));
+    if (!items.length && !extras.length) {
+      setError("Set at least one fulfill quantity greater than zero");
       return;
     }
     setSubmitting(true);
     setError("");
     setSuccess("");
+    setFulfillmentWarnings([]);
+    setFulfillmentLineErrors([]);
     try {
-      const res: any = await ownerPost(`/api/v1/stock-requests/${request.id}/dispatch`, {
+      const res: any = await ownerPatch(`/api/v1/stock-requests/${request.id}/fulfill`, {
         fromLocationId: fromId,
         toLocationId: toId,
-        items,
+        manualMode,
+        items: items.length ? items : undefined,
+        extraItems: extras.length ? extras : undefined,
       });
-      setSuccess("Dispatched and transfer created.");
-      if (res?.data) setRequest(res.data?.request ?? res.data);
-      await loadDetailWithLots(String(fromId));
+      const data = res?.data ?? res;
+      const ful = data?.fulfillment ?? {};
+      setFulfillmentWarnings(ful.warnings ?? []);
+      setFulfillmentLineErrors(ful.lineErrors ?? []);
+      setSuccess(
+        ful.lineErrors?.length
+          ? "Dispatched (some lines were skipped — see notices)."
+          : "Dispatched and transfer created."
+      );
+      if (data?.request) setRequest(data.request);
+      else await loadDetailWithLots(String(fromId));
     } catch (e: any) {
-      setError(e?.message ?? "Failed to dispatch");
+      const j = (e as any)?.response;
+      const data = j?.data ?? j;
+      const ful = data?.fulfillment;
+      const errs = ful?.lineErrors ?? [];
+      setFulfillmentLineErrors(errs);
+      const w = ful?.warnings;
+      if (Array.isArray(w)) setFulfillmentWarnings(w);
+      if (data?.request) setRequest(data.request);
+      else await loadDetailWithLots(String(fromId));
+      if (errs.length) {
+        setError(errs.map((x: { message?: string }) => x.message).filter(Boolean).join(" "));
+      } else {
+        setError(ful?.message || j?.message || e?.message || "Failed to dispatch");
+      }
     } finally {
       setSubmitting(false);
     }
+  };
+
+  const autoFillFefo = () => {
+    setFulfillByItemId((prev) => {
+      const next = { ...prev };
+      for (const row of requestedRows) {
+        const itemId = Number(row.id);
+        const vid = row.variantId;
+        const lots = [...(lotsByVariant[vid] ?? [])].sort(
+          (a: any, b: any) => new Date(a.expDate).getTime() - new Date(b.expDate).getTime()
+        );
+        const remaining = Math.max(
+          0,
+          (row.requestedQty ?? 0) - (row.fulfilledQty ?? 0) - (row.cancelledQty ?? 0)
+        );
+        let need = remaining;
+        let alloc = 0;
+        for (const lot of lots) {
+          if (need <= 0) break;
+          const take = Math.min(need, lot.onHandQty ?? 0);
+          alloc += take;
+          need -= take;
+        }
+        next[itemId] = alloc;
+      }
+      return next;
+    });
   };
 
   if (loading || !request) {
@@ -265,7 +518,7 @@ export default function OwnerStockRequestDetailPage() {
     <div className="dashboard-main-body">
       <PageHeader
         title={`Stock Request #${request.id}`}
-        subtitle="Review requested items, fulfill from batches, and dispatch"
+        subtitle="Review requested items, set fulfill quantities, and dispatch"
         breadcrumbs={[
           { label: "Home", href: "/owner" },
           { label: "Inventory", href: "/owner/inventory" },
@@ -281,7 +534,7 @@ export default function OwnerStockRequestDetailPage() {
 
       <div className="d-flex align-items-center gap-2 mb-3">
         <span className={`badge ${statusClass(request.status)}`}>{request.status}</span>
-        {request.transfer && <span className="badge bg-light text-dark">Transfer #{request.transfer.id}</span>}
+        {request.transfers?.[0] && <span className="badge bg-light text-dark">Transfer #{request.transfers[0].id}</span>}
         {request.status === "CANCELLED" && (request as any).declineReason && (
           <span className="text-muted small">Reason: {(request as any).declineReason}</span>
         )}
@@ -289,20 +542,136 @@ export default function OwnerStockRequestDetailPage() {
 
       {error && <div className="alert alert-danger radius-12">{error}</div>}
       {success && <div className="alert alert-success radius-12">{success}</div>}
+      {(request as any)?.fulfillmentSourceValidation &&
+        (request as any).fulfillmentSourceValidation.ok === false && (
+          <div className="alert alert-warning radius-12">
+            <div className="small fw-semibold mb-1">Source location</div>
+            <p className="mb-0 small">
+              {(request as any).fulfillmentSourceValidation.message ??
+                "Choose a source location under the same organization as this stock request."}
+            </p>
+            {(request as any).fulfillmentSourceValidation.code && (
+              <code className="small d-block mt-1">{(request as any).fulfillmentSourceValidation.code}</code>
+            )}
+          </div>
+        )}
+      {fulfillmentLineErrors.length > 0 && (
+        <div className="alert alert-danger radius-12">
+          <div className="small fw-semibold mb-1">Line validation</div>
+          <ul className="mb-0 ps-3 small">
+            {fulfillmentLineErrors.map((w, i) => (
+              <li key={i}>
+                {w.code ? <code className="me-1">{w.code}</code> : null}
+                {w.message}
+                {w.availableQty != null && w.fulfillQty != null ? (
+                  <span className="text-muted"> (asked {w.fulfillQty}, available {w.availableQty})</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {fulfillmentWarnings.length > 0 && (
+        <div className="alert alert-warning radius-12">
+          <div className="small fw-semibold mb-1">Fulfillment notices</div>
+          <ul className="mb-0 ps-3 small">
+            {fulfillmentWarnings.map((w, i) => (
+              <li key={i}>
+                {w.code ? <code className="me-1">{w.code}</code> : null}
+                {w.message}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      <div className="card radius-12 mb-3 border-primary border-opacity-25">
+        <div className="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <h6 className="mb-0">Enterprise fulfillment (allocation → pick → dispatch)</h6>
+          {enterpriseLoading && <span className="small text-muted">Loading…</span>}
+        </div>
+        <div className="card-body small">
+          {!enterpriseLoading && enterpriseFulfillment && (
+            <>
+              <p className="mb-2">
+                <strong>Allocation plan:</strong>{" "}
+                {enterpriseFulfillment.allocationPlan
+                  ? `#${enterpriseFulfillment.allocationPlan.id} (${enterpriseFulfillment.allocationPlan.status})`
+                  : "—"}
+              </p>
+              <p className="mb-2">
+                <strong>Pick list:</strong>{" "}
+                {enterpriseFulfillment.allocationPlan?.pickList
+                  ? `#${enterpriseFulfillment.allocationPlan.pickList.id} (${enterpriseFulfillment.allocationPlan.pickList.status})`
+                  : "—"}
+              </p>
+              <p className="mb-2">
+                <strong>Dispatches:</strong>{" "}
+                {Array.isArray(enterpriseFulfillment.dispatches) && enterpriseFulfillment.dispatches.length
+                  ? enterpriseFulfillment.dispatches.map((d: any) => `#${d.id} ${d.status}`).join(", ")
+                  : "—"}
+              </p>
+            </>
+          )}
+          {!enterpriseLoading && !enterpriseFulfillment && (
+            <p className="text-muted mb-2">No enterprise pipeline data (or request not visible).</p>
+          )}
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-primary"
+            disabled={enterpriseActionLoading || !fromLocationId || !request?.orgId}
+            onClick={async () => {
+              if (!fromLocationId || !request?.orgId || !id) return;
+              setEnterpriseActionLoading(true);
+              setError("");
+              try {
+                await ownerPost(`/api/v1/fulfillment/stock-requests/${encodeURIComponent(id)}/start`, {
+                  fromLocationId: Number(fromLocationId),
+                  orgId: request.orgId,
+                });
+                const res = await ownerGet(
+                  `/api/v1/fulfillment/stock-requests/${encodeURIComponent(id)}/status?orgId=${encodeURIComponent(String(request.orgId))}`
+                );
+                setEnterpriseFulfillment((res as any)?.data ?? res);
+              } catch (e: any) {
+                setError(e?.message ?? "Failed to start enterprise fulfillment");
+              } finally {
+                setEnterpriseActionLoading(false);
+              }
+            }}
+          >
+            {enterpriseActionLoading ? "Starting…" : "Start allocation plan (draft)"}
+          </button>
+          <p className="text-muted mt-2 mb-0">
+            Uses the selected source location. Staff complete FEFO run, confirm, pick, and dispatch in the warehouse
+            operations UI. Legacy “Fulfill & Dispatch” below remains available.
+          </p>
+        </div>
+      </div>
 
       <div className="card radius-12 mb-3">
         <div className="card-body">
           <div className="row g-3">
             <div className="col-sm-6">
-              <p className="mb-1"><strong>Branch:</strong> {request.branch?.name ?? request.branchId}</p>
-              <p className="mb-1"><strong>Submitted:</strong> {formatDate(request.submittedAt)}</p>
-              <p className="mb-0"><strong>Created:</strong> {formatDate(request.createdAt)}</p>
+              <p className="mb-1">
+                <strong>Branch:</strong> {request.branch?.name ?? request.branchId}
+              </p>
+              <p className="mb-1">
+                <strong>Submitted:</strong> {formatDate(request.submittedAt)}
+              </p>
+              <p className="mb-0">
+                <strong>Created:</strong> {formatDate(request.createdAt)}
+              </p>
             </div>
             <div className="col-sm-6">
-              {request.transfer && (
+              {request.transfers?.[0] && (
                 <>
-                  <p className="mb-1"><strong>Transfer:</strong> #{request.transfer.id} — {request.transfer.status}</p>
-                  {request.transfer.sentAt && <p className="mb-0 text-muted small">Sent: {formatDate(request.transfer.sentAt)}</p>}
+                  <p className="mb-1">
+                    <strong>Transfer:</strong> #{request.transfers[0].id} — {request.transfers[0].status}
+                  </p>
+                  {request.transfers[0].sentAt && (
+                    <p className="mb-0 text-muted small">Sent: {formatDate(request.transfers[0].sentAt)}</p>
+                  )}
                 </>
               )}
             </div>
@@ -320,16 +689,18 @@ export default function OwnerStockRequestDetailPage() {
               <tr>
                 <th>Product</th>
                 <th>Variant</th>
-                <th>Requested Qty</th>
+                <th>Requested</th>
+                <th>Fulfilled (recorded)</th>
                 <th>Note</th>
               </tr>
             </thead>
             <tbody>
-              {(request.items ?? []).map((item: any) => (
+              {requestedRows.map((item: any) => (
                 <tr key={item.id}>
                   <td>{item.product?.name ?? item.productId}</td>
                   <td>{item.variant?.title ?? item.variant?.sku ?? item.variantId}</td>
                   <td>{item.requestedQty}</td>
+                  <td>{item.fulfilledQty ?? 0}</td>
                   <td>{item.note ?? "—"}</td>
                 </tr>
               ))}
@@ -342,8 +713,19 @@ export default function OwnerStockRequestDetailPage() {
         <div className="card radius-12">
           <div className="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
             <h6 className="mb-0">Fulfill & Dispatch</h6>
-            <div className="d-flex align-items-center gap-2">
-              <span className="small text-secondary">Selected qty: {selectedQty}</span>
+            <div className="d-flex align-items-center gap-2 flex-wrap">
+              <div className="form-check form-switch mb-0">
+                <input
+                  className="form-check-input"
+                  type="checkbox"
+                  id="manualMode"
+                  checked={manualMode}
+                  onChange={(e) => setManualMode(e.target.checked)}
+                />
+                <label className="form-check-label small" htmlFor="manualMode">
+                  Manual mode (prefer non-lot from book stock; uses FEFO lots if book is insufficient)
+                </label>
+              </div>
               <button
                 type="button"
                 className="btn btn-outline-secondary btn-sm"
@@ -365,7 +747,10 @@ export default function OwnerStockRequestDetailPage() {
                 >
                   <option value="">Select</option>
                   {locations.map((loc: any) => (
-                    <option key={loc.id} value={loc.id}>{loc.name ?? loc.type ?? loc.id}</option>
+                    <option key={loc.id} value={loc.id}>
+                      {loc.branch?.name ? `${loc.branch.name} — ` : ""}
+                      {loc.name ?? loc.type ?? loc.id}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -376,38 +761,99 @@ export default function OwnerStockRequestDetailPage() {
                 </select>
               </div>
             </div>
-            <p className="small text-secondary mb-2">Set fulfill quantity per lot. Only rows with qty &gt; 0 will be dispatched.</p>
+
+            {fromLocationId && (
+              <p className="small text-secondary mb-2">
+                Enter fulfill quantity per line. Partial and over-fulfillment vs requested are allowed when stock
+                exists; notices appear after dispatch. <strong>Max dispatch</strong> matches server validation (book
+                balance vs FEFO-eligible lots). With manual mode off, lines are allocated FEFO by expiry; with manual
+                on, non-lot is used when book stock covers the line, otherwise FEFO from lots.
+              </p>
+            )}
+
+            <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+              <span className="small text-muted">Delta colors: under (red), over (green), match (neutral)</span>
+              <button type="button" className="btn btn-sm btn-outline-primary" onClick={autoFillFefo}>
+                Auto-fill FEFO (from lot availability)
+              </button>
+            </div>
+
             <div className="table-responsive mb-3">
               <table className="table table-sm">
                 <thead>
                   <tr>
                     <th>Variant</th>
-                    <th>Lot</th>
-                    <th>Expiry</th>
-                    <th>Available</th>
-                    <th>Fulfill Qty</th>
+                    <th>Requested</th>
+                    <th>Fulfill qty</th>
+                    <th>Delta</th>
+                    <th>Lot avail. (raw)</th>
+                    <th>Book (non-lot)</th>
+                    <th>Max dispatch</th>
+                    <th>Note</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {fulfillRows.map((row, idx) => {
-                    const item = request.items?.find((i: any) => i.variantId === row.variantId);
-                    const available = row.onHandQty ?? 0;
+                  {requestedRows.map((row: any) => {
+                    const itemId = Number(row.id);
+                    const fq = Number(fulfillByItemId[itemId] ?? 0);
+                    const req = row.requestedQty ?? 0;
+                    const fulfilled = row.fulfilledQty ?? 0;
+                    const cancelled = row.cancelledQty ?? 0;
+                    const remaining = Math.max(0, req - fulfilled - cancelled);
+                    const delta = fq - remaining;
+                    let deltaClass = "";
+                    if (delta < 0) deltaClass = "text-danger";
+                    else if (delta > 0) deltaClass = "text-success";
+                    const lotAv = totalLotAvailable(row.variantId);
+                    const agg = mapByVariantId(aggregateByVariant, row.variantId) ?? 0;
+                    const maxDisp =
+                      maxDispatchByItemId[itemId] ??
+                      mapByVariantId(maxDispatchByVariant, row.variantId) ??
+                      Math.max(lotAv, agg);
+                    const zeroHint = availabilityHintForVariant(row.variantId, maxDisp);
+                    const noLotsButAgg = lotAv <= 0 && agg > 0;
                     return (
-                      <tr key={`${row.variantId}-${row.lotId}-${idx}`}>
-                        <td>{item?.variant?.title ?? row.variantId}</td>
-                        <td>{row.lotCode ?? row.lotId}</td>
-                        <td>{row.expDate ? formatDate(row.expDate) : "—"}</td>
-                        <td>{available}</td>
+                      <tr key={itemId}>
+                        <td>
+                          <span className="text-muted small me-1">#{itemId}</span>
+                          {row.variant?.title ?? row.variant?.sku ?? row.variantId}
+                        </td>
+                        <td>{req}</td>
                         <td>
                           <input
                             type="number"
                             className="form-control form-control-sm"
                             min={0}
-                            max={available}
-                            value={row.quantity}
-                            onChange={(e) => setFulfillQty(idx, parseInt(e.target.value, 10) || 0)}
-                            style={{ width: 80 }}
+                            value={Number.isFinite(fq) ? fq : 0}
+                            onChange={(e) =>
+                              setFulfillByItemId((m) => ({
+                                ...m,
+                                [itemId]: Math.max(0, parseInt(e.target.value, 10) || 0),
+                              }))
+                            }
+                            style={{ width: 88 }}
                           />
+                        </td>
+                        <td className={deltaClass}>{delta > 0 ? `+${delta}` : delta}</td>
+                        <td>{lotAv}</td>
+                        <td>
+                          {agg}
+                          {noLotsButAgg && (
+                            <span className="badge bg-warning text-dark ms-1" title="No lot rows; manual mode or aggregate dispatch may apply">
+                              No lots
+                            </span>
+                          )}
+                        </td>
+                        <td className="fw-semibold">{maxDisp}</td>
+                        <td className="small text-muted" style={{ maxWidth: 280 }}>
+                          {maxDisp <= 0 ? (
+                            <>
+                              {zeroHint ||
+                                "No dispatchable quantity at this source. Confirm stock is posted to stock_balances / stock_lot_balances at this location, or try another location on the same branch."}
+                            </>
+                          ) : (
+                            "—"
+                          )}
                         </td>
                       </tr>
                     );
@@ -415,111 +861,206 @@ export default function OwnerStockRequestDetailPage() {
                 </tbody>
               </table>
             </div>
-            {fulfillRows.length === 0 && fromLocationId && (
-              <p className="small text-warning mb-2">No lot stock found at selected location for these variants. Add stock at this location or choose another.</p>
-            )}
 
-            {/* Add extra item (variant + FEFO lots) */}
             <div className="border-top pt-3 mt-3">
-              <h6 className="mb-2">Add extra item (not requested)</h6>
-              <div className="row g-2 mb-2">
-                <div className="col-auto">
+              <h6 className="mb-2">Add extra item (not on original request)</h6>
+              <p className="small text-muted mb-2">
+                Search stock at the same <strong>source location</strong> as the fulfill grid (
+                <code className="small">fromLocationId</code>
+                {fromLocationLabel ? (
+                  <>
+                    : <span className="text-dark">{fromLocationLabel}</span>
+                  </>
+                ) : null}
+                ). Quantities match fulfillment validation (non-lot book vs FEFO-eligible lots). Manual / FEFO dispatch mode
+                applies only when you submit — the picker does not change mode.
+              </p>
+              {!fromLocationId ? (
+                <div className="alert alert-light border mb-2 py-2 small" role="status">
+                  Select a <strong>source warehouse / location</strong> in the field above. The extra-item list is empty until a
+                  source is selected — it does not load org-wide catalog stock.
+                </div>
+              ) : null}
+              {pickerMeta?.candidateTruncated ? (
+                <p className="small text-warning mb-2">
+                  Large inventory at this source: results are capped for performance. Refine search to narrow variants.
+                </p>
+              ) : null}
+              <div className="row g-2 mb-2 align-items-center">
+                <div className="col-md-6">
                   <input
-                    type="number"
                     className="form-control form-control-sm"
-                    placeholder="Variant ID"
-                    value={addExtraVariantId}
-                    onChange={(e) => setAddExtraVariantId(e.target.value)}
-                    style={{ width: 100 }}
+                    placeholder="Search by product or variant (SKU, barcode)…"
+                    value={pickerSearch}
+                    onChange={(e) => setPickerSearch(e.target.value)}
+                    disabled={!fromLocationId || pickerLoading}
                   />
                 </div>
-                <div className="col-auto">
+                <div className="col-md-3">
+                  <label className="form-check small mb-0 d-flex align-items-center gap-2">
+                    <input
+                      type="checkbox"
+                      className="form-check-input"
+                      checked={includeZeroStock}
+                      onChange={(e) => setIncludeZeroStock(e.target.checked)}
+                      disabled={!fromLocationId || pickerLoading}
+                    />
+                    Include zero dispatchable
+                  </label>
+                </div>
+                <div className="col-md-3 text-md-end">
                   <button
                     type="button"
                     className="btn btn-outline-secondary btn-sm"
-                    onClick={loadFefoLotsForExtra}
-                    disabled={addExtraLoading || !fromLocationId}
+                    onClick={() => loadPicker()}
+                    disabled={pickerLoading || !fromLocationId}
                   >
-                    {addExtraLoading ? "Loading…" : "Load FEFO lots"}
+                    {pickerLoading ? "Loading…" : "Refresh"}
                   </button>
                 </div>
               </div>
-              {addExtraLots.length > 0 && (
-                <>
-                  <div className="table-responsive mb-2">
-                    <table className="table table-sm mb-0">
-                      <thead>
-                        <tr>
-                          <th>Lot</th>
-                          <th>Expiry</th>
-                          <th>Available</th>
-                          <th>Qty</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {addExtraLots.map((lot, idx) => (
-                          <tr key={lot.lotId}>
-                            <td>{lot.lotCode ?? lot.lotId}</td>
-                            <td className="text-muted small">{lot.expDate ? formatDate(lot.expDate) : "—"}</td>
-                            <td>{lot.onHandQty}</td>
+              {pickerError ? (
+                <div className="alert alert-danger py-2 small mb-2" role="alert">
+                  <span className="fw-semibold me-1">Could not load picker.</span>
+                  {pickerError}
+                </div>
+              ) : null}
+              {fromLocationId && !pickerLoading && !pickerError && pickerResults.length === 0 ? (
+                <p className="small text-muted mb-2" role="status">
+                  {pickerSearch.trim()
+                    ? "No variants match your search within inventory recorded at this source."
+                    : includeZeroStock
+                      ? "No inventory rows at this source match the current filter (or the candidate list is empty)."
+                      : "No variants with dispatchable quantity greater than zero at this source. Enable “Include zero dispatchable” to inspect rows with no FEFO-eligible or book quantity."}
+                </p>
+              ) : null}
+              <div className="table-responsive mb-2" style={{ maxHeight: 280, overflow: "auto" }}>
+                <table className="table table-sm mb-0">
+                  <thead>
+                    <tr>
+                      <th>Product</th>
+                      <th>Variant</th>
+                      <th className="text-end">Avail. (max)</th>
+                      <th className="text-end">Book</th>
+                      <th className="text-end">Lot (FEFO)</th>
+                      <th className="text-end">Lot (raw)</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pickerLoading ? (
+                      <tr>
+                        <td colSpan={7} className="text-muted small py-3" role="status" aria-live="polite">
+                          <span className="spinner-border spinner-border-sm me-2 align-middle text-primary" aria-hidden="true" />
+                          Loading inventory for this source…
+                        </td>
+                      </tr>
+                    ) : (
+                      pickerResults.map((row) => {
+                        const dup = extraLines.some(
+                          (e) => e.productId === row.productId && e.variantId === row.variantId
+                        );
+                        const canAdd = row.maxDispatchable > 0 && !dup;
+                        return (
+                          <tr key={`${row.productId}-${row.variantId}`}>
+                            <td className="small">{row.productName}</td>
+                            <td className="small">{row.variantLabel}</td>
+                            <td className="text-end small fw-semibold">{row.availableQty ?? row.maxDispatchable}</td>
+                            <td className="text-end small">{row.bookQty}</td>
+                            <td className="text-end small">{row.lotFefoQty}</td>
+                            <td className="text-end small text-muted">{row.rawLotOnHandQty ?? 0}</td>
+                            <td>
+                              {dup ? (
+                                <span className="small text-muted">Added</span>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn-sm btn-outline-primary"
+                                  disabled={!canAdd}
+                                  title={
+                                    row.maxDispatchable <= 0
+                                      ? 'No dispatchable quantity at this source (enable "Include zero" to see why)'
+                                      : undefined
+                                  }
+                                  onClick={() => addExtraFromPicker(row)}
+                                >
+                                  Add
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              {pickerPagination && pickerPagination.totalPages > 1 ? (
+                <div className="d-flex flex-wrap align-items-center gap-2 small mb-2">
+                  <span className="text-muted">
+                    Page {pickerPagination.page} of {pickerPagination.totalPages} ({pickerPagination.total} variants)
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary"
+                    disabled={pickerLoading || pickerPagination.page <= 1}
+                    onClick={() => setPickerPage((p) => Math.max(1, p - 1))}
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-outline-secondary"
+                    disabled={pickerLoading || pickerPagination.page >= pickerPagination.totalPages}
+                    onClick={() => setPickerPage((p) => p + 1)}
+                  >
+                    Next
+                  </button>
+                </div>
+              ) : null}
+
+              {extraLines.length > 0 && (
+                <div className="table-responsive">
+                  <table className="table table-sm">
+                    <thead>
+                      <tr>
+                        <th>Product</th>
+                        <th>Variant</th>
+                        <th className="text-end">Max at source</th>
+                        <th>Fulfill qty</th>
+                        <th></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {extraLines.map((ex) => {
+                        const cap = maxAtSourceForExtraLine(ex);
+                        return (
+                          <tr key={ex.key}>
+                            <td className="small">{ex.productName}</td>
+                            <td className="small">{ex.variantLabel}</td>
+                            <td className="text-end small fw-semibold">{cap != null ? cap : "—"}</td>
                             <td>
                               <input
                                 type="number"
                                 className="form-control form-control-sm"
                                 min={0}
-                                max={lot.onHandQty}
-                                value={lot.quantity}
-                                onChange={(e) => setAddExtraLotQty(idx, parseInt(e.target.value, 10) || 0)}
-                                style={{ width: 70 }}
+                                max={cap != null ? cap : undefined}
+                                value={ex.fulfillQty}
+                                onChange={(e) => setExtraQty(ex.key, parseInt(e.target.value, 10) || 0)}
+                                style={{ width: 88 }}
+                                aria-label={`Fulfill quantity for ${ex.variantLabel}`}
                               />
                             </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  <button type="button" className="btn btn-outline-primary btn-sm me-2" onClick={addExtraToDispatch}>
-                    Add to dispatch
-                  </button>
-                  <button type="button" className="btn btn-outline-secondary btn-sm" onClick={() => { setAddExtraLots([]); setAddExtraVariantId(""); }}>
-                    Clear
-                  </button>
-                </>
-              )}
-              {extraFulfillRows.length > 0 && (
-                <div className="mt-2">
-                  <div className="small text-muted mb-1">Extra items in this dispatch:</div>
-                  <div className="table-responsive">
-                    <table className="table table-sm mb-0">
-                      <thead>
-                        <tr>
-                          <th>Variant</th>
-                          <th>Lot</th>
-                          <th>Expiry</th>
-                          <th>Qty</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {extraFulfillRows.map((row, idx) => (
-                          <tr key={`extra-${row.variantId}-${row.lotId}-${idx}`}>
-                            <td>{row.variantId}</td>
-                            <td>{row.lotCode ?? row.lotId}</td>
-                            <td className="text-muted small">{row.expDate ? formatDate(row.expDate) : "—"}</td>
                             <td>
-                              <input
-                                type="number"
-                                className="form-control form-control-sm"
-                                min={0}
-                                value={row.quantity}
-                                onChange={(e) => setExtraFulfillQty(idx, parseInt(e.target.value, 10) || 0)}
-                                style={{ width: 70 }}
-                              />
+                              <button type="button" className="btn btn-sm btn-link text-danger p-0" onClick={() => removeExtra(ex.key)}>
+                                Remove
+                              </button>
                             </td>
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </div>
               )}
             </div>
@@ -528,7 +1069,12 @@ export default function OwnerStockRequestDetailPage() {
               <button
                 type="button"
                 className="btn btn-primary btn-sm"
-                disabled={submitting || lotsLoading || (!fulfillRows.some((r) => r.quantity > 0) && !extraFulfillRows.some((r) => r.quantity > 0))}
+                disabled={
+                  submitting ||
+                  lotsLoading ||
+                  (!requestedRows.some((r: any) => (fulfillByItemId[Number(r.id)] ?? 0) > 0) &&
+                    !extraLines.some((e) => e.fulfillQty > 0))
+                }
                 onClick={handleDispatch}
               >
                 {submitting ? "Dispatching…" : "Fulfill & Dispatch"}

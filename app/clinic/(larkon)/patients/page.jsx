@@ -1,12 +1,15 @@
 "use client";
 
+/**
+ * Standalone /clinic patients list (?branchId=). “View” uses staffClinicPatientDetailPath → cross-shell to
+ * /staff/branch/.../patient-detail/... — same-origin cross-shell; docs/CROSS_SHELL_NAVIGATION.md, CLINIC_STANDALONE_VS_STAFF_PATIENT_ROUTES.md.
+ */
+
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import {
-  staffClinicPatientsList,
-  staffClinicPatientGet,
-} from "@/lib/api";
+import { staffClinicPatientsList } from "@/lib/api";
+import { staffClinicPatientDetailPath } from "@/lib/staffClinicPatientRoutes";
 
 export default function ClinicPatientsPage() {
   const searchParams = useSearchParams();
@@ -124,7 +127,7 @@ export default function ClinicPatientsPage() {
                       <td>{p.animalType?.name ?? "—"}</td>
                       <td className="text-end">
                         <Link
-                          href={`/clinic/patients/${p.id}?branchId=${branchId}`}
+                          href={staffClinicPatientDetailPath(branchId, p.id)}
                           className="btn btn-sm btn-outline-primary"
                         >
                           View

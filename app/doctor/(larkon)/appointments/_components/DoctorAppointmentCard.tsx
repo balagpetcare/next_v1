@@ -19,6 +19,7 @@ export interface AppointmentCardItem {
   petNameSnapshot?: string | null;
   branch?: { name?: string };
   service?: { name?: string };
+  visit?: { id?: number };
 }
 
 export interface DoctorAppointmentCardProps {
@@ -27,6 +28,7 @@ export interface DoctorAppointmentCardProps {
   onCall: () => void;
   onStartConsult: () => void;
   onComplete: () => void;
+  onOpenVisit?: (visitId: number) => void;
   actioning: boolean;
 }
 
@@ -53,9 +55,13 @@ export function DoctorAppointmentCard({
   onCall,
   onStartConsult,
   onComplete,
+  onOpenVisit,
   actioning,
 }: DoctorAppointmentCardProps) {
   const borderClass = getPriorityRowBorderClass(apt.priority);
+  const statusUpper = (apt.status ?? "").toString().toUpperCase();
+  const visitId = apt.visit != null && typeof apt.visit === "object" && "id" in apt.visit ? (apt.visit as { id?: number }).id : undefined;
+  const canStart = visitId == null && ["BOOKED", "CONFIRMED", "CHECKED_IN", "IN_QUEUE", "CALLED"].includes(statusUpper);
 
   return (
     <div
@@ -75,18 +81,23 @@ export function DoctorAppointmentCard({
           <DoctorPriorityBadge priority={apt.priority} className="ms-1" />
         </div>
         <span className="d-flex gap-1" onClick={(e) => e.stopPropagation()}>
-          {["IN_QUEUE", "CHECKED_IN"].includes(apt.status) && (
+          {["IN_QUEUE", "CHECKED_IN"].includes(statusUpper) && (
             <button type="button" className="btn btn-sm btn-info" disabled={actioning} onClick={onCall}>
               Call
             </button>
           )}
-          {apt.status === "CALLED" && (
+          {visitId != null && onOpenVisit && (
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => onOpenVisit(visitId)}>
+              Open Visit
+            </button>
+          )}
+          {canStart && (
             <button type="button" className="btn btn-sm btn-success" disabled={actioning} onClick={onStartConsult}>
               Start
             </button>
           )}
-          {apt.status === "IN_CONSULT" && (
-            <button type="button" className="btn btn-sm btn-primary" disabled={actioning} onClick={onComplete}>
+          {statusUpper === "IN_CONSULT" && (
+            <button type="button" className="btn btn-sm btn-outline-primary" disabled={actioning} onClick={onComplete}>
               Complete
             </button>
           )}

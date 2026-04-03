@@ -3,6 +3,14 @@
 // Import from dashboard-overrides or layout. Full-width premium workspace.
 //
 
+// Internal app pages: allow full width when Bootstrap .container is used inside the dashboard shell.
+// Removes fixed max-width so staff/clinic/admin panels get more usable horizontal space.
+.page-content .container,
+.bpa-app-workspace .container {
+  max-width: none;
+  width: 100%;
+}
+
 // Spacing scale (align with Bootstrap; use in components)
 .bpa-workspace {
   width: 100%;

@@ -5,7 +5,7 @@ import Link from "next/link";
 import { apiGet } from "@/lib/api";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 import { useNotifications } from "@/lib/useNotifications";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
 
 const TABS = [
   { key: "all", label: "All" },

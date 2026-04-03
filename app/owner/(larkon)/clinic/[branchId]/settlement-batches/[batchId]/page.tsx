@@ -127,7 +127,7 @@ export default function SettlementBatchDetailPage() {
         <div className="card-body p-24">
           <div className="d-flex flex-wrap gap-3 mb-3">
             <span><strong>Period</strong> {batch.periodStart ? new Date(String(batch.periodStart)).toLocaleDateString() : "—"} – {batch.periodEnd ? new Date(String(batch.periodEnd)).toLocaleDateString() : "—"}</span>
-            <span><strong>Doctor profile</strong> #{batch.clinicStaffProfileId ?? "—"}</span>
+            <span><strong>Doctor profile</strong> #{String(batch.clinicStaffProfileId ?? "—")}</span>
             <span><strong>Total accrued</strong> {Number(batch.totalAccrued ?? 0)}</span>
             <span><strong>Net payable</strong> {Number(batch.netPayable ?? 0)}</span>
             <span className={`badge radius-8 ${status === "PAID" ? "bg-success" : status === "APPROVED" ? "bg-info" : "bg-secondary"}`}>{status || "—"}</span>

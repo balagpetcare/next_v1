@@ -119,7 +119,10 @@ export default function StaffClinicCatalogPage() {
     );
   }
 
-  const clinicName = branch?.name ?? "Clinic";
+  const clinicName =
+    branch && typeof branch === "object" && "name" in branch && typeof (branch as { name?: string }).name === "string"
+      ? (branch as { name: string }).name
+      : "Clinic";
 
   return (
     <PageWorkspace>

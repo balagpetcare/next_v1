@@ -22,7 +22,12 @@
 /** Allowed localhost ports for BPA panels */
 export const ALLOWED_PORTS = [3100, 3101, 3102, 3103, 3104, 3105, 3106, 3107] as const;
 
-/** Panel configuration mapping */
+/**
+ * Panel configuration mapping.
+ * Note: each port is a distinct browser **origin**; cookies do not cross ports. Relative links from
+ * `/clinic` to `/staff` only work when that port’s Next app serves **both** path prefixes (or use one gateway host).
+ * See docs/CROSS_SHELL_NAVIGATION.md.
+ */
 export const PANEL_CONFIG: Record<string, { port: number; basePath: string; label: string }> = {
   mother: { port: 3100, basePath: '/mother', label: 'Mother' },
   shop: { port: 3101, basePath: '/shop', label: 'Shop' },
@@ -357,11 +362,11 @@ export function resolveLandingPathFromMe(params: {
 
 const COMMON_PORT = 3100;
 const FALLBACK_ORDER: Array<{ key: keyof PanelsFromMe; port: number; path: string }> = [
-  { key: 'owner', port: 3104, path: '/owner' },
+  { key: 'staff', port: 3100, path: '/staff' },      // Prioritize staff context when in staff routes
   { key: 'admin', port: 3103, path: '/admin' },
-  { key: 'staff', port: 3100, path: '/staff' },
   { key: 'doctor', port: 3107, path: '/doctor/dashboard' },
   { key: 'country', port: 3106, path: '/country/dashboard' },
+  { key: 'owner', port: 3104, path: '/owner' },      // Owner checked after staff/doctor/clinic
   { key: 'partner', port: 3100, path: '/' },
 ];
 

@@ -50,11 +50,16 @@ export default function ApprovalsTab({ branchId, approvals, loading, permissions
   const handleRejectSubmit = useCallback(
     async () => {
       if (!rejectModal || !canDecide) return;
+      const reason = rejectReason.trim();
+      if (!reason) {
+        toast.error("A rejection reason is required");
+        return;
+      }
       setDecidingId(rejectModal.id);
       try {
         await staffApprovalDecide(branchId, rejectModal.id, {
           decision: "REJECTED",
-          rejectReason: rejectReason.trim() || undefined,
+          rejectReason: reason,
         });
         toast.success("Request rejected");
         setRejectModal(null);
@@ -163,7 +168,7 @@ export default function ApprovalsTab({ branchId, approvals, loading, permissions
                 <button type="button" className="btn-close" onClick={() => setRejectModal(null)} aria-label="Close" />
               </div>
               <div className="modal-body">
-                <label className="form-label small">Reason (optional)</label>
+                <label className="form-label small">Reason (required)</label>
                 <input
                   type="text"
                   className="form-control form-control-sm"

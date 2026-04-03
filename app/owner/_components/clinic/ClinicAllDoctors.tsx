@@ -46,25 +46,24 @@ function toNumber(value: unknown): number | null {
 
 function pickBranches(res: { data?: unknown[] } | null): ClinicBranch[] {
   if (!Array.isArray(res?.data)) return [];
-  return res.data
-    .map((item) => {
-      const row = asRecord(item);
-      if (!row) return null;
-      const id = toNumber(row.id);
-      if (id == null) return null;
-      const org = asRecord(row.org);
-      return {
-        id,
-        name: typeof row.name === "string" && row.name.trim() ? row.name : `Branch #${id}`,
-        orgId: toNumber(row.orgId) ?? undefined,
-        orgName:
-          (org && typeof org.name === "string" && org.name.trim()
-            ? org.name
-            : undefined) ??
-          "Unknown org",
-      };
-    })
-    .filter((row): row is ClinicBranch => row != null);
+  const out: ClinicBranch[] = [];
+  for (const item of res.data) {
+    const row = asRecord(item);
+    if (!row) continue;
+    const id = toNumber(row.id);
+    if (id == null) continue;
+    const org = asRecord(row.org);
+    out.push({
+      id,
+      name: typeof row.name === "string" && row.name.trim() ? row.name : `Branch #${id}`,
+      orgId: toNumber(row.orgId) ?? undefined,
+      orgName:
+        (org && typeof org.name === "string" && org.name.trim()
+          ? org.name
+          : undefined) ?? "Unknown org",
+    });
+  }
+  return out;
 }
 
 function statusBadge(status: string, kind: "contract" | "verification" | "member"): string {

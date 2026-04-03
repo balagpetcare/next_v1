@@ -9,6 +9,8 @@ export default function SectionCard({
   children,
   className = '',
   noPadding = false,
+  /** When false, omit default mb-4 (e.g. stacked cards with gap-* on parent). */
+  marginBottom = true,
 }: {
   title?: string;
   subtitle?: string;
@@ -16,9 +18,10 @@ export default function SectionCard({
   children: ReactNode;
   className?: string;
   noPadding?: boolean;
+  marginBottom?: boolean;
 }) {
   return (
-    <div className={`card radius-12 border shadow-sm mb-4 ${className}`.trim()}>
+    <div className={`card radius-12 border shadow-sm ${marginBottom ? 'mb-4' : ''} ${className}`.trim()}>
       {(title != null || subtitle != null || actions != null) && (
         <div className="card-header bg-transparent border-bottom d-flex flex-wrap align-items-center justify-content-between gap-2 p-3 p-md-4">
           <div>

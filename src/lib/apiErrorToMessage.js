@@ -11,6 +11,12 @@ export function getMessageFromApiError(err) {
   if (status === 401) return "Unauthorized";
   if (status === 403) return "Forbidden";
   if (status >= 500) return "Server error. Please try again.";
+  if (res?.code === "INSUFFICIENT_STOCK_AT_SOURCE" && res?.variantId != null) {
+    const rq = res.requestedQty;
+    const aq = res.availableQty;
+    return `Not enough stock at the selected source for variant ${res.variantId}. Requested ${rq}, available ${aq}.`;
+  }
+  if (res?.code === "DIRECT_DISPATCH_ORG_MISMATCH" && typeof res.message === "string") return res.message;
   if (res?.message && typeof res.message === "string") return res.message;
   if (res?.error && typeof res.error === "string") return res.error;
   if (res?.errors && typeof res.errors === "object") {

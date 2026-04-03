@@ -8,7 +8,8 @@ import { staffClinicDashboardSummary } from "@/lib/api";
 import Card from "@/src/bpa/components/ui/Card";
 import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
-import { OperationalAlertStrip } from "@/src/components/dashboard";
+import { OperationalAlertStrip, PageWorkspace } from "@/src/components/dashboard";
+import { staffClinicPatientsPath } from "@/lib/staffClinicPatientRoutes";
 
 const DASHBOARD_PERMS = ["clinic.overview.read", "clinic.overview.manage"];
 
@@ -39,7 +40,7 @@ export default function StaffBranchClinicDashboardPage() {
 
   if (ctxLoading) {
     return (
-      <div className="container py-40 text-center">
+      <div className="py-40 px-3 text-center">
         <div className="spinner-border text-primary" role="status" />
         <p className="mt-16 text-secondary-light">Loading...</p>
       </div>
@@ -56,7 +57,7 @@ export default function StaffBranchClinicDashboardPage() {
   }
 
   return (
-    <div className="container py-24">
+    <PageWorkspace>
       <BranchHeader branch={branch} myAccess={myAccess} branchId={branchId} />
       <div className="d-flex align-items-center gap-12 mb-24">
         <Link href={`/staff/branch/${branchId}`} className="btn btn-outline-secondary btn-sm">
@@ -118,7 +119,7 @@ export default function StaffBranchClinicDashboardPage() {
             Queue
           </Link>
           <Link
-            href={`/staff/branch/${branchId}/clinic/patients`}
+            href={staffClinicPatientsPath(branchId)}
             className="btn btn-outline-primary radius-12"
           >
             <i className="ri-user-heart-line me-1" />
@@ -133,6 +134,6 @@ export default function StaffBranchClinicDashboardPage() {
           </Link>
         </div>
       </Card>
-    </div>
+    </PageWorkspace>
   );
 }

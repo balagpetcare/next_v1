@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { usePathname, useRouter } from 'next/navigation'
 import LkInput from '@larkon-ui/components/LkInput'
 import IconifyIcon from '@larkon/components/wrappers/IconifyIcon'
 import { useLarkonPanelBasePath } from '@larkon/context/LarkonPanelContext'
@@ -15,8 +16,25 @@ import QuickAppointmentDrawer from '@/src/components/clinic/QuickAppointmentDraw
 
 const page = () => {
   const basePath = useLarkonPanelBasePath()
+  const pathname = usePathname()
+  const router = useRouter()
   const [quickAppointmentOpen, setQuickAppointmentOpen] = useState(false)
   const showQuickAppointment = basePath === '/clinic' || basePath === '/staff'
+
+  // Extract branchId from path when on /staff/branch/:id/... or /clinic/... so the drawer can use it
+  const branchIdFromPath =
+    (typeof pathname === 'string' && pathname.match(/\/staff\/branch\/([^/]+)/)?.[1]) ||
+    (typeof pathname === 'string' && pathname.match(/\/clinic\/branch\/([^/]+)/)?.[1]) ||
+    ''
+
+  const handleNewAppointment = () => {
+    const staffBranchMatch = typeof pathname === 'string' && pathname.match(/^\/staff\/branch\/([^/]+)\/clinic/)
+    if (staffBranchMatch && staffBranchMatch[1]) {
+      router.push(`/staff/branch/${staffBranchMatch[1]}/clinic/appointments/new`)
+      return
+    }
+    setQuickAppointmentOpen(true)
+  }
 
   return (
     <>
@@ -32,7 +50,7 @@ const page = () => {
                 <button
                   type="button"
                   className="btn btn-icon btn-ghost-secondary btn-sm"
-                  onClick={() => setQuickAppointmentOpen(true)}
+                  onClick={handleNewAppointment}
                   title="Quick Appointment"
                   aria-label="Quick Appointment"
                 >
@@ -58,7 +76,11 @@ const page = () => {
           </div>
         </div>
       </header>
-      <QuickAppointmentDrawer open={quickAppointmentOpen} onClose={() => setQuickAppointmentOpen(false)} />
+      <QuickAppointmentDrawer
+        open={quickAppointmentOpen}
+        onClose={() => setQuickAppointmentOpen(false)}
+        branchIdFromPath={branchIdFromPath}
+      />
     </>
   )
 }

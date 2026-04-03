@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { format, formatDistanceToNow } from "date-fns";
-import { enUS } from "date-fns/locale";
+import { format } from "date-fns/format";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
+import { enUS } from "date-fns/locale/en-US";
 import { ownerGet, ownerPost } from "@/app/owner/_lib/ownerApi";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 
@@ -114,7 +115,13 @@ export default function OwnerBranchAccessRequestsPage() {
     row?.user?.auth?.phone ||
     "—";
   const branchName = (row) => row?.branch?.name || "—";
-  const roleLabel = (row) => (row?.role ? String(row.role).replace(/_/g, " ") : "—");
+  const queueStatus = (row) => row?.ownerQueueStatus || row?.status;
+  const roleLabel = (row) => {
+    if (row?.accessRequestKind === "WAREHOUSE_EXTENSION" && row?.pendingWarehouseMeta?.requestedRole) {
+      return `${String(row.pendingWarehouseMeta.requestedRole).replace(/_/g, " ")} (warehouse)`;
+    }
+    return row?.role ? String(row.role).replace(/_/g, " ") : "—";
+  };
 
   return (
     <div className="dashboard-main-body">
@@ -194,6 +201,11 @@ export default function OwnerBranchAccessRequestsPage() {
                     <tr key={row.id}>
                       <td>
                         <strong>{displayName(row)}</strong>
+                        {row?.accessRequestKind === "WAREHOUSE_EXTENSION" && (
+                          <div className="mt-1">
+                            <span className="badge bg-info text-dark">Warehouse access</span>
+                          </div>
+                        )}
                         {(row?.user?.auth?.email || row?.user?.auth?.phone) && (
                           <div className="text-muted small">
                             {row.user.auth.email || row.user.auth.phone}
@@ -207,12 +219,12 @@ export default function OwnerBranchAccessRequestsPage() {
                         </span>
                       </td>
                       <td>
-                        <span className={`badge ${statusBadgeClass(row.status)}`}>
-                          {row.status || "—"}
+                        <span className={`badge ${statusBadgeClass(queueStatus(row))}`}>
+                          {queueStatus(row) || "—"}
                         </span>
                       </td>
                       <td>
-                        {formatTimestampEn(row.requestedAt)}
+                        {formatTimestampEn(row.queueRequestedAt || row.requestedAt)}
                       </td>
                       {statusFilter === "PENDING" ? (
                         <td className="text-end">

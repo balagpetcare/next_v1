@@ -14,7 +14,8 @@ export default function ActionDropdown({ actions = [], item, className = "" }) {
   const [position, setPosition] = useState({ top: 0, right: 0 });
   const dropdownRef = useRef(null);
   const menuRef = useRef(null);
-
+  
+  
   // Compute position synchronously when opening so menu doesn't flash at (0,0)
   useLayoutEffect(() => {
     if (!isOpen || !dropdownRef.current) return;
@@ -56,7 +57,9 @@ export default function ActionDropdown({ actions = [], item, className = "" }) {
     };
   }, [isOpen]);
 
-  if (!actions || actions.length === 0) return null;
+  if (!actions || actions.length === 0) {
+    return null;
+  }
 
   return (
     <div

@@ -36,11 +36,11 @@ export default function DoctorSummaryCard({ branchId, doctor, canAssign = false 
         </div>
         <p className="text-muted small mb-2">{doctor.speciality ?? "—"}</p>
         <DoctorStatusBadgeGroup
-          status={doctor.status}
-          contractStatus={doctor.contractStatus}
-          bookingStatus={doctor.bookingStatus}
-          assignmentType={doctor.assignmentType}
-          registrationStatus={doctor.registrationStatus}
+          status={doctor.status ?? undefined}
+          contractStatus={doctor.contractStatus ?? undefined}
+          bookingStatus={doctor.bookingStatus ?? undefined}
+          assignmentType={doctor.assignmentType ?? undefined}
+          registrationStatus={doctor.registrationStatus ?? undefined}
         />
         <div className="mt-3 pt-3 border-top border-light small">
           <div className="d-flex justify-content-between text-muted">

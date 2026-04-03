@@ -289,8 +289,14 @@ export default function DispatchReceiveDrawer({ show, onHide, dispatchId, branch
                 </table>
               </div>
               <div className="mb-2">
-                <label className="form-label small">Notes (optional)</label>
-                <LkInput type="text" size="sm" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Notes..." />
+                <label className="form-label small">Receiving notes / discrepancy details (optional)</label>
+                <LkInput
+                  type="text"
+                  size="sm"
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                  placeholder="Stored on GRN; use for shortage/damage context"
+                />
               </div>
               <div className="d-flex flex-wrap gap-2">
                 <button type="submit" className="btn btn-primary btn-sm" disabled={submitting || receiveSuccess || !canSubmit}>

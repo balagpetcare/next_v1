@@ -73,15 +73,14 @@ export default function OwnerStockRequestsPage() {
     (async () => {
       try {
         setError("");
-        type MeRes = { organizations?: { id: number }[]; data?: { organizations?: { id: number }[] } };
-        const [me, branchesRes] = await Promise.all([
-          ownerGet<MeRes>("/api/v1/owner/me").catch((): MeRes => ({})),
-          ownerGet<{ data?: unknown[] }>("/api/v1/owner/branches").catch(() => ({ data: [] })),
+        // getOwnerMe does not include organizations — use the org list endpoint (same as other owner inventory).
+        const [orgsRes, branchesRes] = await Promise.all([
+          ownerGet("/api/v1/owner/organizations").catch(() => ({ data: [] })),
+          ownerGet("/api/v1/owner/branches").catch(() => ({ data: [] })),
         ]);
         if (cancelled) return;
-        const orgs = me?.organizations ?? me?.data?.organizations ?? [];
-        const firstOrgId = orgs[0]?.id ?? null;
-        setOrgId(firstOrgId);
+        const orgRows = pickArray(orgsRes) as { id?: number }[];
+        setOrgId(orgRows[0]?.id != null ? Number(orgRows[0].id) : null);
         setBranches(pickArray(branchesRes));
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? "Failed to load stock requests");
@@ -226,6 +225,13 @@ export default function OwnerStockRequestsPage() {
       {loading ? (
         <div className="card radius-12">
           <div className="card-body text-center py-4 text-secondary">Loading stock requests…</div>
+        </div>
+      ) : !orgId ? (
+        <div className="card radius-12">
+          <div className="card-body text-center py-4 text-secondary">
+            No organization is linked to your account, so stock requests cannot be listed. Complete owner onboarding or
+            contact support if this persists.
+          </div>
         </div>
       ) : items.length === 0 ? (
         <div className="card radius-12">

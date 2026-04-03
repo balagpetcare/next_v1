@@ -12,6 +12,12 @@ function getCatalogBase(): string {
   return API_BASE;
 }
 
+/** JSON envelopes often infer `data` as `{}`, which fails strict `Record<string, unknown>` assignment. */
+function asJsonRecord(data: unknown): Record<string, unknown> | null {
+  if (data == null || typeof data !== "object" || Array.isArray(data)) return null;
+  return data as Record<string, unknown>;
+}
+
 /** GET that hits backend directly (for owner clinic catalog when proxy returns 404). */
 async function ownerGetCatalog<T>(path: string): Promise<T | null> {
   const res = await fetch(`${getCatalogBase()}${path}`, { method: "GET", credentials: "include", cache: "no-store" });
@@ -1171,29 +1177,71 @@ export type StaffInviteRow = {
   invitedBy?: { id: number; profile?: { displayName?: string }; auth?: { email?: string } };
 };
 
+export type OwnerInvitation = {
+  id: number;
+  branchId: number;
+  orgId?: number;
+  email?: string | null;
+  phone?: string | null;
+  displayName?: string | null;
+  status: string;
+  role?: string | null;
+  inviteAsDoctor?: boolean;
+  expiresAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+  branch?: { id: number; name: string };
+  org?: { id: number; name: string };
+  invitedBy?: { id: number; profile?: { displayName?: string }; auth?: { email?: string } };
+};
+
+export async function ownerGetInvitation(inviteId: number): Promise<OwnerInvitation | null> {
+  const res = await ownerGet<{ success?: boolean; data?: OwnerInvitation }>(`/api/v1/owner/invitations/${inviteId}`);
+  return res?.data || null;
+}
+
+export async function ownerUpdateInvitation(inviteId: number, data: Partial<OwnerInvitation>): Promise<{ success?: boolean; data?: OwnerInvitation; message?: string }> {
+  return ownerPatch<{ success?: boolean; data?: OwnerInvitation; message?: string }>(`/api/v1/owner/invitations/${inviteId}`, data);
+}
+
 export async function ownerResendInvitation(inviteId: number): Promise<{ success?: boolean; data?: unknown; message?: string }> {
   return ownerPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/owner/invitations/${inviteId}/resend`, {});
+}
+
+export async function ownerReinviteInvitation(inviteId: number): Promise<{ success?: boolean; data?: unknown; message?: string }> {
+  return ownerPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/owner/invitations/${inviteId}/reinvite`, {});
 }
 
 export async function ownerCancelInvitation(inviteId: number): Promise<{ success?: boolean; data?: unknown; message?: string }> {
   return ownerPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/owner/invitations/${inviteId}/cancel`, {});
 }
 
-export async function ownerClinicDoctorDetail(
-  branchId: string | number,
-  memberId: string | number
-): Promise<{
+export type OwnerClinicDoctorDetailResult = {
   branch?: { id: number; name: string };
   profile?: Record<string, unknown>;
-  serviceFees?: Array<{ id: number; serviceId: number; serviceName?: string; category?: string; fee: number; durationMin?: number | null; isActive: boolean; notes?: string | null }>;
+  serviceFees?: Array<{
+    id: number;
+    serviceId: number;
+    serviceName?: string;
+    category?: string;
+    fee: number;
+    durationMin?: number | null;
+    isActive: boolean;
+    notes?: string | null;
+  }>;
   scheduleTemplates?: unknown[];
   displayName?: string | null;
   [k: string]: unknown;
-} | null> {
+};
+
+export async function ownerClinicDoctorDetail(
+  branchId: string | number,
+  memberId: string | number
+): Promise<OwnerClinicDoctorDetailResult | null> {
   const res = await ownerGet<{ success?: boolean; data?: unknown }>(
     `/api/v1/owner/clinic/branches/${branchId}/doctors/${memberId}`
   );
-  return (res as { data?: unknown })?.data ?? null;
+  return asJsonRecord((res as { data?: unknown })?.data) as OwnerClinicDoctorDetailResult | null;
 }
 
 export async function ownerClinicDoctorTermsPatch(
@@ -1254,10 +1302,10 @@ export async function ownerClinicPackageById(branchId: string | number, packageI
     const j = await res.json().catch(() => null);
     if (res.status === 403) return null;
     if (!res.ok) throw new Error((j as { message?: string })?.message || `Request failed (${res.status})`);
-    return (j as { data?: unknown })?.data ?? null;
+    return asJsonRecord((j as { data?: unknown })?.data);
   }
   const res = await ownerGet<{ success?: boolean; data?: unknown }>(path);
-  return (res as { data?: unknown })?.data ?? null;
+  return asJsonRecord((res as { data?: unknown })?.data);
 }
 
 export async function ownerClinicPackageCreate(branchId: string | number, body: Record<string, unknown>): Promise<unknown> {
@@ -1337,14 +1385,14 @@ export async function ownerClinicPackageComposition(branchId: string | number, p
   const res = await ownerGet<{ success?: boolean; data?: unknown }>(
     `/api/v1/owner/clinic/branches/${branchId}/packages/${packageId}/composition${q}`
   );
-  return (res as { data?: unknown })?.data ?? null;
+  return asJsonRecord((res as { data?: unknown })?.data);
 }
 
 export async function ownerClinicPackageImpact(branchId: string | number, packageId: string | number): Promise<Record<string, unknown> | null> {
   const res = await ownerGet<{ success?: boolean; data?: unknown }>(
     `/api/v1/owner/clinic/branches/${branchId}/packages/${packageId}/impact`
   );
-  return (res as { data?: unknown })?.data ?? null;
+  return asJsonRecord((res as { data?: unknown })?.data);
 }
 
 export async function ownerClinicPackageAuditLog(
@@ -1373,7 +1421,7 @@ export async function ownerClinicPackageDuplicate(
     `/api/v1/owner/clinic/branches/${branchId}/packages/${packageId}/duplicate`,
     { packageCode: code, newPackageCode: code }
   );
-  return (res as { data?: unknown })?.data ?? null;
+  return asJsonRecord((res as { data?: unknown })?.data);
 }
 
 export async function ownerClinicPackageTemplatesList(branchId: string | number): Promise<unknown[]> {
@@ -1387,7 +1435,7 @@ export async function ownerClinicPackageTemplateById(branchId: string | number, 
   const res = await ownerGet<{ success?: boolean; data?: unknown }>(
     `/api/v1/owner/clinic/branches/${branchId}/package-templates/${templateId}`
   );
-  return (res as { data?: unknown })?.data ?? null;
+  return asJsonRecord((res as { data?: unknown })?.data);
 }
 
 export async function ownerClinicPackageTemplateCreate(
@@ -1429,7 +1477,7 @@ export async function ownerClinicCatalogTemplateById(branchId: string | number, 
   const res = await ownerGetCatalog<{ success?: boolean; data?: unknown }>(
     `/api/v1/owner/clinic/branches/${branchId}/catalog/templates/${templateId}`
   );
-  return (res as { data?: unknown })?.data ?? null;
+  return asJsonRecord((res as { data?: unknown })?.data);
 }
 
 export async function ownerClinicCatalogInstallPreview(
@@ -1592,7 +1640,7 @@ export async function ownerClinicItemById(branchId: string | number, itemId: str
   const res = await ownerGet<{ success?: boolean; data?: unknown }>(
     `/api/v1/owner/clinic/branches/${branchId}/items/${itemId}`
   );
-  return (res as { data?: unknown })?.data ?? null;
+  return asJsonRecord((res as { data?: unknown })?.data);
 }
 
 export async function ownerClinicItemCreate(branchId: string | number, body: Record<string, unknown>): Promise<unknown> {
@@ -2023,7 +2071,7 @@ export async function ownerClinicDiscountPolicyById(branchId: string | number, p
   const res = await ownerGet<{ success?: boolean; data?: unknown }>(
     `/api/v1/owner/clinic/branches/${branchId}/discount-policies/${policyId}`
   );
-  return (res as { data?: unknown })?.data ?? null;
+  return asJsonRecord((res as { data?: unknown })?.data);
 }
 
 export async function ownerClinicDiscountPolicyCreate(branchId: string | number, body: Record<string, unknown>): Promise<unknown> {
@@ -2244,7 +2292,7 @@ export async function ownerClinicFinanceConfig(branchId: string | number): Promi
   const res = await ownerGet<{ success?: boolean; data?: unknown }>(
     `/api/v1/owner/clinic/branches/${branchId}/finance-config`
   );
-  return (res as { data?: unknown })?.data ?? null;
+  return asJsonRecord((res as { data?: unknown })?.data);
 }
 
 export async function ownerClinicFinanceConfigUpdate(branchId: string | number, body: Record<string, unknown>): Promise<unknown> {
@@ -2409,9 +2457,73 @@ export async function ownerMyPets(): Promise<{ pets: any[] } | null> {
   return (res as { data?: { pets: any[] } })?.data ?? { pets: [] };
 }
 
+/** Snapshot-only appointments matching current user phone (for "Link your visits" flow). */
+export async function ownerMyPendingAppointments(): Promise<{ appointments?: any[] }> {
+  const res = await ownerGet<{ success?: boolean; data?: { appointments?: any[] } }>("/api/v1/owner/me/pending-appointments");
+  const data = (res as { data?: { appointments?: any[] } })?.data;
+  return { appointments: Array.isArray(data?.appointments) ? data.appointments : [] };
+}
+
 export async function ownerMyPetGet(petId: string | number): Promise<any | null> {
   const res = await ownerGet<{ success?: boolean; data?: any }>(`/api/v1/owner/me/pets/${petId}`);
   return (res as { data?: any })?.data ?? null;
+}
+
+/**
+ * Register a pet for the current user (canonical Pet model; same as clinic-side).
+ * POST /api/v1/user/pets/register.
+ * On duplicate microchip returns 409 with code DUPLICATE_PET — surface in UI.
+ */
+export async function ownerRegisterPet(body: {
+  name: string;
+  animalTypeId: number;
+  breedId?: number | null;
+  subBreedId?: number | null;
+  colorId?: number | null;
+  coatPatternId?: number | null;
+  sizeId?: number | null;
+  customBreedText?: string | null;
+  customColorText?: string | null;
+  dateOfBirth?: string | null;
+  sex: "MALE" | "FEMALE";
+  microchipNumber?: string | null;
+  isRescue?: boolean;
+  isNeutered?: boolean;
+  notes?: string | null;
+  weightKg?: number | null;
+}): Promise<any> {
+  const base = typeof window !== "undefined" ? "" : API_BASE;
+  const res = await fetch(`${base}/api/v1/user/pets/register`, {
+    method: "POST",
+    credentials: "include",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({
+      name: body.name?.trim(),
+      animalTypeId: body.animalTypeId,
+      breedId: body.breedId ?? undefined,
+      subBreedId: body.subBreedId ?? undefined,
+      colorId: body.colorId ?? undefined,
+      coatPatternId: body.coatPatternId ?? undefined,
+      sizeId: body.sizeId ?? undefined,
+      customBreedText: body.customBreedText?.trim() || undefined,
+      customColorText: body.customColorText?.trim() || undefined,
+      dateOfBirth: body.dateOfBirth || undefined,
+      sex: body.sex,
+      microchipNumber: body.microchipNumber?.trim() || undefined,
+      isRescue: body.isRescue ?? false,
+      isNeutered: body.isNeutered ?? false,
+      notes: body.notes?.trim() || undefined,
+      weightKg: body.weightKg ?? undefined,
+    }),
+  });
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error((j as { message?: string })?.message || `Request failed (${res.status})`) as Error & { status?: number; code?: string };
+    err.status = res.status;
+    err.code = (j as { code?: string })?.code;
+    throw err;
+  }
+  return (j as { data?: any })?.data ?? j;
 }
 
 // ========== Injection token + reconciliation (Clinic Medicine Control) ==========
@@ -2481,4 +2593,630 @@ export async function ownerClinicAcknowledgeReconciliation(
     note ? { note } : {}
   );
   return (res as { data?: any })?.data ?? null;
+}
+
+// ========== Pharmacy Enterprise: Expiry Write-Off ==========
+export async function scanExpiredStock(data: {
+  orgId: number;
+  locationId?: number;
+  dryRun?: boolean;
+}) {
+  return ownerPost("/api/v1/inventory/expiry-writeoff/scan", data);
+}
+
+export async function manualWriteOff(data: {
+  lotId: number;
+  locationId: number;
+  quantity: number;
+  reason?: string;
+}) {
+  return ownerPost("/api/v1/inventory/expiry-writeoff/manual", data);
+}
+
+export async function getWriteOffLog(params?: {
+  orgId?: number;
+  locationId?: number;
+  lotId?: number;
+  method?: "AUTO" | "MANUAL";
+  startDate?: string;
+  endDate?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const q = params ? "?" + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)]))).toString() : "";
+  return ownerGet(`/api/v1/inventory/expiry-writeoff/log${q}`);
+}
+
+export async function getExpiredStock(params?: {
+  orgId?: number;
+  locationId?: number;
+  branchId?: number;
+}) {
+  const q = params ? "?" + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)]))).toString() : "";
+  return ownerGet(`/api/v1/inventory/expired-stock${q}`);
+}
+
+// ========== Pharmacy Enterprise: Batch Recall ==========
+export async function createRecall(data: {
+  orgId: number;
+  lotId: number;
+  reason: string;
+  severity: "STANDARD" | "URGENT" | "CRITICAL";
+}) {
+  return ownerPost("/api/v1/inventory/recalls", data);
+}
+
+export async function listRecalls(params?: {
+  orgId?: number;
+  status?: "ACTIVE" | "QUARANTINED" | "RESOLVED" | "CANCELLED";
+  severity?: "STANDARD" | "URGENT" | "CRITICAL";
+  lotId?: number;
+  page?: number;
+  limit?: number;
+}) {
+  const q = params ? "?" + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)]))).toString() : "";
+  return ownerGet(`/api/v1/inventory/recalls${q}`);
+}
+
+export async function getRecallDetail(id: number, orgId: number) {
+  return ownerGet(`/api/v1/inventory/recalls/${id}?orgId=${encodeURIComponent(String(orgId))}`);
+}
+
+export async function quarantineLot(id: number, data: {
+  locationId: number;
+  targetLocationId: number;
+}) {
+  return ownerPost(`/api/v1/inventory/recalls/${id}/quarantine`, data);
+}
+
+export async function resolveRecall(id: number, data?: { notes?: string }) {
+  return ownerPost(`/api/v1/inventory/recalls/${id}/resolve`, data || {});
+}
+
+export async function cancelRecall(id: number, data?: { notes?: string }) {
+  return ownerPost(`/api/v1/inventory/recalls/${id}/cancel`, data || {});
+}
+
+// ========== Pharmacy Enterprise: Dashboard ==========
+export async function getPharmacyDashboard(params?: {
+  orgId?: number;
+  branchId?: number;
+}) {
+  const q = params ? "?" + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)]))).toString() : "";
+  return ownerGet(`/api/v1/inventory/pharmacy-dashboard${q}`);
+}
+
+export async function getExpiryTrend(params?: {
+  orgId?: number;
+  months?: number;
+}) {
+  const q = params ? "?" + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)]))).toString() : "";
+  return ownerGet(`/api/v1/inventory/pharmacy-dashboard/trend${q}`);
+}
+
+export async function getPharmacyAlerts(params?: {
+  orgId?: number;
+  branchId?: number;
+}) {
+  const q = params ? "?" + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)]))).toString() : "";
+  return ownerGet(`/api/v1/inventory/pharmacy-dashboard/alerts${q}`);
+}
+
+// ========== Phase 2: Write-Off Requests ==========
+export async function createWriteOffRequest(data: {
+  orgId: number;
+  locationId: number;
+  reason: string;
+  notes?: string;
+  lines: { variantId: number; lotId?: number; quantity: number; reason?: string }[];
+}) {
+  return ownerPost("/api/v1/inventory/write-off-requests", data);
+}
+
+export async function listWriteOffRequests(params?: {
+  orgId?: number;
+  locationId?: number;
+  status?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const q = params ? "?" + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)]))).toString() : "";
+  return ownerGet(`/api/v1/inventory/write-off-requests${q}`);
+}
+
+export async function getWriteOffRequest(id: number) {
+  return ownerGet(`/api/v1/inventory/write-off-requests/${id}`);
+}
+
+export async function approveWriteOffRequest(id: number) {
+  return ownerPost(`/api/v1/inventory/write-off-requests/${id}/approve`, {});
+}
+
+export async function rejectWriteOffRequest(id: number, data: { rejectionReason: string }) {
+  return ownerPost(`/api/v1/inventory/write-off-requests/${id}/reject`, data);
+}
+
+export async function postWriteOffRequest(id: number) {
+  return ownerPost(`/api/v1/inventory/write-off-requests/${id}/post`, {});
+}
+
+// ========== Phase 3: Vendor Returns ==========
+export async function createVendorReturn(data: {
+  orgId: number;
+  vendorId: number;
+  locationId: number;
+  reason: string;
+  note?: string;
+  creditExpected?: number;
+  referenceNumber?: string;
+  lines: { variantId: number; lotId?: number; quantity: number; unitCost?: number; condition?: string; note?: string }[];
+}) {
+  return ownerPost("/api/v1/inventory/vendor-returns", data);
+}
+
+export async function listVendorReturns(params?: {
+  orgId?: number;
+  vendorId?: number;
+  status?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const q = params ? "?" + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)]))).toString() : "";
+  return ownerGet(`/api/v1/inventory/vendor-returns${q}`);
+}
+
+export async function getVendorReturn(id: number) {
+  return ownerGet(`/api/v1/inventory/vendor-returns/${id}`);
+}
+
+export async function submitVendorReturn(id: number) {
+  return ownerPost(`/api/v1/inventory/vendor-returns/${id}/submit`, {});
+}
+
+export async function approveVendorReturn(id: number) {
+  return ownerPost(`/api/v1/inventory/vendor-returns/${id}/approve`, {});
+}
+
+export async function dispatchVendorReturn(id: number) {
+  return ownerPost(`/api/v1/inventory/vendor-returns/${id}/dispatch`, {});
+}
+
+export async function markVendorReturnReceivedByVendor(id: number, data?: { referenceNumber?: string }) {
+  return ownerPost(`/api/v1/inventory/vendor-returns/${id}/received-by-vendor`, data || {});
+}
+
+export async function markVendorReturnCredited(id: number, data: { creditReceived: number }) {
+  return ownerPost(`/api/v1/inventory/vendor-returns/${id}/credit`, data);
+}
+
+export async function cancelVendorReturn(id: number) {
+  return ownerPost(`/api/v1/inventory/vendor-returns/${id}/cancel`, {});
+}
+
+// ========== Phase 5: Warehouse Transfer Orders ==========
+export async function createWarehouseTransferOrder(data: {
+  orgId: number;
+  fromLocationId: number;
+  toLocationId: number;
+  note?: string;
+  lines: { variantId: number; lotId?: number; requestedQty: number; note?: string }[];
+}) {
+  return ownerPost("/api/v1/inventory/warehouse-transfer-orders", data);
+}
+
+export async function listWarehouseTransferOrders(params?: {
+  orgId?: number;
+  fromLocationId?: number;
+  toLocationId?: number;
+  status?: string;
+  page?: number;
+  limit?: number;
+}) {
+  const q = params ? "?" + new URLSearchParams(Object.fromEntries(Object.entries(params).filter(([,v]) => v != null).map(([k,v]) => [k, String(v)]))).toString() : "";
+  return ownerGet(`/api/v1/inventory/warehouse-transfer-orders${q}`);
+}
+
+export async function getWarehouseTransferOrder(id: number) {
+  return ownerGet(`/api/v1/inventory/warehouse-transfer-orders/${id}`);
+}
+
+export async function approveWarehouseTransferOrder(id: number) {
+  return ownerPost(`/api/v1/inventory/warehouse-transfer-orders/${id}/approve`, {});
+}
+
+export async function pickWarehouseTransferOrder(id: number, data: { pickedLines: { lineId: number; pickedQty: number }[] }) {
+  return ownerPost(`/api/v1/inventory/warehouse-transfer-orders/${id}/pick`, data);
+}
+
+export async function dispatchWarehouseTransferOrder(id: number) {
+  return ownerPost(`/api/v1/inventory/warehouse-transfer-orders/${id}/dispatch`, {});
+}
+
+export async function receiveWarehouseTransferOrder(id: number, data: { receivedLines: { lineId: number; receivedQty: number }[] }) {
+  return ownerPost(`/api/v1/inventory/warehouse-transfer-orders/${id}/receive`, data);
+}
+
+export async function closeWarehouseTransferOrder(id: number) {
+  return ownerPost(`/api/v1/inventory/warehouse-transfer-orders/${id}/close`, {});
+}
+
+// ========== Phase 4: Inventory Analytics ==========
+function buildQuery(params: Record<string, string | number | undefined | null>): string {
+  const entries = Object.entries(params).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)]);
+  return entries.length ? "?" + new URLSearchParams(entries).toString() : "";
+}
+
+// ========== Wave-3: Network balance & reverse logistics ==========
+export async function networkBalanceRecompute(body: { orgId: number; scope?: string; branchId?: number }) {
+  return ownerPost("/api/v1/network-balance/recompute", body);
+}
+
+export async function listNetworkRecommendations(params: {
+  orgId: number;
+  status?: string;
+  branchId?: number;
+  page?: number;
+  limit?: number;
+}) {
+  return ownerGet(`/api/v1/network-balance/recommendations${buildQuery(params)}`);
+}
+
+export async function getNetworkRecommendation(id: number, orgId: number) {
+  return ownerGet(`/api/v1/network-balance/recommendations/${id}?orgId=${encodeURIComponent(String(orgId))}`);
+}
+
+export async function dismissNetworkRecommendation(id: number, orgId: number, reason?: string) {
+  return ownerPost(`/api/v1/network-balance/recommendations/${id}/dismiss`, { orgId, reason });
+}
+
+export async function acceptNetworkRecommendation(
+  id: number,
+  body: { orgId: number; target: "WTO" | "STOCK_REQUEST"; overrides?: { qty?: number } }
+) {
+  return ownerPost(`/api/v1/network-balance/recommendations/${id}/accept`, body);
+}
+
+export async function getNetworkBalanceSnapshot(orgId: number, branchId?: number) {
+  return ownerGet(`/api/v1/network-balance/snapshots/latest${buildQuery({ orgId, branchId })}`);
+}
+
+export async function listQuarantineStock(orgId: number) {
+  return ownerGet(`/api/v1/inventory/quarantine-stock?orgId=${encodeURIComponent(String(orgId))}`);
+}
+
+export async function listRecallCampaigns(orgId: number) {
+  return ownerGet(`/api/v1/inventory/recalls/campaigns?orgId=${encodeURIComponent(String(orgId))}`);
+}
+
+export async function createRecallCampaign(data: {
+  orgId: number;
+  title: string;
+  externalRef?: string;
+  severity?: string;
+  metaJson?: object;
+}) {
+  return ownerPost("/api/v1/inventory/recalls/campaigns", data);
+}
+
+export async function getRecallCampaign(id: number, orgId: number) {
+  return ownerGet(`/api/v1/inventory/recalls/campaigns/${id}?orgId=${encodeURIComponent(String(orgId))}`);
+}
+
+export async function attachRecallToCampaign(campaignId: number, recallId: number, orgId: number) {
+  return ownerPost(`/api/v1/inventory/recalls/campaigns/${campaignId}/attach-recall`, { orgId, recallId });
+}
+
+export async function listReverseStockReturns(params: { orgId: number; status?: string; page?: number; limit?: number }) {
+  return ownerGet(`/api/v1/reverse-logistics/stock-returns${buildQuery(params)}`);
+}
+
+export async function createReverseStockReturn(body: {
+  orgId: number;
+  fromLocationId: number;
+  toLocationId: number;
+  reason: string;
+  note?: string;
+  items: { variantId: number; lotId?: number; quantityReturned: number }[];
+}) {
+  return ownerPost("/api/v1/reverse-logistics/stock-returns", body);
+}
+
+export async function getReverseStockReturn(id: number, orgId: number) {
+  return ownerGet(`/api/v1/reverse-logistics/stock-returns/${id}?orgId=${encodeURIComponent(String(orgId))}`);
+}
+
+export async function receiveReverseStockReturn(
+  id: number,
+  body: { orgId: number; lines: { itemId: number; quantityReceived: number }[] }
+) {
+  return ownerPost(`/api/v1/reverse-logistics/stock-returns/${id}/receive`, body);
+}
+
+export async function setStockReturnDisposition(
+  id: number,
+  body: {
+    orgId: number;
+    disposition: string;
+    linkedVendorReturnId?: number | null;
+    metaPatch?: object;
+  }
+) {
+  return ownerPatch(`/api/v1/reverse-logistics/stock-returns/${id}/disposition`, body);
+}
+
+export async function disputeStockReturn(id: number, orgId: number, note?: string) {
+  return ownerPost(`/api/v1/reverse-logistics/stock-returns/${id}/dispute`, { orgId, note });
+}
+
+export async function listReverseLogisticsCases(orgId: number) {
+  return ownerGet(`/api/v1/reverse-logistics/cases?orgId=${encodeURIComponent(String(orgId))}`);
+}
+
+export async function getInventoryMovementSummary(params: {
+  orgId: number;
+  fromDate?: string;
+  toDate?: string;
+  locationId?: number;
+}) {
+  return ownerGet(`/api/v1/inventory/analytics/movement-summary${buildQuery(params)}`);
+}
+
+export async function getStockTurnoverReport(params: {
+  orgId: number;
+  fromDate?: string;
+  toDate?: string;
+  locationId?: number;
+}) {
+  return ownerGet(`/api/v1/inventory/analytics/stock-turnover${buildQuery(params)}`);
+}
+
+export async function getAbcAnalysis(params: {
+  orgId: number;
+  fromDate?: string;
+  toDate?: string;
+  locationId?: number;
+}) {
+  return ownerGet(`/api/v1/inventory/analytics/abc-analysis${buildQuery(params)}`);
+}
+
+export async function getDeadStock(params: {
+  orgId: number;
+  locationId?: number;
+  daysThreshold?: number;
+}) {
+  return ownerGet(`/api/v1/inventory/analytics/dead-stock${buildQuery(params)}`);
+}
+
+// ========== Phase 6: Reconciliation ==========
+export async function runStockReconciliation(params: {
+  orgId: number;
+  locationId?: number;
+}) {
+  return ownerGet(`/api/v1/inventory/reconciliation${buildQuery(params)}`);
+}
+
+// ========== AI Intelligence Phase 4 ==========
+export async function getAiControlTowerOverview(params: { orgId: number }) {
+  return ownerGet<{ success?: boolean; data?: unknown }>(`/api/v1/ai/control-tower/overview${buildQuery(params)}`);
+}
+
+export async function getAiProcurementRecommendations(params: { branchId: number }) {
+  return ownerGet<{ success?: boolean; data?: unknown[] }>(
+    `/api/v1/ai/procurement/recommendations${buildQuery(params)}`
+  );
+}
+
+export async function getAiForecast(params: {
+  branchId: number;
+  horizonDays?: number;
+  variantId?: number;
+  productId?: number;
+  categoryId?: number;
+  warehouseId?: number;
+  planningScope?: "BRANCH" | "WAREHOUSE";
+}) {
+  return ownerGet<{ success?: boolean; data?: unknown[] }>(`/api/v1/ai/forecast${buildQuery(params)}`);
+}
+
+export async function getAiDemandTrend(params: {
+  branchId: number;
+  variantId: number;
+  windowDays?: number;
+  warehouseId?: number;
+}) {
+  return ownerGet<{ success?: boolean; data?: { series?: { date: string; units: number }[] } }>(
+    `/api/v1/ai/demand-trend${buildQuery(params)}`
+  );
+}
+
+export async function getAiPlanningAlerts(params: { orgId: number }) {
+  return ownerGet<{ success?: boolean; data?: unknown }>(`/api/v1/ai/alerts${buildQuery(params)}`);
+}
+
+export async function getAiProcurementPriceHistory(params: {
+  branchId: number;
+  variantId: number;
+  vendorId?: number;
+}) {
+  return ownerGet<{ success?: boolean; data?: unknown[] }>(
+    `/api/v1/ai/procurement/price-history${buildQuery(params)}`
+  );
+}
+
+export async function getAiProcurementLeadTimeHistory(params: { branchId: number; vendorId: number }) {
+  return ownerGet<{ success?: boolean; data?: unknown[] }>(
+    `/api/v1/ai/procurement/lead-time-history${buildQuery(params)}`
+  );
+}
+
+export async function postAiBulkDismissReplenishment(ids: number[]) {
+  return ownerPost<{ success?: boolean; data?: unknown }>(`/api/v1/ai/replenishment/suggestions/bulk-dismiss`, {
+    ids,
+  });
+}
+
+export async function postAiBulkAcceptReplenishment(ids: number[]) {
+  return ownerPost<{ success?: boolean; data?: unknown }>(`/api/v1/ai/replenishment/suggestions/bulk-accept`, {
+    ids,
+  });
+}
+
+export async function getAiReplenishmentSuggestions(params: {
+  branchId: number;
+  status?: "OPEN" | "ACCEPTED" | "DISMISSED" | "ALL";
+}) {
+  return ownerGet<{ success?: boolean; data?: unknown[] }>(
+    `/api/v1/ai/replenishment/suggestions${buildQuery(params)}`
+  );
+}
+
+// ========== Wave-4: Financial intelligence, SLA, command center ==========
+export async function getFinancialIntelligenceSummary(params: {
+  orgId: number;
+  from: string;
+  to: string;
+  branchId?: number;
+}) {
+  return ownerGet<{ success?: boolean; data?: unknown }>(
+    `/api/v1/intelligence/financial/summary${buildQuery(params)}`
+  );
+}
+
+export async function getCostToServeDetail(params: {
+  orgId: number;
+  variantId: number;
+  branchId: number;
+  from: string;
+  to: string;
+}) {
+  return ownerGet<{ success?: boolean; data?: unknown }>(`/api/v1/intelligence/financial/cts${buildQuery(params)}`);
+}
+
+export async function postFinancialIntelligenceRefresh(body: { orgId: number; from: string; to: string }) {
+  return ownerPost<{ success?: boolean; data?: unknown }>(`/api/v1/intelligence/financial/refresh`, body);
+}
+
+export async function getSloDefinitions(params: { orgId: number }) {
+  return ownerGet<{ success?: boolean; data?: unknown[] }>(`/api/v1/intelligence/slo/definitions${buildQuery(params)}`);
+}
+
+export async function getSloMeasurements(params: { orgId: number; from: string; to: string; sloKey?: string }) {
+  return ownerGet<{ success?: boolean; data?: unknown[] }>(
+    `/api/v1/intelligence/slo/measurements${buildQuery(params)}`
+  );
+}
+
+export async function putSloDefinition(id: number, body: { orgId: number; targetValue?: number; isActive?: boolean; windowDays?: number; metaJson?: object }) {
+  return ownerPut<{ success?: boolean; data?: unknown }>(`/api/v1/intelligence/slo/definitions/${id}`, body);
+}
+
+export async function getOperationalExceptions(params: {
+  orgId: number;
+  status?: string;
+  severity?: string;
+  branchId?: number;
+  breachOnly?: boolean;
+  skip?: number;
+  take?: number;
+}) {
+  return ownerGet<{ success?: boolean; data?: { rows?: unknown[]; total?: number } }>(
+    `/api/v1/operations/command-center/exceptions${buildQuery(params)}`
+  );
+}
+
+export async function getOperationalExceptionDetail(id: number, params: { orgId: number }) {
+  return ownerGet<{ success?: boolean; data?: unknown }>(
+    `/api/v1/operations/command-center/exceptions/${id}${buildQuery(params)}`
+  );
+}
+
+export async function patchOperationalException(
+  id: number,
+  body: { orgId: number; acknowledge?: boolean; status?: string; assignedToUserId?: number | null; resolutionNote?: string }
+) {
+  return ownerPatch<{ success?: boolean; data?: unknown }>(`/api/v1/operations/command-center/exceptions/${id}`, body);
+}
+
+export async function postOperationalExceptionRca(
+  id: number,
+  body: { orgId: number; primaryCause: string; contributingFactorsJson?: unknown; notes?: string }
+) {
+  return ownerPost<{ success?: boolean; data?: unknown }>(`/api/v1/operations/command-center/exceptions/${id}/rca`, body);
+}
+
+export async function postOperationalExceptionRefresh(body: { orgId: number }) {
+  return ownerPost<{ success?: boolean; data?: unknown }>(`/api/v1/operations/command-center/refresh`, body);
+}
+
+// ========== Wave-5: Executive tower, decision assist, scenarios ==========
+export async function getExecutiveTowerOverview(params: { orgId: number }) {
+  return ownerGet<{ success?: boolean; data?: unknown }>(`/api/v1/executive-tower/overview${buildQuery(params)}`);
+}
+
+export async function getExecutiveTowerKpis(params: { orgId: number; domain?: string; branchId?: number }) {
+  return ownerGet<{ success?: boolean; data?: unknown }>(`/api/v1/executive-tower/kpis${buildQuery(params)}`);
+}
+
+export async function getExecutiveTowerDrilldown(params: {
+  orgId: number;
+  kpiKey: string;
+  branchId?: number;
+  take?: number;
+}) {
+  return ownerGet<{ success?: boolean; data?: unknown }>(`/api/v1/executive-tower/drilldown${buildQuery(params)}`);
+}
+
+export async function listDecisionPackages(params: { orgId: number; status?: string }) {
+  return ownerGet<{ success?: boolean; data?: unknown[] }>(`/api/v1/executive-tower/decision-packages${buildQuery(params)}`);
+}
+
+export async function getDecisionPackage(id: number, params: { orgId: number }) {
+  return ownerGet<{ success?: boolean; data?: unknown }>(
+    `/api/v1/executive-tower/decision-packages/${id}${buildQuery(params)}`
+  );
+}
+
+export async function postSynthesizeDecisionPackage(body: { orgId: number; take?: number }) {
+  return ownerPost<{ success?: boolean; data?: unknown }>(`/api/v1/executive-tower/decision-packages/synthesize`, body);
+}
+
+export async function postApproveDecisionPackage(
+  id: number,
+  body: { orgId: number; clientRequestId?: string; comment?: string }
+) {
+  return ownerPost<{ success?: boolean; data?: unknown }>(`/api/v1/executive-tower/decision-packages/${id}/approve`, body);
+}
+
+export async function postRejectDecisionPackage(id: number, body: { orgId: number; comment?: string }) {
+  return ownerPost<{ success?: boolean; data?: unknown }>(`/api/v1/executive-tower/decision-packages/${id}/reject`, body);
+}
+
+export async function postOverrideDecisionPackage(
+  id: number,
+  body: { orgId: number; overrideJson?: Record<string, unknown>; comment?: string }
+) {
+  return ownerPost<{ success?: boolean; data?: unknown }>(`/api/v1/executive-tower/decision-packages/${id}/override`, body);
+}
+
+export async function listScenarioRuns(params: { orgId: number }) {
+  return ownerGet<{ success?: boolean; data?: unknown[] }>(`/api/v1/executive-tower/scenarios${buildQuery(params)}`);
+}
+
+export async function getScenarioRun(runId: number, params: { orgId: number }) {
+  return ownerGet<{ success?: boolean; data?: unknown }>(
+    `/api/v1/executive-tower/scenarios/${runId}${buildQuery(params)}`
+  );
+}
+
+export async function postScenarioRun(body: {
+  orgId: number;
+  templateKey: string;
+  horizonDays?: number;
+  parametersJson?: Record<string, unknown>;
+}) {
+  return ownerPost<{ success?: boolean; data?: unknown }>(`/api/v1/executive-tower/scenarios`, body);
+}
+
+export async function getScenarioTemplates() {
+  return ownerGet<{ success?: boolean; data?: unknown[] }>(`/api/v1/executive-tower/scenario-templates`);
 }

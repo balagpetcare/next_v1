@@ -26,6 +26,7 @@ import {
   DEFAULT_CATALOG_FILTERS,
   DOMAIN_BADGE,
 } from "@/app/owner/_components/clinic/catalog/catalogConstants";
+import { PaginationBar } from "@/src/components/common/PaginationBar";
 
 type CategoryNode = {
   id: number;
@@ -86,6 +87,7 @@ export default function ClinicCatalogPage() {
   const [drawerItemId, setDrawerItemId] = useState<number | null>(null);
   const [categoryTree, setCategoryTree] = useState<CategoryNode[]>([]);
   const [categoriesLoading, setCategoriesLoading] = useState(false);
+  const [catalogListPage, setCatalogListPage] = useState(1);
 
   const loadItems = useCallback(async () => {
     if (!branchId) return;
@@ -93,7 +95,7 @@ export default function ClinicCatalogPage() {
       setLoading(true);
       setError("");
       const res = await ownerClinicItemsList(branchId, {
-        page: 1,
+        page: catalogListPage,
         limit: 100,
         search: filters.search.trim() || undefined,
         domainType: filters.domainType || undefined,
@@ -108,6 +110,10 @@ export default function ClinicCatalogPage() {
     } finally {
       setLoading(false);
     }
+  }, [branchId, catalogListPage, filters.search, filters.domainType, filters.categoryId, filters.isActive]);
+
+  useEffect(() => {
+    setCatalogListPage(1);
   }, [branchId, filters.search, filters.domainType, filters.categoryId, filters.isActive]);
 
   useEffect(() => {
@@ -357,9 +363,18 @@ export default function ClinicCatalogPage() {
                   onDeactivate={handleDeactivate}
                 />
               </div>
-              {data.pagination.totalPages > 1 && (
-                <div className="card-footer text-muted small">
-                  Page {data.pagination.page} of {data.pagination.totalPages} ({data.pagination.total} total)
+              {data.pagination.total > 0 && (
+                <div className="card-footer bg-transparent border-0">
+                  <PaginationBar
+                    page={data.pagination.page}
+                    pageSize={data.pagination.limit}
+                    total={data.pagination.total}
+                    totalPages={Math.max(1, data.pagination.totalPages || 1)}
+                    disabled={loading}
+                    onPageChange={setCatalogListPage}
+                    className="mt-0 pt-3 border-top"
+                    ariaLabel="Catalog items pages"
+                  />
                 </div>
               )}
             </div>

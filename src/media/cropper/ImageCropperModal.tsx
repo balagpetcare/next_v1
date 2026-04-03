@@ -1,65 +1,100 @@
 "use client";
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Modal, Button } from "react-bootstrap";
-import dynamic from "next/dynamic";
-import type { CropperConfig, CropResult, CropParams, OutputFormat } from "./types";
+import Cropper from "react-easy-crop";
+import type { Area } from "react-easy-crop";
+import type { CropperConfig, CropParams, CropResult, OutputFormat } from "./types";
 
-const ReactCropper = dynamic(
-  () => import("react-cropper").then((m) => m.default),
-  { ssr: false }
-);
+export type { CropperConfig, CropParams, CropResult, OutputFormat } from "./types";
 
-type CropperData = { x: number; y: number; width: number; height: number; rotate: number; scaleX: number; scaleY: number };
-type HistoryEntry = CropperData;
-
-const MAX_HISTORY = 20;
-const ZOOM_MIN = 0.5;
+const ZOOM_MIN = 1;
 const ZOOM_MAX = 3;
-const MAX_READY_FRAMES = 10;
 
-type CropperInstance = import("cropperjs").default;
-
-function isCanvasReady(cropper: CropperInstance | null): boolean {
-  if (!cropper?.getCanvasData) return false;
-  try {
-    const d = cropper.getCanvasData();
-    return d != null && typeof (d as { width?: number }).width === "number" && typeof (d as { height?: number }).height === "number";
-  } catch {
-    return false;
-  }
+async function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => resolve(img);
+    img.onerror = reject;
+    img.src = src;
+  });
 }
 
-function applyTransforms(
-  cropper: CropperInstance,
-  zoom: number,
-  flipH: boolean,
-  flipV: boolean,
-  onReady: (data: { width: number; height: number }) => void
-): void {
-  let frameCount = 0;
-  function tryApply() {
-    if (!isCanvasReady(cropper)) {
-      if (frameCount < MAX_READY_FRAMES) {
-        frameCount += 1;
-        requestAnimationFrame(tryApply);
-      }
-      return;
-    }
-    try {
-      if (zoom !== 1) cropper.zoomTo(zoom);
-      cropper.scaleX(flipH ? -1 : 1);
-      cropper.scaleY(flipV ? -1 : 1);
-      const d = cropper.getData(true);
-      onReady({ width: d.width, height: d.height });
-    } catch {
-      if (frameCount < MAX_READY_FRAMES) {
-        frameCount += 1;
-        requestAnimationFrame(tryApply);
-      }
-    }
-  }
-  requestAnimationFrame(tryApply);
+async function cropToBlob(
+  imageSrc: string,
+  cropArea: Area,
+  rotation: number,
+  output: { format: "webp" | "jpg" | "png"; quality?: number; maxWidth?: number; maxHeight?: number }
+): Promise<Blob | null> {
+  const img = await loadImage(imageSrc);
+  const canvas = document.createElement("canvas");
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+
+  const rad = (rotation * Math.PI) / 180;
+  const sin = Math.abs(Math.sin(rad));
+  const cos = Math.abs(Math.cos(rad));
+  const rotatedWidth = img.width * cos + img.height * sin;
+  const rotatedHeight = img.width * sin + img.height * cos;
+
+  canvas.width = rotatedWidth;
+  canvas.height = rotatedHeight;
+  ctx.translate(rotatedWidth / 2, rotatedHeight / 2);
+  ctx.rotate(rad);
+  ctx.drawImage(img, -img.width / 2, -img.height / 2);
+
+  const croppedCanvas = document.createElement("canvas");
+  const croppedCtx = croppedCanvas.getContext("2d");
+  if (!croppedCtx) return null;
+
+  const scaleX = img.naturalWidth / img.width;
+  const scaleY = img.naturalHeight / img.height;
+  const cropX = cropArea.x * scaleX;
+  const cropY = cropArea.y * scaleY;
+  const cropWidth = cropArea.width * scaleX;
+  const cropHeight = cropArea.height * scaleY;
+
+  const maxW = output.maxWidth || 1800;
+  const maxH = output.maxHeight || 1800;
+  const scale = Math.min(1, maxW / cropWidth, maxH / cropHeight);
+  const finalWidth = Math.round(cropWidth * scale);
+  const finalHeight = Math.round(cropHeight * scale);
+
+  croppedCanvas.width = finalWidth;
+  croppedCanvas.height = finalHeight;
+  croppedCtx.drawImage(
+    canvas,
+    cropX,
+    cropY,
+    cropWidth,
+    cropHeight,
+    0,
+    0,
+    finalWidth,
+    finalHeight
+  );
+
+  const mime = output.format === "jpg" ? "image/jpeg" : output.format === "png" ? "image/png" : "image/webp";
+  const quality = output.format === "png" ? undefined : (output.quality ?? 0.92);
+
+  return new Promise((resolve) => {
+    croppedCanvas.toBlob(
+      (blob) => {
+        if (!blob) {
+          croppedCanvas.toBlob(
+            (fallbackBlob) => resolve(fallbackBlob),
+            mime,
+            Math.max(0.5, (quality ?? 0.92) - 0.2)
+          );
+        } else {
+          resolve(blob);
+        }
+      },
+      mime,
+      quality
+    );
+  });
 }
 
 export interface ImageCropperModalProps {
@@ -72,215 +107,82 @@ export interface ImageCropperModalProps {
 
 export function ImageCropperModal({ open, file, config, onClose, onSave }: ImageCropperModalProps) {
   const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [crop, setCrop] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [rotation, setRotation] = useState(0);
-  const [flipH, setFlipH] = useState(false);
-  const [flipV, setFlipV] = useState(false);
-  const [cropBoxData, setCropBoxData] = useState<{ width: number; height: number } | null>(null);
+  const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [saving, setSaving] = useState(false);
-  const [history, setHistory] = useState<HistoryEntry[]>([]);
-  const [historyIndex, setHistoryIndex] = useState(-1);
 
-  const cropperRef = useRef<HTMLImageElement & { cropper?: CropperInstance } | null>(null);
-  const cropperReadyRef = useRef(false);
   const output = config.output;
-  const aspectRatio = config.aspectRatio ?? NaN;
-  const { showGrid, allowRotate, allowFlip, allowZoom } = config.ui ?? {};
+  const aspectRatio = config.aspectRatio ?? undefined;
+  const { allowRotate, allowZoom } = config.ui ?? {};
 
-  useEffect(() => {
-    if (open && typeof window !== "undefined") {
-      import("./cropper.css");
-    }
-  }, [open]);
 
   useEffect(() => {
     if (!open || !file) {
       setImageSrc(null);
-      cropperReadyRef.current = false;
       return;
     }
-    cropperReadyRef.current = false;
     const url = URL.createObjectURL(file);
     setImageSrc(url);
+    setCrop({ x: 0, y: 0 });
     setZoom(1);
     setRotation(0);
-    setFlipH(false);
-    setFlipV(false);
-    setCropBoxData(null);
-    setHistory([]);
-    setHistoryIndex(-1);
+    setCroppedAreaPixels(null);
     return () => URL.revokeObjectURL(url);
   }, [open, file]);
 
-  const getCropper = useCallback(() => cropperRef.current?.cropper ?? null, []);
+  const onCropComplete = useCallback((_: Area, croppedAreaPixels: Area) => {
+    setCroppedAreaPixels(croppedAreaPixels);
+  }, []);
 
-  const pushHistory = useCallback(() => {
-    const cropper = getCropper();
-    if (!cropper || !isCanvasReady(cropper)) return;
-    try {
-      const data = cropper.getData(true);
-      const entry: HistoryEntry = { x: data.x, y: data.y, width: data.width, height: data.height, rotate: data.rotate, scaleX: data.scaleX, scaleY: data.scaleY };
-      setHistory((prev) => {
-        const next = prev.slice(0, historyIndex + 1);
-        next.push(entry);
-        if (next.length > MAX_HISTORY) next.shift();
-        else setHistoryIndex(next.length - 1);
-        return next;
-      });
-    } catch {
-      /* ignore when canvas not ready */
-    }
-  }, [getCropper, historyIndex]);
-
-  const handleCropEnd = useCallback(() => {
-    const cropper = getCropper();
-    if (!cropper || !isCanvasReady(cropper)) return;
-    try {
-      const data = cropper.getData(true);
-      setCropBoxData({ width: data.width, height: data.height });
-    } catch {
-      /* ignore when canvas not ready */
-    }
-  }, [getCropper]);
-
-  const handleUndo = useCallback(() => {
-    if (historyIndex <= 0) return;
-    const idx = historyIndex - 1;
-    const e = history[idx];
-    const cropper = getCropper();
-    if (e && cropper && isCanvasReady(cropper)) {
-      try {
-        cropper.setData(e);
-        setHistoryIndex(idx);
-        setCropBoxData({ width: e.width, height: e.height });
-      } catch {
-        /* ignore */
-      }
-    }
-  }, [history, historyIndex, getCropper]);
-
-  const handleRedo = useCallback(() => {
-    if (historyIndex >= history.length - 1) return;
-    const idx = historyIndex + 1;
-    const e = history[idx];
-    const cropper = getCropper();
-    if (e && cropper && isCanvasReady(cropper)) {
-      try {
-        cropper.setData(e);
-        setHistoryIndex(idx);
-        setCropBoxData({ width: e.width, height: e.height });
-      } catch {
-        /* ignore */
-      }
-    }
-  }, [history, historyIndex, getCropper]);
+  const handleRotate = useCallback(() => {
+    setRotation((r) => (r + 90) % 360);
+  }, []);
 
   const handleReset = useCallback(() => {
-    pushHistory();
-    const cropper = getCropper();
-    if (cropper && isCanvasReady(cropper)) {
-      try {
-        cropper.reset();
-        cropper.scaleX(1);
-        cropper.scaleY(1);
-      } catch {
-        /* ignore */
-      }
-    }
-    setRotation(0);
-    setFlipH(false);
-    setFlipV(false);
+    setCrop({ x: 0, y: 0 });
     setZoom(1);
-  }, [getCropper, pushHistory]);
-
-  const handleRotate90 = useCallback(() => {
-    pushHistory();
-    const cropper = getCropper();
-    if (cropper && isCanvasReady(cropper)) {
-      try {
-        cropper.rotate(90);
-      } catch {
-        /* ignore */
-      }
-    }
-    setRotation((r) => (r + 90) % 360);
-  }, [getCropper, pushHistory]);
-
-  const handleFlipH = useCallback(() => {
-    pushHistory();
-    setFlipH((h) => !h);
-    const cropper = getCropper();
-    if (cropper && isCanvasReady(cropper)) {
-      try {
-        cropper.scaleX(flipH ? 1 : -1);
-      } catch {
-        /* ignore */
-      }
-    }
-  }, [getCropper, pushHistory, flipH]);
-
-  const handleFlipV = useCallback(() => {
-    pushHistory();
-    setFlipV((v) => !v);
-    const cropper = getCropper();
-    if (cropper && isCanvasReady(cropper)) {
-      try {
-        cropper.scaleY(flipV ? 1 : -1);
-      } catch {
-        /* ignore */
-      }
-    }
-  }, [getCropper, pushHistory, flipV]);
-
-  useEffect(() => {
-    const cropper = getCropper();
-    if (!cropper || !isCanvasReady(cropper)) return;
-    try {
-      cropper.zoomTo(zoom);
-    } catch {
-      /* ignore until ready */
-    }
-  }, [zoom, getCropper]);
+    setRotation(0);
+  }, []);
 
   const handleSave = useCallback(async () => {
-    const cropper = getCropper();
-    if (!imageSrc || !cropper) return;
-    if (!isCanvasReady(cropper)) {
-      console.warn("Cropper canvas not ready yet");
-      return;
-    }
+    if (!imageSrc || !croppedAreaPixels) return;
 
     setSaving(true);
     try {
-      const data = cropper.getData(true);
-      const canvas = cropper.getCroppedCanvas({
-        maxWidth: output.maxWidth,
-        maxHeight: output.maxHeight,
-        imageSmoothingQuality: "high",
+      const blob = await cropToBlob(imageSrc, croppedAreaPixels, rotation, output);
+      if (!blob) throw new Error("Crop failed");
+
+      // Debug: Log blob details
+      console.log('Crop Debug - Blob created:', {
+        type: blob.type,
+        size: blob.size,
+        isBlob: blob instanceof Blob,
+        arrayBuffer: await blob.slice(0, 10).arrayBuffer().then(buf => new Uint8Array(buf)),
       });
-      if (!canvas) throw new Error("getCroppedCanvas failed");
 
-      const mime = output.format === "jpg" ? "image/jpeg" : output.format === "png" ? "image/png" : "image/webp";
-      const quality = output.format === "png" ? undefined : (output.quality ?? 0.92);
-
-      const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, mime, quality));
-      if (!blob) throw new Error("toBlob failed");
-
-      const width = Math.round(canvas.width);
-      const height = Math.round(canvas.height);
+      const width = Math.round(croppedAreaPixels.width);
+      const height = Math.round(croppedAreaPixels.height);
 
       const cropParams: CropParams = {
-        x: data.x,
-        y: data.y,
-        width: data.width,
-        height: data.height,
-        rotation: data.rotate,
-        flipHorizontal: data.scaleX < 0,
-        flipVertical: data.scaleY < 0,
+        x: croppedAreaPixels.x,
+        y: croppedAreaPixels.y,
+        width: croppedAreaPixels.width,
+        height: croppedAreaPixels.height,
+        rotation,
       };
 
       const fileOut = new File([blob], file?.name?.replace(/\.[^.]+$/, "") || "cropped", {
         type: blob.type,
+      });
+
+      // Debug: Log file details
+      console.log('Crop Debug - File created:', {
+        name: fileOut.name,
+        type: fileOut.type,
+        size: fileOut.size,
+        lastModified: fileOut.lastModified,
       });
 
       const result: CropResult = {
@@ -299,19 +201,14 @@ export function ImageCropperModal({ open, file, config, onClose, onSave }: Image
     } finally {
       setSaving(false);
     }
-  }, [imageSrc, getCropper, output, file, onSave, onClose]);
-
-  const canUndo = historyIndex > 0;
-  const canRedo = historyIndex >= 0 && historyIndex < history.length - 1;
+  }, [imageSrc, croppedAreaPixels, rotation, output, file, onSave, onClose]);
 
   if (!open) return null;
 
-  const cropperAspectRatio = Number.isNaN(aspectRatio) ? NaN : aspectRatio;
-
   return (
-    <Modal show={open} onHide={onClose} size="lg" centered className="radius-16">
+    <Modal show={open} onHide={onClose} size="lg" centered>
       <Modal.Header closeButton className="border-bottom">
-        <Modal.Title>Crop image</Modal.Title>
+        <Modal.Title>Crop Image</Modal.Title>
       </Modal.Header>
       <Modal.Body>
         <div className="d-flex flex-column gap-3">
@@ -320,32 +217,18 @@ export function ImageCropperModal({ open, file, config, onClose, onSave }: Image
             style={{ height: 400 }}
           >
             {imageSrc && (
-              <ReactCropper
-                ref={cropperRef}
-                src={imageSrc}
-                style={{ height: 400, width: "100%" }}
-                aspectRatio={cropperAspectRatio}
-                dragMode="crop"
-                guides={showGrid ?? true}
-                center={true}
-                highlight={true}
-                autoCropArea={1}
-                cropBoxMovable={true}
-                cropBoxResizable={true}
-                movable={true}
-                rotatable={true}
-                scalable={true}
-                zoomable={true}
-                zoomOnWheel={false}
-                zoomOnTouch={false}
-                toggleDragModeOnDblclick={false}
-                cropend={handleCropEnd}
-                crop={handleCropEnd}
-                onInitialized={(instance) => {
-                  applyTransforms(instance, zoom, flipH, flipV, (data) => {
-                    setCropBoxData(data);
-                    cropperReadyRef.current = true;
-                  });
+              <Cropper
+                image={imageSrc}
+                crop={crop}
+                zoom={zoom}
+                rotation={rotation}
+                aspect={aspectRatio}
+                onCropChange={setCrop}
+                onZoomChange={setZoom}
+                onRotationChange={setRotation}
+                onCropComplete={onCropComplete}
+                style={{
+                  containerStyle: { height: 400 },
                 }}
               />
             )}
@@ -353,8 +236,8 @@ export function ImageCropperModal({ open, file, config, onClose, onSave }: Image
 
           <div className="d-flex flex-wrap align-items-center gap-2">
             {allowZoom !== false && (
-              <div style={{ minWidth: 160 }}>
-                <label className="form-label small text-secondary mb-0">Zoom</label>
+              <div style={{ minWidth: 200 }}>
+                <label className="form-label small text-secondary mb-1">Zoom</label>
                 <input
                   type="range"
                   className="form-range"
@@ -367,44 +250,28 @@ export function ImageCropperModal({ open, file, config, onClose, onSave }: Image
               </div>
             )}
             {allowRotate !== false && (
-              <Button variant="light" size="sm" className="radius-12" onClick={handleRotate90}>
+              <Button variant="light" size="sm" onClick={handleRotate}>
                 Rotate 90°
               </Button>
             )}
-            {allowFlip !== false && (
-              <>
-                <Button variant="light" size="sm" className="radius-12" onClick={handleFlipH}>
-                  Flip H
-                </Button>
-                <Button variant="light" size="sm" className="radius-12" onClick={handleFlipV}>
-                  Flip V
-                </Button>
-              </>
-            )}
-            <Button variant="light" size="sm" className="radius-12" onClick={handleReset}>
+            <Button variant="light" size="sm" onClick={handleReset}>
               Reset
-            </Button>
-            <Button variant="light" size="sm" className="radius-12" disabled={!canUndo} onClick={handleUndo}>
-              Undo
-            </Button>
-            <Button variant="light" size="sm" className="radius-12" disabled={!canRedo} onClick={handleRedo}>
-              Redo
             </Button>
           </div>
 
-          {cropBoxData && (
+          {croppedAreaPixels && (
             <div className="small text-secondary">
-              Crop: {Math.round(cropBoxData.width)}×{Math.round(cropBoxData.height)}
+              Crop: {Math.round(croppedAreaPixels.width)}×{Math.round(croppedAreaPixels.height)}
             </div>
           )}
         </div>
       </Modal.Body>
       <Modal.Footer className="border-top">
-        <Button variant="secondary" className="radius-12" onClick={onClose} disabled={saving}>
+        <Button variant="secondary" onClick={onClose} disabled={saving}>
           Cancel
         </Button>
-        <Button variant="primary" className="radius-12" onClick={handleSave} disabled={saving}>
-          {saving ? "Saving…" : "Save crop"}
+        <Button variant="primary" onClick={handleSave} disabled={saving || !croppedAreaPixels}>
+          {saving ? "Saving…" : "Confirm Crop"}
         </Button>
       </Modal.Footer>
     </Modal>

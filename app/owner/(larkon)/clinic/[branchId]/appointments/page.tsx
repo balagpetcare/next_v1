@@ -367,6 +367,29 @@ export default function OwnerClinicAppointmentsPage() {
   );
 }
 
+function normalizeOwnerSlotList(raw: unknown): { start: string; end: string; doctorId?: number }[] {
+  if (!Array.isArray(raw)) return [];
+  const out: { start: string; end: string; doctorId?: number }[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const o = item as Record<string, unknown>;
+    const start =
+      typeof o.start === "string"
+        ? o.start
+        : typeof o.scheduledStartAt === "string"
+          ? o.scheduledStartAt
+          : "";
+    const end =
+      typeof o.end === "string" ? o.end : typeof o.scheduledEndAt === "string" ? o.scheduledEndAt : "";
+    if (!start || !end) continue;
+    let doctorId: number | undefined;
+    if (typeof o.doctorId === "number") doctorId = o.doctorId;
+    else if (typeof o.branchMemberId === "number") doctorId = o.branchMemberId;
+    out.push({ start, end, doctorId });
+  }
+  return out;
+}
+
 function RescheduleModal({
   branchId,
   appointment,
@@ -393,7 +416,7 @@ function RescheduleModal({
     }
     setSlotsLoading(true);
     ownerClinicSlots(branchId, { date, doctorId: undefined, serviceId: undefined })
-      .then((s) => setSlots(Array.isArray(s) ? s : []))
+      .then((s) => setSlots(normalizeOwnerSlotList(s)))
       .catch(() => setSlots([]))
       .finally(() => setSlotsLoading(false));
   }, [branchId, date]);

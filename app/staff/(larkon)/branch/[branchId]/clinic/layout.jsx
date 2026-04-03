@@ -17,7 +17,7 @@ export default function StaffBranchClinicLayout({ children }) {
 
   if (isLoading) {
     return (
-      <div className="container py-40 text-center">
+      <div className="py-40 px-3 text-center">
         <div className="spinner-border text-primary" role="status" />
         <p className="mt-16 text-secondary-light">Loading...</p>
       </div>

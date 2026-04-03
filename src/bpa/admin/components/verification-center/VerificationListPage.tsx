@@ -15,6 +15,7 @@ import {
   VerificationEntityKey,
   getVerificationDetailHref,
 } from "./config";
+import { PaginationBar } from "@/src/components/common/PaginationBar";
 
 type RowItem = Record<string, unknown>;
 
@@ -244,8 +245,6 @@ export default function VerificationListPage({ entityKey }: { entityKey: Verific
   );
 
   const totalPages = Math.max(1, Math.ceil(total / limit));
-  const canPrev = page > 1;
-  const canNext = page < totalPages;
 
   const resetPagination = () => setPage(1);
 
@@ -418,29 +417,16 @@ export default function VerificationListPage({ entityKey }: { entityKey: Verific
             </div>
             {loading ? <div className="text-center text-secondary py-3">Loading...</div> : null}
 
-            <div className="d-flex align-items-center justify-content-between mt-3 pt-2 border-top">
-              <span className="small text-secondary">
-                Page {page} of {totalPages}
-              </span>
-              <div className="d-flex gap-2">
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-secondary"
-                  disabled={!canPrev || loading}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                >
-                  Previous
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-secondary"
-                  disabled={!canNext || loading}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
+            <PaginationBar
+              page={page}
+              pageSize={limit}
+              total={total}
+              totalPages={totalPages}
+              disabled={loading}
+              onPageChange={setPage}
+              className="mt-3 pt-3 border-top"
+              ariaLabel={`${config.label} verification pages`}
+            />
           </SectionCard>
         </div>
       </div>

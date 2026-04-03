@@ -9,7 +9,8 @@ export interface VisitItem {
 }
 
 export interface HistoryPet {
-  vaccinations?: { vaccineType?: { name?: string }; administeredAt?: string }[];
+  /** API may return loosely typed vaccination rows until doctor history is fully modeled. */
+  vaccinations?: unknown[];
 }
 
 export interface ClinicalHistoryTimelineProps {
@@ -72,11 +73,14 @@ export function ClinicalHistoryTimeline({ visits = [], pet, loading, error, onRe
         <div className="small">
           <strong>Vaccinations:</strong> {vaccinations.length} record(s)
           <ul className="list-unstyled mt-1 mb-0">
-            {vaccinations.slice(0, 5).map((vac: { vaccineType?: { name?: string }; administeredAt?: string }, i: number) => (
+            {vaccinations.slice(0, 5).map((vac, i) => {
+              const row = vac as { vaccineType?: { name?: string }; administeredAt?: string };
+              return (
               <li key={i}>
-                {vac.vaccineType?.name ?? "—"} — {vac.administeredAt ? new Date(vac.administeredAt).toLocaleDateString() : ""}
+                {row.vaccineType?.name ?? "—"} — {row.administeredAt ? new Date(row.administeredAt).toLocaleDateString() : ""}
               </li>
-            ))}
+            );
+            })}
           </ul>
         </div>
       )}

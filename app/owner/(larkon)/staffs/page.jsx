@@ -6,23 +6,29 @@ import { useEntityList } from "@/app/owner/_hooks/useEntityList";
 import { useEntityFilters } from "@/app/owner/_hooks/useEntityFilters";
 import { useEntityActions } from "@/app/owner/_hooks/useEntityActions";
 import { getEntityConfig } from "@/app/owner/_lib/entityConfig";
-import { ownerGet, ownerPatch, ownerDelete } from "@/app/owner/_lib/ownerApi";
+import {
+  ownerGet,
+  ownerPatch,
+  ownerDelete,
+  ownerResendInvitation,
+  ownerReinviteInvitation,
+  ownerCancelInvitation,
+} from "@/app/owner/_lib/ownerApi";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 import StatusBadge from "@/app/owner/_components/StatusBadge";
-import EntityStats from "@/app/owner/_components/shared/EntityStats";
 import ActionDropdown from "@/app/owner/_components/shared/ActionDropdown";
 
-function safeUpper(x) {
-  return String(x || "").toUpperCase();
-}
 
 function nameFromRow(row, fallback = "—") {
   return (
     row?.user?.profile?.fullName ||
     row?.user?.profile?.displayName ||
     row?.user?.profile?.username ||
+    row?.invitedDisplayName ||
     row?.user?.auth?.email ||
     row?.user?.auth?.phone ||
+    row?.invitedEmail ||
+    row?.invitedPhone ||
     fallback
   );
 }
@@ -49,10 +55,11 @@ function getRoleBadgeColor(role) {
 function OwnerStaffsContent() {
   const config = getEntityConfig("staff");
   const { filters, updateFilter } = useEntityFilters(config);
-  const { data, loading, error, stats, refresh } = useEntityList(config, filters);
+  const { data, loading, error, refresh } = useEntityList(config, filters);
   const { remove: deleteStaff } = useEntityActions(config);
   const [branches, setBranches] = useState([]);
   const [q, setQ] = useState("");
+  const [actionBusyId, setActionBusyId] = useState(null);
 
   // Load branches for filter
   useEffect(() => {
@@ -117,14 +124,61 @@ function OwnerStaffsContent() {
     return result;
   }, [data, filters, q]);
 
-  const handleToggleStaffStatus = async (id, currentStatus) => {
-    const isEnabling = currentStatus === "DISABLED";
-    if (!confirm(isEnabling ? "Enable this staff?" : "Disable this staff?")) return;
+  const handleToggleStaffStatus = async (item) => {
+    if (!item?.id) return;
+    const normalized = String(item?.status || "ACTIVE").toUpperCase();
+    const isActive = normalized === "ACTIVE";
+    if (!confirm(isActive ? "Suspend this staff?" : "Activate this staff?")) return;
+    setActionBusyId(item.id);
     try {
-      await ownerPatch(`/api/v1/owner/staffs/${id}/${isEnabling ? "enable" : "disable"}`, {});
+      await ownerPatch(`/api/v1/owner/staffs/${item.id}/${isActive ? "disable" : "enable"}`, {});
       await refresh();
     } catch (e) {
-      alert(e?.response?.error || e?.message || (isEnabling ? "Enable failed" : "Disable failed"));
+      alert(e?.response?.error || e?.message || (isActive ? "Suspend failed" : "Activate failed"));
+    } finally {
+      setActionBusyId(null);
+    }
+  };
+
+  const handleResendInvite = async (item) => {
+    if (!item?.inviteId) return;
+    if (!confirm("Resend this invitation?")) return;
+    setActionBusyId(item.inviteId);
+    try {
+      await ownerResendInvitation(item.inviteId);
+      await refresh();
+    } catch (e) {
+      alert(e?.message || "Resend failed");
+    } finally {
+      setActionBusyId(null);
+    }
+  };
+
+  const handleReinvite = async (item) => {
+    if (!item?.inviteId) return;
+    if (!confirm("Re-invite this staff member with a fresh link?")) return;
+    setActionBusyId(item.inviteId);
+    try {
+      await ownerReinviteInvitation(item.inviteId);
+      await refresh();
+    } catch (e) {
+      alert(e?.message || "Re-invite failed");
+    } finally {
+      setActionBusyId(null);
+    }
+  };
+
+  const handleCancelInvite = async (item) => {
+    if (!item?.inviteId) return;
+    if (!confirm("Cancel this invitation?")) return;
+    setActionBusyId(item.inviteId);
+    try {
+      await ownerCancelInvitation(item.inviteId);
+      await refresh();
+    } catch (e) {
+      alert(e?.message || "Cancel failed");
+    } finally {
+      setActionBusyId(null);
     }
   };
 
@@ -148,6 +202,27 @@ function OwnerStaffsContent() {
     const statuses = [...new Set(data.map((r) => r?.status || r?.membershipStatus || "ACTIVE").filter(Boolean))].sort();
     return statuses;
   }, [data]);
+
+  const staffStats = useMemo(() => {
+    const members = data.filter(r => r.rowType === 'MEMBER' || (!r.rowType && !r.inviteId));
+    const invites = data.filter(r => r.rowType === 'INVITE' || r.inviteId);
+    return {
+      total: data.length,
+      totalMembers: members.length,
+      active: members.filter(r => String(r.status || '').toUpperCase() === 'ACTIVE').length,
+      inactive: members.filter(r => ['INACTIVE', 'SUSPENDED', 'DISABLED'].includes(String(r.rawStatus || r.status || '').toUpperCase())).length,
+      invited: invites.filter(r => r.rawStatus === 'PENDING').length,
+      expired: invites.filter(r => r.rawStatus === 'EXPIRED').length,
+    };
+  }, [data]);
+
+  const STATUS_LABELS = {
+    ACTIVE: 'Active',
+    INACTIVE: 'Inactive',
+    INVITED: 'Invited (Pending)',
+    EXPIRED: 'Expired Invite',
+    REVOKED: 'Revoked / Cancelled',
+  };
 
   return (
     <div className="dashboard-main-body">
@@ -180,7 +255,43 @@ function OwnerStaffsContent() {
       />
 
       {/* Stats Cards */}
-      {stats && <EntityStats stats={stats} className="mb-24" />}
+      {!loading && data.length > 0 && (
+        <div className="row g-3 mb-24">
+          {[
+            { key: 'totalMembers', label: 'Total Staff', icon: 'ri-team-line', color: 'primary', filter: null },
+            { key: 'active', label: 'Active', icon: 'ri-checkbox-circle-line', color: 'success', filter: 'ACTIVE' },
+            { key: 'inactive', label: 'Inactive', icon: 'ri-indeterminate-circle-line', color: 'danger', filter: 'INACTIVE' },
+            { key: 'invited', label: 'Invited', icon: 'ri-mail-send-line', color: 'warning', filter: 'INVITED' },
+            { key: 'expired', label: 'Expired', icon: 'ri-time-line', color: 'secondary', filter: 'EXPIRED' },
+          ].map(({ key, label, icon, color, filter }) => (
+            <div key={key} className="col-6 col-md-4 col-xl">
+              <div
+                className="card radius-12 border-0 shadow-sm h-100"
+                style={filter ? {
+                  cursor: 'pointer',
+                  transition: 'box-shadow 0.2s, outline 0.1s',
+                  outline: filters.status === filter ? `2px solid var(--bs-${color}, #6c757d)` : '2px solid transparent',
+                } : {}}
+                onClick={filter ? () => updateFilter('status', filters.status === filter ? 'ALL' : filter) : undefined}
+                title={filter ? (filters.status === filter ? `Clear ${label} filter` : `Show ${label} only`) : undefined}
+              >
+                <div className="card-body p-3 d-flex align-items-center gap-3">
+                  <div
+                    className="rounded-circle d-flex align-items-center justify-content-center flex-shrink-0"
+                    style={{ width: '40px', height: '40px', backgroundColor: color === 'primary' ? '#e0edff' : color === 'success' ? '#d1fae5' : color === 'danger' ? '#fee2e2' : color === 'warning' ? '#fef3c7' : '#f3f4f6' }}
+                  >
+                    <i className={`${icon} text-${color}`} style={{ fontSize: '18px' }} />
+                  </div>
+                  <div>
+                    <div className="fw-bold fs-5 lh-1 mb-1">{staffStats[key] ?? 0}</div>
+                    <div className="text-muted small">{label}</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Filters */}
       <div className="card radius-12 mb-24">
@@ -262,7 +373,7 @@ function OwnerStaffsContent() {
                 <option value="ALL">All Status</option>
                 {availableStatuses.map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {STATUS_LABELS[s] || s}
                   </option>
                 ))}
               </select>
@@ -314,7 +425,7 @@ function OwnerStaffsContent() {
                 ? "No staff members found matching your filters."
                 : "No staff members yet. Invite staff to get started."}
             </div>
-            {!q && !filters.branchId && !filters.role && !filters.status && (
+            {!q && (!filters.branchId || filters.branchId === "ALL") && (!filters.role || filters.role === "ALL") && (!filters.status || filters.status === "ALL") && (
               <Link
                 href="/owner/staffs/new"
                 className="btn btn-primary radius-12 mt-3"
@@ -343,11 +454,109 @@ function OwnerStaffsContent() {
                 </thead>
                 <tbody>
                   {filteredData.map((item) => {
-                    const name = nameFromRow(item, `Staff #${item.id}`);
+                    const isInvite = item?.rowType === "INVITE" || item?.inviteId;
+                    const rowId = isInvite ? item?.inviteId : item?.id;
+                    const name = nameFromRow(item, `Staff #${rowId}`);
                     const initials = getInitials(name);
+                    
+                    const actions = isInvite
+                      ? [
+                          {
+                            label: "View Details",
+                            href: `/owner/invitations/${item?.inviteId}`,
+                            icon: "solar:eye-outline",
+                          },
+                          { divider: true },
+                          {
+                            label: "Edit Invitation",
+                            href: `/owner/invitations/${item?.inviteId}/edit`,
+                            icon: "solar:pen-outline",
+                            disabled: item?.rawStatus === "ACCEPTED" || item?.rawStatus === "REVOKED",
+                          },
+                          { divider: true },
+                          {
+                            label: item?.rawStatus === "PENDING" ? "Resend Invite" : "Re-invite",
+                            onClick: (e) => {
+                              e.stopPropagation();
+                              if (item?.rawStatus === "PENDING") {
+                                handleResendInvite(item);
+                              } else {
+                                handleReinvite(item);
+                              }
+                            },
+                            icon: "solar:refresh-outline",
+                            variant: "warning",
+                            disabled: actionBusyId === item?.inviteId || item?.rawStatus === "ACCEPTED",
+                          },
+                          { divider: true },
+                          {
+                            label: "Cancel Invite",
+                            onClick: (e) => {
+                              e.stopPropagation();
+                              handleCancelInvite(item);
+                            },
+                            icon: "solar:close-circle-outline",
+                            variant: "danger",
+                            disabled: actionBusyId === item?.inviteId || item?.rawStatus === "ACCEPTED" || item?.rawStatus === "REVOKED",
+                          },
+                        ]
+                      : [
+                          {
+                            label: "View Details",
+                            href: `/owner/staffs/${item.id}`,
+                            icon: "solar:eye-outline",
+                          },
+                          { divider: true },
+                          {
+                            label: "Edit",
+                            href: `/owner/staffs/${item.id}/edit`,
+                            icon: "solar:pen-outline",
+                          },
+                          ...(item?.user?.id
+                            ? [
+                                { divider: true },
+                                {
+                                  label: "Manage access",
+                                  href: `/owner/staff-access/staff/${item.user.id}`,
+                                  icon: "solar:lock-keyhole-outline",
+                                },
+                              ]
+                            : []),
+                          { divider: true },
+                          {
+                            label: "Change branch",
+                            href: `/owner/staffs/${item.id}/edit`,
+                            icon: "solar:buildings-2-outline",
+                          },
+                          { divider: true },
+                          {
+                            label: item?.status === "ACTIVE" ? "Suspend" : "Activate",
+                            onClick: (e) => {
+                              e.stopPropagation();
+                              handleToggleStaffStatus(item);
+                            },
+                            icon: item?.status === "ACTIVE" ? "solar:pause-circle-outline" : "solar:play-circle-outline",
+                            variant: item?.status === "ACTIVE" ? "warning" : "success",
+                            disabled: actionBusyId === item?.id,
+                          },
+                          {
+                            divider: true,
+                          },
+                          {
+                            label: "Delete",
+                            onClick: (e) => {
+                              e.stopPropagation();
+                              handleDelete(item.id);
+                            },
+                            icon: "solar:trash-bin-trash-outline",
+                            variant: "danger",
+                            disabled: actionBusyId === item?.id,
+                          },
+                        ];
+
                     return (
                       <tr
-                        key={item.id}
+                        key={item.rowKey || item.id}
                         style={{
                           transition: "all 0.2s ease",
                         }}
@@ -367,13 +576,31 @@ function OwnerStaffsContent() {
                               {initials}
                             </div>
                             <div>
-                              <Link
-                                href={`/owner/staffs/${item.id}`}
-                                className="text-decoration-none fw-semibold text-dark"
-                              >
-                                {name}
-                              </Link>
-                              <div className="text-muted small">ID: {item.id}</div>
+                              {isInvite ? (
+                                <Link
+                                  href={`/owner/invitations/${item.inviteId}`}
+                                  className="text-decoration-none fw-semibold text-dark"
+                                >
+                                  {name}
+                                </Link>
+                              ) : (
+                                <Link
+                                  href={`/owner/staffs/${item.id}`}
+                                  className="text-decoration-none fw-semibold text-dark"
+                                >
+                                  {name}
+                                </Link>
+                              )}
+                              <div className="text-muted small d-flex align-items-center gap-1 mt-1">
+                                {isInvite ? (
+                                  <>
+                                    <span className="badge text-bg-warning" style={{ fontSize: '9px', padding: '2px 5px', letterSpacing: '0.3px' }}>INVITE</span>
+                                    <span className="text-muted">#{rowId}</span>
+                                  </>
+                                ) : (
+                                  <span>ID: {item.id}</span>
+                                )}
+                              </div>
                             </div>
                           </div>
                         </td>
@@ -408,25 +635,25 @@ function OwnerStaffsContent() {
                         </td>
                         <td style={{ padding: "16px 20px", verticalAlign: "middle" }}>
                           <div className="d-flex flex-column">
-                            {item?.user?.auth?.email && (
+                            {(item?.user?.auth?.email || item?.invitedEmail) && (
                               <a
-                                href={`mailto:${item.user.auth.email}`}
+                                href={`mailto:${item?.user?.auth?.email || item?.invitedEmail}`}
                                 className="text-decoration-none small"
                               >
                                 <i className="ri-mail-line me-1" />
-                                {item.user.auth.email}
+                                {item?.user?.auth?.email || item?.invitedEmail}
                               </a>
                             )}
-                            {item?.user?.auth?.phone && (
+                            {(item?.user?.auth?.phone || item?.invitedPhone) && (
                               <a
-                                href={`tel:${item.user.auth.phone}`}
+                                href={`tel:${item?.user?.auth?.phone || item?.invitedPhone}`}
                                 className="text-decoration-none small text-muted"
                               >
                                 <i className="ri-phone-line me-1" />
-                                {item.user.auth.phone}
+                                {item?.user?.auth?.phone || item?.invitedPhone}
                               </a>
                             )}
-                            {!item?.user?.auth?.email && !item?.user?.auth?.phone && (
+                            {!item?.user?.auth?.email && !item?.user?.auth?.phone && !item?.invitedEmail && !item?.invitedPhone && (
                               <span className="text-muted small">—</span>
                             )}
                           </div>
@@ -439,60 +666,7 @@ function OwnerStaffsContent() {
                           style={{ padding: "16px 20px", verticalAlign: "middle" }}
                           onClick={(e) => e.stopPropagation()}
                         >
-                          <ActionDropdown
-                            actions={[
-                              {
-                                label: "View Details",
-                                href: `/owner/staffs/${item.id}`,
-                                icon: "solar:eye-outline",
-                              },
-                              { divider: true },
-                              {
-                                label: "Edit",
-                                href: `/owner/staffs/${item.id}/edit`,
-                                icon: "solar:pen-outline",
-                              },
-                              ...(item?.user?.id
-                                ? [
-                                    { divider: true },
-                                    {
-                                      label: "Manage access",
-                                      href: `/owner/staff-access/staff/${item.user.id}`,
-                                      icon: "solar:lock-keyhole-outline",
-                                    },
-                                  ]
-                                : []),
-                              { divider: true },
-                              {
-                                label: "Change branch",
-                                href: `/owner/staffs/${item.id}/edit`,
-                                icon: "solar:buildings-2-outline",
-                              },
-                              { divider: true },
-                              {
-                                label: item?.status === "ACTIVE" ? "Suspend" : "Activate",
-                                onClick: (e) => {
-                                  e.stopPropagation();
-                                  handleToggleStaffStatus(item.id, item?.status);
-                                },
-                                icon: item?.status === "ACTIVE" ? "solar:pause-circle-outline" : "solar:play-circle-outline",
-                                variant: item?.status === "ACTIVE" ? "warning" : "success",
-                              },
-                              {
-                                divider: true,
-                              },
-                              {
-                                label: "Delete",
-                                onClick: (e) => {
-                                  e.stopPropagation();
-                                  handleDelete(item.id);
-                                },
-                                icon: "solar:trash-bin-trash-outline",
-                                variant: "danger",
-                              },
-                            ]}
-                            item={item}
-                          />
+                          <ActionDropdown actions={actions} item={item} />
                         </td>
                       </tr>
                     );

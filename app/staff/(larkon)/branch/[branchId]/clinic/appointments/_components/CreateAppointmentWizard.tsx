@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useMemo } from "react";
 import {
   SlotPicker,
   ServiceSelector,
@@ -172,6 +172,32 @@ export default function CreateAppointmentWizard({
     }
   }, [branchId, step, state.serviceId, state.packageId, state.doctorId]);
 
+  // For consultation services: ensure UI shows only doctor/consultation fee (no service price line).
+  const displayPreview = useMemo(() => {
+    if (!pricePreview) return null;
+    const selectedService = state.serviceId ? services.find((s) => s.id === state.serviceId) : null;
+    const isConsultation =
+      selectedService?.category != null && String(selectedService.category).toUpperCase() === "CONSULTATION";
+    if (!isConsultation) return pricePreview;
+    const doctorFeeAmount =
+      pricePreview.doctorFee ??
+      pricePreview.breakdown?.find((b) => b.label === "Consultation fee" || b.label === "Doctor fee")?.amount ??
+      0;
+    const feeOnlyBreakdown =
+      pricePreview.breakdown?.filter(
+        (b) => b.label === "Consultation fee" || b.label === "Doctor fee"
+      ).length > 0
+        ? pricePreview.breakdown!.filter((b) => b.label === "Consultation fee" || b.label === "Doctor fee")
+        : [{ label: "Consultation fee" as const, amount: doctorFeeAmount }];
+    return {
+      ...pricePreview,
+      basePrice: 0,
+      doctorFee: doctorFeeAmount,
+      totalPrice: doctorFeeAmount - (pricePreview.discountAmount ?? 0),
+      breakdown: feeOnlyBreakdown,
+    };
+  }, [pricePreview, state.serviceId, services]);
+
   const handlePatientSearch = useCallback(
     (query: string) => {
       if (!query.trim()) return;
@@ -244,7 +270,8 @@ export default function CreateAppointmentWizard({
     const scheduledStartAt = new Date(state.slotStart).toISOString();
     const scheduledEndAt = new Date(state.slotEnd).toISOString();
     const isAnyDoctor = state.doctorId === "auto" || state.doctorId == null || state.doctorId === 0;
-    const effectiveDoctorId = isAnyDoctor ? null : (state.doctorId != null && state.doctorId !== 0 ? state.doctorId : null);
+    const effectiveDoctorId: number | null =
+      isAnyDoctor || typeof state.doctorId !== "number" ? null : state.doctorId;
     const roomIdToSend =
       state.roomId ?? (compatibleRooms.length > 0 ? compatibleRooms[0].id : undefined);
     staffClinicAppointmentCreateV2(branchId, {
@@ -492,7 +519,7 @@ export default function CreateAppointmentWizard({
               )}
             </div>
             <div className="col-12">
-              <PriceSummaryCard preview={pricePreview} loading={loadingPrice} />
+              <PriceSummaryCard preview={displayPreview} loading={loadingPrice} />
             </div>
             <div className="col-12">
               <label className="form-label small">Internal note (optional)</label>

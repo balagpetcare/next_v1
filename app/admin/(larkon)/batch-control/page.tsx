@@ -11,6 +11,7 @@ import EmptyState from '@/src/bpa/admin/components/EmptyState'
 import ErrorState from '@/src/bpa/admin/components/ErrorState'
 import LoadingSkeleton from '@/src/bpa/admin/components/LoadingSkeleton'
 import { getGovernance } from '@/src/bpa/admin/lib/governanceApi'
+import { PaginationBar } from '@/src/components/common/PaginationBar'
 
 type BatchRow = {
   id: number
@@ -134,9 +135,6 @@ export default function AdminBatchControlListPage() {
     setSearch('')
     setPage(1)
   }
-
-  const from = total === 0 ? 0 : (page - 1) * limit + 1
-  const to = Math.min(page * limit, total)
 
   return (
     <AdminPageShell
@@ -337,32 +335,37 @@ export default function AdminBatchControlListPage() {
             )}
           </div>
           {total > 0 && (
-            <div className="card-footer bg-transparent border-0 d-flex justify-content-between align-items-center small text-secondary">
-              <span>
-                Showing {from}–{to} of {total}
-              </span>
-              <div className="d-flex gap-2 align-items-center">
-                <label className="mb-0 d-flex align-items-center gap-1">
-                  Per page:
-                  <select
-                    className="form-select form-select-sm"
-                    style={{ width: 70 }}
-                    value={limit}
-                    onChange={(e) => setLimit(Number(e.target.value))}
-                  >
-                    {PAGE_SIZES.map((n) => (
-                      <option key={n} value={n}>{n}</option>
-                    ))}
-                  </select>
-                </label>
-                <button type="button" className="btn btn-outline-secondary btn-sm" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-                  Previous
-                </button>
-                <span>Page {page} of {totalPages}</span>
-                <button type="button" className="btn btn-outline-secondary btn-sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                  Next
-                </button>
-              </div>
+            <div className="card-footer bg-transparent border-0">
+              <PaginationBar
+                page={page}
+                pageSize={limit}
+                total={total}
+                totalPages={totalPages}
+                disabled={loading}
+                onPageChange={setPage}
+                className="mt-0 pt-3 border-top"
+                ariaLabel="Batch control pages"
+                endBeforeNav={
+                  <label className="d-flex align-items-center gap-1 small text-muted mb-0">
+                    <span className="text-nowrap">Per page</span>
+                    <select
+                      className="form-select form-select-sm"
+                      style={{ width: 70 }}
+                      value={limit}
+                      onChange={(e) => {
+                        setLimit(Number(e.target.value))
+                        setPage(1)
+                      }}
+                    >
+                      {PAGE_SIZES.map((n) => (
+                        <option key={n} value={n}>
+                          {n}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                }
+              />
             </div>
           )}
         </div>

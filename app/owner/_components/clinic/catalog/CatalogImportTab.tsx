@@ -10,6 +10,7 @@ import {
   ownerClinicAddFromMasterPreview,
   ownerClinicAddFromMasterExecute,
 } from "@/app/owner/_lib/ownerApi";
+import { PaginationBar } from "@/src/components/common/PaginationBar";
 
 type CatalogImportTabProps = { branchId: string };
 
@@ -452,17 +453,23 @@ function MasterCatalogFlow({ branchId }: { branchId: string }) {
         </table>
       </div>
 
-      <div className="d-flex align-items-center gap-3 flex-wrap mb-3">
-        <span className="small text-muted">
-          Selected: <strong>{selectedIds.size}</strong> item(s). Page {pagination.page} of {pagination.totalPages || 1} ({pagination.total} total).
-        </span>
-        {pagination.totalPages > 1 && (
-          <div className="d-flex gap-1">
-            <button type="button" className="btn btn-outline-secondary btn-sm radius-8" onClick={() => goToPage(pagination.page - 1)} disabled={pagination.page <= 1}>Prev</button>
-            <button type="button" className="btn btn-outline-secondary btn-sm radius-8" onClick={() => goToPage(pagination.page + 1)} disabled={pagination.page >= (pagination.totalPages || 1)}>Next</button>
-          </div>
-        )}
-        <div className="d-flex gap-2">
+      <div className="d-flex flex-column gap-2 mb-3">
+        <PaginationBar
+          page={pagination.page}
+          pageSize={pagination.limit}
+          total={pagination.total}
+          totalPages={Math.max(1, pagination.totalPages || 1)}
+          disabled={itemsLoading}
+          onPageChange={goToPage}
+          className="mt-0 pt-0 border-0"
+          ariaLabel="Master catalog pages"
+          endBeforeNav={
+            <span className="small text-muted mb-0">
+              Selected: <strong>{selectedIds.size}</strong> item(s)
+            </span>
+          }
+        />
+        <div className="d-flex gap-2 flex-wrap">
           <button
             type="button"
             className="btn btn-outline-primary btn-sm radius-12"

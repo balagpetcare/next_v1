@@ -66,8 +66,8 @@ export interface PricePreview {
 export interface EligibleDoctor {
   doctorId: number;
   doctorName: string;
-  specializationTags: string[] | null;
-  defaultConsultationFee: number | null;
+  specializationTags?: string[] | null;
+  defaultConsultationFee?: number | null;
   serviceFee?: number | null;
   durationMin?: number | null;
 }

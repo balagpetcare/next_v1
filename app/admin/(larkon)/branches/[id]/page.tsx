@@ -10,7 +10,15 @@ import AdminPageShell from '@/src/bpa/admin/components/AdminPageShell'
 import SectionCard from '@/src/bpa/admin/components/SectionCard'
 import StatCard from '@/src/bpa/admin/components/StatCard'
 import StatusChip from '@/src/bpa/admin/components/StatusChip'
+import LoadingSkeleton from '@/src/bpa/admin/components/LoadingSkeleton'
 import { adminToast } from '@/src/bpa/admin/lib/adminToast'
+import {
+  resolveBranchLifecycleStatus,
+  listEnabledCapabilityKeys,
+  getCapabilityLabel,
+  formatBranchAddressSummary,
+  parseCapabilitiesJson,
+} from '@/src/bpa/admin/lib/branchAdmin'
 
 const STATUS_OPTIONS = ['DRAFT', 'PENDING_REVIEW', 'ACTIVE', 'INACTIVE', 'BLOCKED']
 const VERIF_OPTIONS = ['UNSUBMITTED', 'SUBMITTED', 'VERIFIED', 'REJECTED']
@@ -18,10 +26,15 @@ const VERIF_OPTIONS = ['UNSUBMITTED', 'SUBMITTED', 'VERIFIED', 'REJECTED']
 type BranchRow = {
   id: number
   name?: string
+  code?: string | null
   status?: string
   verificationStatus?: string
   orgId?: number
   org?: { name?: string; ownerUserId?: number }
+  capabilitiesJson?: unknown
+  featuresJson?: unknown
+  location?: unknown
+  addressJson?: unknown
   typeLinks?: { branchType?: { code?: string } }[]
   profileDetails?: { id?: number; documents?: unknown[] }
   publishRequests?: { id: number; status?: string }[]
@@ -132,10 +145,14 @@ export default function AdminBranchDetailPage() {
   if (!row) {
     return (
       <AdminPageShell title="Branch" breadcrumbs={[{ label: 'Branches', href: '/admin/branches' }, { label: '…' }]}>
-        <div className="text-secondary">Loading…</div>
+        <LoadingSkeleton rows={6} />
       </AdminPageShell>
     )
   }
+
+  const statusInfo = resolveBranchLifecycleStatus(row.status ?? 'DRAFT')
+  const capabilityKeys = listEnabledCapabilityKeys(row.capabilitiesJson)
+  const addressSummary = formatBranchAddressSummary(row)
 
   const salesData = sales as { totalRevenue?: number; totalOrders?: number; averageOrderValue?: number } | null
   const invData = inventory as { summary?: { totalItems?: number; lowStockCount?: number }; items?: unknown[] } | null
@@ -155,6 +172,43 @@ export default function AdminBranchDetailPage() {
       </p>
 
       {error ? <div className="alert alert-danger mb-3">{error}</div> : null}
+
+      {/* Branch Summary */}
+      <SectionCard title="Branch Overview" className="mb-3">
+        <div className="row">
+          <div className="col-md-6">
+            <Field label="Branch Name" value={row.name} />
+            <Field label="Branch Code" value={row.code || '—'} />
+            <Field label="Branch ID" value={`#${row.id}`} />
+            <Field label="Organization" value={row.org?.name} />
+          </div>
+          <div className="col-md-6">
+            <Field 
+              label="Status" 
+              value={<StatusChip status={row.status} variant={statusInfo.variant} />} 
+            />
+            <Field 
+              label="Verification" 
+              value={<StatusChip status={row.verificationStatus || 'UNSUBMITTED'} />} 
+            />
+            <Field label="Address" value={addressSummary} />
+            <div className="d-flex justify-content-between gap-3 py-1" style={{ fontSize: 13 }}>
+              <div className="text-secondary" style={{ minWidth: 140 }}>Capabilities</div>
+              <div className="text-end d-flex flex-wrap gap-1 justify-content-end">
+                {capabilityKeys.length > 0 ? (
+                  capabilityKeys.map((key) => (
+                    <span key={key} className="badge bg-light text-dark border">
+                      {getCapabilityLabel(key)}
+                    </span>
+                  ))
+                ) : (
+                  <span className="text-muted">None configured</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      </SectionCard>
 
       {kpisData && (
         <div className="row g-3 mb-3">
@@ -227,6 +281,32 @@ export default function AdminBranchDetailPage() {
                 placeholder="CLINIC, PET_SHOP"
               />
             </div>
+            <div className="mb-3">
+              <label className="form-label">Capabilities</label>
+              <div className="d-flex flex-wrap gap-2">
+                {['clinic', 'shop', 'online_sales', 'delivery_hub', 'hq_warehouse'].map((cap) => {
+                  const caps = parseCapabilitiesJson(form.capabilitiesJson)
+                  const isEnabled = caps[cap] === true
+                  return (
+                    <div key={cap} className="form-check">
+                      <input
+                        type="checkbox"
+                        className="form-check-input"
+                        id={`edit-cap-${cap}`}
+                        checked={isEnabled}
+                        onChange={(e) => {
+                          const newCaps = { ...caps, [cap]: e.target.checked }
+                          setForm({ ...form, capabilitiesJson: newCaps })
+                        }}
+                      />
+                      <label className="form-check-label" htmlFor={`edit-cap-${cap}`}>
+                        {getCapabilityLabel(cap)}
+                      </label>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
             <button type="button" onClick={save} disabled={busy} className="btn btn-primary">
               {busy ? 'Saving…' : 'Save Changes'}
             </button>
@@ -275,9 +355,11 @@ export default function AdminBranchDetailPage() {
           )}
 
           <SectionCard title="Staff roster" className="mt-3">
-            {(row.members || []).length > 0 ? (
+            {(() => {
+              const members = row.members ?? [];
+              return members.length > 0 ? (
               <div className="d-flex flex-column gap-2">
-                {row.members.map((m) => (
+                {members.map((m) => (
                   <div key={m.id} className="d-flex align-items-center justify-content-between p-2 border rounded">
                     <div>
                       <div className="fw-semibold">{m.user?.profile?.displayName ?? `User #${m.userId}`}</div>
@@ -293,7 +375,8 @@ export default function AdminBranchDetailPage() {
               </div>
             ) : (
               <div className="text-secondary small">No staff assigned.</div>
-            )}
+            );
+            })()}
           </SectionCard>
         </div>
       </div>

@@ -16,6 +16,40 @@ import { toast } from "react-toastify";
 
 const PERMS = ["medicine.dispense.request", "medicine.dispense.approve", "medicine.dispense.issue"];
 
+type InternalOrdersDashboard = {
+  pending: number;
+  approved: number;
+  rejected: number;
+  issued: number;
+  activated: number;
+  closed: number;
+  byRequestType: Record<string, number>;
+};
+
+const EMPTY_DASHBOARD: InternalOrdersDashboard = {
+  pending: 0,
+  approved: 0,
+  rejected: 0,
+  issued: 0,
+  activated: 0,
+  closed: 0,
+  byRequestType: {},
+};
+
+function normalizeInternalOrdersDashboard(
+  d: Partial<InternalOrdersDashboard> | null | undefined
+): InternalOrdersDashboard {
+  return {
+    pending: d?.pending ?? 0,
+    approved: d?.approved ?? 0,
+    rejected: d?.rejected ?? 0,
+    issued: d?.issued ?? 0,
+    activated: d?.activated ?? 0,
+    closed: d?.closed ?? 0,
+    byRequestType: d?.byRequestType && typeof d.byRequestType === "object" ? d.byRequestType : {},
+  };
+}
+
 export default function InternalOrdersPage() {
   const params = useParams();
   const branchId = useMemo(() => String(params?.branchId ?? ""), [params]);
@@ -26,7 +60,7 @@ export default function InternalOrdersPage() {
   const canIssue = permissions.includes("medicine.dispense.issue");
 
   const [tab, setTab] = useState<"PENDING" | "APPROVED" | "ISSUED" | "">("");
-  const [dashboard, setDashboard] = useState<Record<string, number>>({});
+  const [dashboard, setDashboard] = useState<InternalOrdersDashboard>(EMPTY_DASHBOARD);
   const [list, setList] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [actingId, setActingId] = useState<number | null>(null);
@@ -35,8 +69,8 @@ export default function InternalOrdersPage() {
   const loadDashboard = useCallback(() => {
     if (!branchId) return;
     staffClinicInternalOrdersDashboard(branchId, requestTypeFilter ? { requestType: requestTypeFilter } : undefined)
-      .then(setDashboard)
-      .catch(() => setDashboard({}));
+      .then((d) => setDashboard(normalizeInternalOrdersDashboard(d)))
+      .catch(() => setDashboard(EMPTY_DASHBOARD));
   }, [branchId, requestTypeFilter]);
 
   const loadList = useCallback(() => {

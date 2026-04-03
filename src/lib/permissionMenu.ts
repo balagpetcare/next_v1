@@ -180,9 +180,43 @@ const CORE_OWNER_FALLBACK: MenuItem[] = [
       { id: "owner.inventory.stockRequests", label: "Stock Requests", href: "/owner/inventory/stock-requests", required: [] },
       { id: "owner.inventory.transfers", label: "Inventory Transfers", href: "/owner/inventory/transfers", required: [] },
       { id: "owner.inventory.receipts", label: "Receipts", href: "/owner/inventory/receipts", required: [] },
+      { id: "owner.inventory.purchaseOrders", label: "Purchase orders", href: "/owner/inventory/purchase-orders", required: [] },
+      { id: "owner.inventory.allocation", label: "Allocation & picking", href: "/owner/inventory/allocation", required: [] },
       { id: "owner.inventory.locations", label: "Locations", href: "/owner/inventory/locations", required: [] },
       { id: "owner.inventory.adjustments", label: "Adjustments", href: "/owner/inventory/adjustments", required: [] },
       { id: "owner.inventory.batches", label: "Batches", href: "/owner/inventory/batches", required: [] },
+      { id: "owner.inventory.writeOffs", label: "Write-Offs", href: "/owner/inventory/write-offs", required: [] },
+      { id: "owner.inventory.vendorReturns", label: "Vendor Returns", href: "/owner/inventory/vendor-returns", required: [] },
+      { id: "owner.inventory.warehouseTransfers", label: "Warehouse Transfers", href: "/owner/inventory/warehouse-transfers", required: [] },
+      { id: "owner.inventory.networkBalance", label: "Network balance", href: "/owner/inventory/network-balance", required: [] },
+      { id: "owner.inventory.reverseLogistics", label: "Reverse logistics", href: "/owner/inventory/reverse-logistics", required: [] },
+      { id: "owner.inventory.quarantine", label: "Quarantine stock", href: "/owner/inventory/quarantine", required: [] },
+      { id: "owner.inventory.analytics", label: "Analytics", href: "/owner/inventory/analytics", required: [] },
+      { id: "owner.inventory.controlTower", label: "Control tower", href: "/owner/inventory/control-tower", required: [] },
+      { id: "owner.inventory.procurementAi", label: "Procurement intelligence", href: "/owner/inventory/procurement-intelligence", required: [] },
+      { id: "owner.inventory.reconciliation", label: "Reconciliation", href: "/owner/inventory/reconciliation", required: [] },
+    ],
+  },
+  {
+    id: "owner.pharmacy",
+    label: "Pharmacy",
+    icon: "ri:medicine-bottle-line",
+    required: [],
+    children: [
+      { id: "owner.pharmacy.dashboard", label: "Dashboard", href: "/owner/pharmacy", required: [] },
+      { id: "owner.pharmacy.requisitions", label: "Requisitions", href: "/owner/pharmacy/requisitions", required: [], badgeType: "count" },
+      { id: "owner.pharmacy.expiry", label: "Expiry management", href: "/owner/inventory/expiry-management", required: [] },
+      { id: "owner.pharmacy.recalls", label: "Batch recalls", href: "/owner/inventory/recalls", required: [] },
+    ],
+  },
+  {
+    id: "owner.warehouse",
+    label: "Warehouse",
+    icon: "solar:box-outline",
+    required: [],
+    children: [
+      { id: "owner.warehouse.list", label: "Warehouses", href: "/owner/warehouse", required: [] },
+      { id: "owner.warehouse.new", label: "New Warehouse", href: "/owner/warehouse/new", required: [] },
     ],
   },
   {
@@ -362,9 +396,43 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
         { id: "owner.inventory.stockRequests", label: "Stock Requests", href: "/owner/inventory/stock-requests", required: ["inventory.read"] },
         { id: "owner.inventory.transfers", label: "Inventory Transfers", href: "/owner/inventory/transfers", required: ["inventory.read"] },
         { id: "owner.inventory.receipts", label: "Receipts", href: "/owner/inventory/receipts", required: ["inventory.read"] },
+        { id: "owner.inventory.purchaseOrders", label: "Purchase orders", href: "/owner/inventory/purchase-orders", required: ["inventory.read"] },
+        { id: "owner.inventory.allocation", label: "Allocation & picking", href: "/owner/inventory/allocation", required: ["inventory.read"] },
         { id: "owner.inventory.locations", label: "Locations", href: "/owner/inventory/locations", required: ["inventory.read"] },
         { id: "owner.inventory.adjustments", label: "Adjustments", href: "/owner/inventory/adjustments", required: ["inventory.read"] },
         { id: "owner.inventory.batches", label: "Batches", href: "/owner/inventory/batches", required: ["inventory.read"] },
+        { id: "owner.inventory.writeOffs", label: "Write-Offs", href: "/owner/inventory/write-offs", required: ["inventory.read"] },
+        { id: "owner.inventory.vendorReturns", label: "Vendor Returns", href: "/owner/inventory/vendor-returns", required: ["inventory.read"] },
+        { id: "owner.inventory.warehouseTransfers", label: "Warehouse Transfers", href: "/owner/inventory/warehouse-transfers", required: ["inventory.read"] },
+        { id: "owner.inventory.networkBalance", label: "Network balance", href: "/owner/inventory/network-balance", required: ["inventory.read"] },
+        { id: "owner.inventory.reverseLogistics", label: "Reverse logistics", href: "/owner/inventory/reverse-logistics", required: ["inventory.read"] },
+        { id: "owner.inventory.quarantine", label: "Quarantine stock", href: "/owner/inventory/quarantine", required: ["inventory.read"] },
+        { id: "owner.inventory.analytics", label: "Analytics", href: "/owner/inventory/analytics", required: ["inventory.read"] },
+        { id: "owner.inventory.controlTower", label: "Control tower", href: "/owner/inventory/control-tower", required: ["inventory.read"] },
+        { id: "owner.inventory.procurementAi", label: "Procurement intelligence", href: "/owner/inventory/procurement-intelligence", required: ["inventory.read"] },
+        { id: "owner.inventory.reconciliation", label: "Reconciliation", href: "/owner/inventory/reconciliation", required: ["inventory.read"] },
+      ],
+    },
+    {
+      id: "owner.pharmacy",
+      label: "Pharmacy",
+      icon: "ri:medicine-bottle-line",
+      required: ["inventory.read"],
+      children: [
+        { id: "owner.pharmacy.dashboard", label: "Dashboard", href: "/owner/pharmacy", required: ["inventory.read"] },
+        { id: "owner.pharmacy.requisitions", label: "Requisitions", href: "/owner/pharmacy/requisitions", required: ["inventory.read"], badgeType: "count" },
+        { id: "owner.pharmacy.expiry", label: "Expiry management", href: "/owner/inventory/expiry-management", required: ["inventory.read"] },
+        { id: "owner.pharmacy.recalls", label: "Batch recalls", href: "/owner/inventory/recalls", required: ["inventory.read"] },
+      ],
+    },
+    {
+      id: "owner.warehouse",
+      label: "Warehouse",
+      icon: "solar:box-outline",
+      required: ["warehouse.view", "inventory.read"],
+      children: [
+        { id: "owner.warehouse.list", label: "Warehouses", href: "/owner/warehouse", required: ["warehouse.view", "inventory.read"] },
+        { id: "owner.warehouse.new", label: "New Warehouse", href: "/owner/warehouse/new", required: ["warehouse.manage", "inventory.read"] },
       ],
     },
     {
@@ -431,6 +499,7 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
     { id: "clinic.queue", label: "Queue Console", href: "/clinic/queue", icon: "solar:list-outline", required: ["clinic.queue.manage"] },
     { id: "clinic.checkin", label: "Check-in Desk", href: "/clinic/checkin", icon: "solar:user-check-outline", required: ["clinic.appointments.manage", "clinic.queue.manage"] },
     { id: "clinic.screen", label: "Waiting Screen", href: "/clinic/screen", icon: "solar:tv-outline", required: ["clinic.queue.screen", "clinic.queue.manage"] },
+    // Branch staff: list via staffClinicPatientsPath (branchSidebarConfig). Standalone /clinic/patients is a separate app route; deep links to staff workspace use staffClinicPatientDetailPath(branchId, petId) when opening a pet from a branch context.
     { id: "clinic.patients", label: "Patients", href: "/clinic/patients", icon: "solar:shield-check-outline", required: ["clinic.patients.read"] },
     { id: "clinic.staff", label: "Staff", href: "/clinic/staff", icon: "solar:user-id-outline", required: ["staff.read"] },
     { id: "clinic.medicineControl", label: "Medicine Control", href: "/clinic/medicine-control", icon: "ri:medicine-bottle-line", required: ["medicine.policy.read"], children: [
@@ -499,6 +568,7 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
         { id: "admin.producerGovernance.enforcement", label: "Moderation / enforcement", href: "/admin/enforcement", required: ["admin.governance.incidents.manage"] },
         { id: "admin.producerGovernance.enforcementCases", label: "Trust & Safety cases", href: "/admin/enforcement/cases", required: ["admin.governance.enforcement.cases"] },
         { id: "admin.producerGovernance.codeLookup", label: "Code Lookup", href: "/admin/code-lookup", required: ["admin.governance.code.search"] },
+        { id: "admin.producerGovernance.vendorAnalytics", label: "Vendor analytics", href: "/admin/vendor-analytics", required: ["admin.vendor.analytics.read"] },
       ],
     },
 
@@ -530,6 +600,43 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
       children: [
         { id: "admin.countries", label: "Countries", href: "/admin/countries", required: [] },
         { id: "admin.states", label: "States / Provinces", href: "/admin/states", required: [] },
+      ],
+    },
+
+    // ============================================
+    // SECTION 3.6: Medicine workspace (catalog + master data)
+    // ============================================
+    {
+      id: "admin.section.medicine",
+      label: "Medicine",
+      icon: "ri:medicine-bottle-line",
+      required: [],
+      children: [
+        {
+          id: "admin.medicine.dashboard",
+          label: "Medicine Control Center",
+          href: "/admin/medicine",
+          required: [
+            "medicine.master.read",
+            "medicine.master.write",
+            "medicine.catalog.import",
+            "medicine.catalog.export",
+            "medicine.catalog.review",
+            "medicine.catalog.listing.manage",
+            "medicine.catalog.governance",
+          ],
+        },
+        { id: "admin.medicine.listings", label: "Medicines", href: "/admin/medicine/listings", required: ["medicine.master.read", "medicine.catalog.listing.manage", "medicine.master.write", "medicine.catalog.governance"] },
+        { id: "admin.medicine.generics", label: "Generics", href: "/admin/medicine/generics", required: ["medicine.master.read", "medicine.master.write", "medicine.catalog.governance"] },
+        { id: "admin.medicine.brands", label: "Brands", href: "/admin/medicine/brands", required: ["medicine.master.read", "medicine.master.write", "medicine.catalog.governance"] },
+        { id: "admin.medicine.dosageForms", label: "Dosage Forms", href: "/admin/medicine/dosage-forms", required: ["medicine.master.read", "medicine.master.write", "medicine.catalog.governance"] },
+        { id: "admin.medicine.presentations", label: "Strengths / Presentations", href: "/admin/medicine/presentations", required: ["medicine.master.read", "medicine.master.write", "medicine.catalog.governance"] },
+        { id: "admin.medicine.manufacturers", label: "Manufacturers", href: "/admin/medicine/manufacturers", required: ["medicine.master.read", "medicine.master.write", "medicine.catalog.governance"] },
+        { id: "admin.medicine.countryCatalogs", label: "Country Catalogs", href: "/admin/medicine/country-catalogs", required: ["medicine.master.read", "medicine.catalog.listing.manage", "medicine.master.write", "medicine.catalog.governance"] },
+        { id: "admin.medicine.imports", label: "Imports", href: "/admin/medicine/imports", required: ["medicine.catalog.import", "medicine.master.write", "medicine.catalog.governance"] },
+        { id: "admin.medicine.review", label: "Review & Conflicts", href: "/admin/medicine/review", required: ["medicine.catalog.review", "medicine.master.read", "medicine.catalog.import", "medicine.catalog.governance"] },
+        { id: "admin.medicine.exports", label: "Export & Reports", href: "/admin/medicine/exports", required: ["medicine.catalog.export", "medicine.master.write", "medicine.catalog.governance"] },
+        { id: "admin.medicine.settings", label: "Governance", href: "/admin/medicine/settings", required: ["medicine.master.read", "medicine.catalog.governance"] },
       ],
     },
 
@@ -817,8 +924,10 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
     { id: "producer.staff", label: "Staff", href: "/producer/staff", icon: "solar:users-group-two-rounded-bold-duotone", required: ["producer.org.read"] },
     { id: "producer.support", label: "Support", href: "/producer/support/tickets", icon: "solar:chat-round-dots-outline", required: [] },
   ],
+  // Branch-scoped clinic items (Patients, Appointments, etc.) come from branchSidebarConfig when inside /staff/branch/[branchId]; keep this list minimal.
   staff: [
     { id: "staff.dashboard", label: "Branches", href: "/staff/branch", icon: "solar:home-smile-outline", required: [] },
+    { id: "staff.warehouse", label: "Warehouse Ops", href: "/staff/warehouse", icon: "solar:box-outline", required: ["warehouse.view"] },
     { id: "staff.workspace", label: "Workspace", href: "/staff/workspace", icon: "solar:widget-5-outline", required: [] },
   ],
   doctor: [
@@ -832,6 +941,13 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
     { id: "doctor.prescriptions", label: "Prescriptions", href: "/doctor/prescriptions", icon: "solar:document-text-outline", required: [] },
     { id: "doctor.cases", label: "Cases / Surgery", href: "/doctor/cases", icon: "solar:heart-pulse-outline", required: [] },
     { id: "doctor.services", label: "Services", href: "/doctor/services", icon: "solar:stethoscope-outline", required: [] },
+    {
+      id: "doctor.serviceFees",
+      label: "Service fees & pricing",
+      href: "/doctor/service-fees",
+      icon: "solar:tag-outline",
+      required: [],
+    },
     { id: "doctor.settlement", label: "Settlement / Earnings", href: "/doctor/settlement", icon: "solar:wallet-money-outline", required: [] },
     { id: "doctor.notifications", label: "Notifications", href: "/doctor/notifications", icon: "solar:bell-outline", required: [] },
   ],

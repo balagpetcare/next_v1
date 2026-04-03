@@ -23,6 +23,7 @@ import {
 } from "../_data/nationalities";
 import type { InternationalAddress } from "../_types/kyc";
 import type { KycDocumentType } from "../_types/kyc";
+import { ShieldCheck, FileText, Upload, CheckCircle, Info } from "lucide-react";
 
 const REQUIRED_DOCS = ["NID_FRONT", "NID_BACK", "SELFIE_WITH_NID"];
 
@@ -64,23 +65,6 @@ export default function OwnerKycClientPage() {
   const [consentAccepted, setConsentAccepted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const hasRedirected = useRef(false);
-  const hasCheckedDoctorRedirect = useRef(false);
-
-  // If user is a doctor candidate (needs doctor verification), send to doctor verification instead of KYC
-  useEffect(() => {
-    if (hasCheckedDoctorRedirect.current) return;
-    hasCheckedDoctorRedirect.current = true;
-    const apiBase = String(process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/+$/, "") || "";
-    fetch(`${apiBase}/api/v1/auth/me`, { credentials: "include", headers: { Accept: "application/json" } })
-      .then((r) => r.json().catch(() => null))
-      .then((j) => {
-        const doctorStatus = j?.doctorVerificationStatus;
-        if (doctorStatus != null && String(doctorStatus).toUpperCase() !== "VERIFIED") {
-          router.replace("/doctor/verification");
-        }
-      })
-      .catch(() => {});
-  }, [router]);
 
   const load = useCallback(async () => {
     setError("");
@@ -249,9 +233,10 @@ export default function OwnerKycClientPage() {
 
   if (loading) {
     return (
-      <div className="container-fluid">
-        <div className="d-flex align-items-center justify-content-center py-5">
-          <span className="spinner-border text-primary" role="status" />
+      <div className="min-vh-100 d-flex align-items-center justify-content-center" style={{ background: "linear-gradient(to bottom, #f8fafc 0%, #ffffff 100%)" }}>
+        <div className="text-center">
+          <div className="spinner-border text-primary mb-3" role="status" style={{ width: "3rem", height: "3rem" }} />
+          <p className="text-muted">Loading your verification workspace...</p>
         </div>
       </div>
     );
@@ -272,52 +257,66 @@ export default function OwnerKycClientPage() {
       locked={locked}
     >
       {step === 1 && (
-        <div className="row g-3">
+        <div className="row g-4">
           <div className="col-12 col-xl-8">
-            <div className="card border radius-16 mb-16">
-              <div className="card-body p-20">
-                <div className="fw-semibold mb-12">Identity</div>
+            {/* Identity Information Card */}
+            <div className="card border-0 shadow-sm mb-4">
+              <div className="card-header bg-white border-bottom py-3">
+                <div className="d-flex align-items-center gap-2">
+                  <div className="bg-primary bg-opacity-10 text-primary p-2 rounded">
+                    <ShieldCheck size={20} />
+                  </div>
+                  <div>
+                    <h5 className="mb-0 fw-bold">Personal Identity</h5>
+                    <small className="text-muted">Please ensure this matches your official ID document</small>
+                  </div>
+                </div>
+              </div>
+              <div className="card-body p-4">
                 <div className="row g-3">
                   <div className="col-12">
-                    <label className="form-label">Full name *</label>
+                    <label className="form-label fw-semibold">Full Legal Name <span className="text-danger">*</span></label>
                     <input
-                      className="form-control radius-12"
+                      className="form-control form-control-lg"
                       value={fullName}
                       onChange={(e) => setFullName(e.target.value)}
                       disabled={locked}
+                      placeholder="e.g. Jane Doe"
                     />
                   </div>
                   <div className="col-12 col-lg-6">
-                    <label className="form-label">Mobile</label>
+                    <label className="form-label fw-semibold">Mobile Number <span className="text-danger">*</span></label>
                     <input
-                      className="form-control radius-12"
+                      className="form-control form-control-lg"
                       value={mobile}
                       onChange={(e) => setMobile(e.target.value)}
                       disabled={locked}
+                      placeholder="+880..."
                     />
                   </div>
                   <div className="col-12 col-lg-6">
-                    <label className="form-label">Email</label>
+                    <label className="form-label fw-semibold">Email Address <span className="text-danger">*</span></label>
                     <input
                       type="email"
-                      className="form-control radius-12"
+                      className="form-control form-control-lg"
                       value={email}
                       onChange={(e) => setEmail(e.target.value)}
                       disabled={locked}
+                      placeholder="name@example.com"
                     />
                   </div>
                   <div className="col-12 col-lg-6">
-                    <label className="form-label">Date of birth</label>
+                    <label className="form-label fw-semibold">Date of Birth <span className="text-danger">*</span></label>
                     <input
                       type="date"
-                      className="form-control radius-12"
+                      className="form-control form-control-lg"
                       value={dateOfBirth}
                       onChange={(e) => setDateOfBirth(e.target.value)}
                       disabled={locked}
                     />
                   </div>
                   <div className="col-12 col-lg-6">
-                    <label className="form-label">Nationality</label>
+                    <label className="form-label fw-semibold">Nationality <span className="text-danger">*</span></label>
                     <NationalitySelect
                       value={nationalityCode}
                       onChange={(code, opt) => {
@@ -329,45 +328,84 @@ export default function OwnerKycClientPage() {
                     />
                   </div>
                   <div className="col-12">
-                    <label className="form-label">NID Number</label>
+                    <label className="form-label fw-semibold">National ID (NID) Number <span className="text-danger">*</span></label>
                     <input
-                      className="form-control radius-12"
+                      className="form-control form-control-lg"
                       value={nidNumber}
                       onChange={(e) => setNidNumber(e.target.value)}
                       disabled={locked}
+                      placeholder="10, 13, or 17 digit NID number"
                     />
                   </div>
                 </div>
-                <div className="d-flex gap-10 flex-wrap mt-16">
-                  <button
-                    type="button"
-                    className="btn btn-dark radius-12"
-                    disabled={locked}
-                    onClick={() => saveDraft(false)}
-                  >
-                    Save Draft
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-primary radius-12"
-                    disabled={locked}
-                    onClick={() => saveDraft(true)}
-                  >
-                    Save & Continue
-                  </button>
+              </div>
+              <div className="card-footer bg-light border-top py-3">
+                <div className="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+                  {!locked && (
+                    <small className="text-muted d-flex align-items-center gap-2">
+                      <Info size={14} />
+                      All fields marked with <span className="text-danger fw-bold">*</span> are required
+                    </small>
+                  )}
+                  <div className="d-flex gap-2 ms-auto">
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary"
+                      disabled={locked}
+                      onClick={() => saveDraft(false)}
+                    >
+                      Save Draft
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      disabled={locked}
+                      onClick={() => saveDraft(true)}
+                    >
+                      Save & Continue →
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>
+
+            {/* Address Form */}
             <KycAddressForm value={address} onChange={setAddress} disabled={locked} />
           </div>
+          
+          {/* Trust & Requirements Sidebar */}
           <div className="col-12 col-xl-4">
-            <div className="card border radius-16">
-              <div className="card-body p-20">
-                <div className="fw-semibold mb-8">You&apos;ll need</div>
-                <div className="text-sm text-secondary-light">
-                  • NID front & back (clear)
-                  <br />• Selfie with NID
-                  <br />• Accurate address
+            <div className="card border-0 shadow-sm bg-primary bg-opacity-10 sticky-top" style={{ top: "1rem" }}>
+              <div className="card-body p-4">
+                <div className="d-flex align-items-center gap-2 mb-3">
+                  <div className="bg-primary text-white p-2 rounded">
+                    <ShieldCheck size={20} />
+                  </div>
+                  <h6 className="mb-0 fw-bold">Secure Verification</h6>
+                </div>
+                <p className="text-muted small mb-3">
+                  We collect your identity details to comply with regulatory requirements and ensure a safe environment for all users.
+                </p>
+                <div className="fw-semibold mb-2">What you'll need:</div>
+                <ul className="list-unstyled mb-3">
+                  <li className="d-flex align-items-start gap-2 mb-2">
+                    <CheckCircle size={16} className="text-success flex-shrink-0 mt-1" />
+                    <small>Clear photos of your valid NID (front & back)</small>
+                  </li>
+                  <li className="d-flex align-items-start gap-2 mb-2">
+                    <CheckCircle size={16} className="text-success flex-shrink-0 mt-1" />
+                    <small>A clear selfie holding your NID card</small>
+                  </li>
+                  <li className="d-flex align-items-start gap-2">
+                    <CheckCircle size={16} className="text-success flex-shrink-0 mt-1" />
+                    <small>Your accurate present residential address</small>
+                  </li>
+                </ul>
+                <div className="border-top pt-3">
+                  <small className="text-muted d-flex align-items-center gap-2">
+                    <Upload size={14} />
+                    Your data is securely encrypted
+                  </small>
                 </div>
               </div>
             </div>
@@ -376,8 +414,8 @@ export default function OwnerKycClientPage() {
       )}
 
       {step === 2 && (
-        <div className="row g-3">
-          <div className="col-12">
+        <div className="row g-4">
+          <div className="col-12 col-xl-8">
             <KycDocumentsForm
               documentType={documentType}
               onDocumentTypeChange={setDocumentType}
@@ -385,25 +423,63 @@ export default function OwnerKycClientPage() {
               onUploadComplete={load}
               disabled={locked}
             />
-            <div className="d-flex gap-10 flex-wrap mt-16">
-              <button type="button" className="btn btn-light radius-12" onClick={() => setStep(1)}>
-                Back
-              </button>
-              <button
-                type="button"
-                className="btn btn-primary radius-12"
-                disabled={!step3Enabled}
-                onClick={() => setStep(3)}
-              >
-                Next: Review & Submit
-              </button>
+            
+            {/* Navigation */}
+            <div className="card border-0 shadow-sm mt-4">
+              <div className="card-body p-3">
+                <div className="d-flex justify-content-between align-items-center">
+                  <button type="button" className="btn btn-outline-secondary" onClick={() => setStep(1)}>
+                    ← Back to Identity
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    disabled={!step3Enabled}
+                    onClick={() => setStep(3)}
+                  >
+                    Continue to Review →
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Photo Requirements Sidebar */}
+          <div className="col-12 col-xl-4">
+            <div className="card border-0 shadow-sm bg-info bg-opacity-10 sticky-top" style={{ top: "1rem" }}>
+              <div className="card-body p-4">
+                <div className="d-flex align-items-center gap-2 mb-3">
+                  <div className="bg-info text-white p-2 rounded">
+                    <FileText size={20} />
+                  </div>
+                  <h6 className="mb-0 fw-bold">Photo Requirements</h6>
+                </div>
+                <ul className="list-unstyled mb-0">
+                  <li className="d-flex align-items-start gap-2 mb-2">
+                    <CheckCircle size={16} className="text-info flex-shrink-0 mt-1" />
+                    <small>Ensure good lighting and avoid glare or reflections on the card</small>
+                  </li>
+                  <li className="d-flex align-items-start gap-2 mb-2">
+                    <CheckCircle size={16} className="text-info flex-shrink-0 mt-1" />
+                    <small>All text and numbers must be clearly readable</small>
+                  </li>
+                  <li className="d-flex align-items-start gap-2 mb-2">
+                    <CheckCircle size={16} className="text-info flex-shrink-0 mt-1" />
+                    <small>Do not digitally alter or watermark the images</small>
+                  </li>
+                  <li className="d-flex align-items-start gap-2">
+                    <CheckCircle size={16} className="text-info flex-shrink-0 mt-1" />
+                    <small>For the selfie, make sure both your face and the NID card are clearly visible together</small>
+                  </li>
+                </ul>
+              </div>
             </div>
           </div>
         </div>
       )}
 
       {step === 3 && (
-        <div className="row g-3">
+        <div className="row g-4">
           <div className="col-12 col-xl-8">
             <KycReviewSubmit
               fullName={fullName}
@@ -420,15 +496,25 @@ export default function OwnerKycClientPage() {
               submitting={submitting}
             />
           </div>
+          
+          {/* After Submission Info */}
           <div className="col-12 col-xl-4">
-            <div className="card border radius-16">
-              <div className="card-body p-20">
-                <div className="fw-semibold mb-8">After submit</div>
-                <div className="text-sm text-secondary-light">
-                  You can create your first branch, add products, and invite staff while we review.
+            <div className="card border-0 shadow-sm bg-success bg-opacity-10 sticky-top" style={{ top: "1rem" }}>
+              <div className="card-body p-4">
+                <div className="d-flex align-items-center gap-2 mb-3">
+                  <div className="bg-success text-white p-2 rounded">
+                    <Info size={20} />
+                  </div>
+                  <h6 className="mb-0 fw-bold">After Submission</h6>
                 </div>
-                <a href="/owner/dashboard" className="btn btn-light radius-12 mt-12 w-100">
-                  Open Dashboard
+                <p className="text-muted small mb-3">
+                  Once you submit your verification, our compliance team will review it. You can continue to set up your business branches, products, and invite staff in the meantime.
+                </p>
+                <p className="text-muted small mb-3">
+                  Certain features like going live and wallet payouts will remain locked until your verification is fully approved.
+                </p>
+                <a href="/owner/dashboard" className="btn btn-outline-success w-100">
+                  Go to Dashboard
                 </a>
               </div>
             </div>

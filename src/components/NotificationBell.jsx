@@ -5,7 +5,7 @@ import { Icon } from "@iconify/react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useNotifications } from "@/lib/useNotifications";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
 import { getProducerTypeLabel, getProducerViewHref, getProducerNotificationPriority, getPriorityBadgeClass } from "@/app/producer/_lib/producerNotificationHelpers";
 
 /** Derive API panel from pathname so each panel sees only its notifications */

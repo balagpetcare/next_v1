@@ -7,6 +7,7 @@ import { useBranchContext } from "@/lib/useBranchContext";
 import { staffClinicVialSessionsList } from "@/lib/api";
 import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
+import { PageWorkspace } from "@/src/components/dashboard";
 
 const PERMS = ["medicine.vial.open", "medicine.vial.use", "medicine.vial.return"];
 
@@ -33,11 +34,11 @@ export default function ActiveVialsPage() {
     load();
   }, [load]);
 
-  if (isLoading) return <div className="container py-40 text-center"><div className="spinner-border text-primary" /></div>;
+  if (isLoading) return <div className="py-40 px-3 text-center"><div className="spinner-border text-primary" /></div>;
   if (!hasAccess) return <AccessDenied missingPerm="medicine.vial.open" onBack={() => window.history.back()} />;
 
   return (
-    <div className="container py-24">
+    <PageWorkspace>
       <BranchHeader branch={branch} myAccess={myAccess} branchId={branchId} />
       <div className="d-flex align-items-center gap-12 mb-24 flex-wrap">
         <Link href={`/staff/branch/${branchId}/clinic/medicine-control`} className="btn btn-outline-secondary btn-sm">← Medicine Control</Link>
@@ -82,6 +83,6 @@ export default function ActiveVialsPage() {
           )}
         </div>
       </div>
-    </div>
+    </PageWorkspace>
   );
 }

@@ -6,6 +6,9 @@ import { isPublicPath, getAuthFromCookies } from "@/lib/authHelpers";
 //
 // Public paths: /auth/*, /login, /register, /post-auth-landing, /getting-started, etc.
 // are never protected — checked first so guests can access landing and auth flows.
+//
+// Matcher includes both /clinic/* and /staff/* — auth is evaluated per request host (same-origin app).
+// Cross-shell relative links between /clinic and /staff assume one deployment origin (see docs/CROSS_SHELL_NAVIGATION.md).
 
 function withNextParam(url: URL, req: NextRequest) {
   const next = req.nextUrl.pathname + req.nextUrl.search;
@@ -49,6 +52,65 @@ export function proxy(req: NextRequest) {
     const [, branchId] = supplyCreateMatch;
     const url = req.nextUrl.clone();
     url.pathname = `/staff/branch/${branchId}/clinic/supply-request-create`;
+    return NextResponse.redirect(url, 307);
+  }
+
+  // Staff inventory: nested stock-requests/new → flat stock-request-create (same nested-route stability as supply-request-create)
+  const stockRequestNewMatch = pathname.match(/^\/staff\/branch\/([^/]+)\/inventory\/stock-requests\/new$/);
+  if (stockRequestNewMatch) {
+    const [, branchId] = stockRequestNewMatch;
+    const url = req.nextUrl.clone();
+    url.pathname = `/staff/branch/${branchId}/inventory/stock-request-create`;
+    return NextResponse.redirect(url, 307);
+  }
+
+  // Nested .../stock-requests/:id → flat stock-request-detail/:id (Turbopack 404 on nested dynamic segment)
+  const stockRequestDetailNested = pathname.match(/^\/staff\/branch\/([^/]+)\/inventory\/stock-requests\/(\d+)$/);
+  if (stockRequestDetailNested) {
+    const [, branchId, requestId] = stockRequestDetailNested;
+    const url = req.nextUrl.clone();
+    url.pathname = `/staff/branch/${branchId}/inventory/stock-request-detail/${requestId}`;
+    return NextResponse.redirect(url, 307);
+  }
+
+  // Staff pharmacy: nested requisitions/new → flat requisition-create (same nested-route stability as stock-request-create)
+  const pharmacyRequisitionNewMatch = pathname.match(/^\/staff\/branch\/([^/]+)\/pharmacy\/requisitions\/new$/);
+  if (pharmacyRequisitionNewMatch) {
+    const [, branchId] = pharmacyRequisitionNewMatch;
+    const url = req.nextUrl.clone();
+    url.pathname = `/staff/branch/${branchId}/pharmacy/requisition-create`;
+    return NextResponse.redirect(url, 307);
+  }
+
+  // Staff pharmacy: legacy flat requisition-detail → canonical nested .../requisitions/:id
+  const pharmacyRequisitionDetailFlat = pathname.match(/^\/staff\/branch\/([^/]+)\/pharmacy\/requisition-detail\/(\d+)$/);
+  if (pharmacyRequisitionDetailFlat) {
+    const [, branchId, requisitionId] = pharmacyRequisitionDetailFlat;
+    const url = req.nextUrl.clone();
+    url.pathname = `/staff/branch/${branchId}/pharmacy/requisitions/${requisitionId}`;
+    return NextResponse.redirect(url, 307);
+  }
+
+  // Staff clinic patients: legacy nested URLs → flat canonical (register, detail, edit). clone() keeps searchParams.
+  const patientRegisterLegacy = pathname.match(/^\/staff\/branch\/([^/]+)\/clinic\/patients\/register$/);
+  if (patientRegisterLegacy) {
+    const [, branchId] = patientRegisterLegacy;
+    const url = req.nextUrl.clone();
+    url.pathname = `/staff/branch/${branchId}/clinic/patient-register`;
+    return NextResponse.redirect(url, 307);
+  }
+  const patientEditLegacy = pathname.match(/^\/staff\/branch\/([^/]+)\/clinic\/patients\/(\d+)\/edit$/);
+  if (patientEditLegacy) {
+    const [, branchId, patientId] = patientEditLegacy;
+    const url = req.nextUrl.clone();
+    url.pathname = `/staff/branch/${branchId}/clinic/patient-edit/${patientId}`;
+    return NextResponse.redirect(url, 307);
+  }
+  const patientDetailLegacy = pathname.match(/^\/staff\/branch\/([^/]+)\/clinic\/patients\/(\d+)$/);
+  if (patientDetailLegacy) {
+    const [, branchId, patientId] = patientDetailLegacy;
+    const url = req.nextUrl.clone();
+    url.pathname = `/staff/branch/${branchId}/clinic/patient-detail/${patientId}`;
     return NextResponse.redirect(url, 307);
   }
 

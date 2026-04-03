@@ -11,26 +11,28 @@ import {
   staffClinicDoctorsWithFees,
   staffClinicCheckDuplicate,
   staffClinicPackagesList,
+  getAnimalTypes,
 } from "@/lib/api";
 import { toast } from "react-toastify";
 
 const OWNER_LOOKUP_DEBOUNCE_MS = 600;
 
 function todayYMD() {
-  return new Date().toISOString().split("T")[0];
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 function maxDateYMD() {
   const d = new Date();
   d.setDate(d.getDate() + 30);
-  return d.toISOString().split("T")[0];
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
 
-export default function QuickAppointmentDrawer({ open, onClose }) {
+export default function QuickAppointmentDrawer({ open, onClose, branchIdFromPath = "" }) {
   const params = useParams();
   const searchParams = useSearchParams();
   const branchIdFromParams = params?.branchId;
   const branchIdFromQuery = searchParams?.get("branchId");
-  const branchId = branchIdFromParams || branchIdFromQuery || "";
+  const branchId = branchIdFromParams || branchIdFromQuery || branchIdFromPath || "";
 
   const [owner, setOwner] = useState(null);
   const [ownerSearching, setOwnerSearching] = useState(false);
@@ -47,13 +49,14 @@ export default function QuickAppointmentDrawer({ open, onClose }) {
   const [submitting, setSubmitting] = useState(false);
   const [duplicateWarning, setDuplicateWarning] = useState(null);
   const [forceSaveAfterDuplicate, setForceSaveAfterDuplicate] = useState(false);
+  const [animalTypes, setAnimalTypes] = useState([]);
 
   const getInitialForm = useCallback(() => ({
     ownerName: "",
     mobileSnapshot: "",
     petId: "",
     petNameSnapshot: "",
-    petTypeSnapshot: "",
+    animalTypeId: "",
     doctorId: "",
     serviceId: "",
     packageId: "",
@@ -86,6 +89,13 @@ export default function QuickAppointmentDrawer({ open, onClose }) {
       .then((s) => setServices(Array.isArray(s) ? s : []))
       .catch(() => toast.error("Could not load services"))
       .finally(() => setOptionsLoading(false));
+  }, [open, branchId]);
+
+  useEffect(() => {
+    if (!open || !branchId) return;
+    getAnimalTypes()
+      .then((t) => setAnimalTypes(Array.isArray(t) ? t : []))
+      .catch(() => setAnimalTypes([]));
   }, [open, branchId]);
 
   useEffect(() => {
@@ -169,7 +179,7 @@ export default function QuickAppointmentDrawer({ open, onClose }) {
   }, [open, branchId, form.mobileSnapshot]);
 
   useEffect(() => {
-    if (!branchId || !form.date) {
+    if (!open || !branchId || !form.date) {
       setSlots([]);
       return;
     }
@@ -182,7 +192,7 @@ export default function QuickAppointmentDrawer({ open, onClose }) {
       .then((s) => setSlots(Array.isArray(s) ? s : []))
       .catch(() => setSlots([]))
       .finally(() => setSlotsLoading(false));
-  }, [branchId, form.date, form.doctorId, form.serviceId]);
+  }, [open, branchId, form.date, form.doctorId, form.serviceId]);
 
   const checkDuplicate = useCallback(async () => {
     const mobile = (form.mobileSnapshot || owner?.auth?.phone || "").trim();
@@ -225,7 +235,7 @@ export default function QuickAppointmentDrawer({ open, onClose }) {
         ownerNameSnapshot: ownerName || null,
         mobileSnapshot: mobile,
         petNameSnapshot: (form.petNameSnapshot || (form.petId && patients.find((p) => p.id === Number(form.petId))?.name))?.trim() || null,
-        petTypeSnapshot: form.petTypeSnapshot?.trim() || null,
+        petTypeSnapshot: (animalTypes.find((t) => t.id === Number(form.animalTypeId))?.name ?? null) || null,
         priority: form.priority,
         notes: form.notes?.trim() || null,
       };
@@ -237,7 +247,7 @@ export default function QuickAppointmentDrawer({ open, onClose }) {
     } finally {
       setSubmitting(false);
     }
-  }, [branchId, form, owner, patients, onClose]);
+  }, [branchId, form, owner, patients, animalTypes, onClose]);
 
   const handleSaveAndBook = useCallback(async () => {
     if (!branchId) return;
@@ -278,7 +288,7 @@ export default function QuickAppointmentDrawer({ open, onClose }) {
         ownerNameSnapshot: ownerName || null,
         mobileSnapshot: mobile,
         petNameSnapshot: (form.petNameSnapshot || (form.petId && patients.find((p) => p.id === Number(form.petId))?.name))?.trim() || null,
-        petTypeSnapshot: form.petTypeSnapshot?.trim() || null,
+        petTypeSnapshot: (animalTypes.find((t) => t.id === Number(form.animalTypeId))?.name ?? null) || null,
         priority: form.priority,
         notes: form.notes?.trim() || null,
       };
@@ -290,7 +300,7 @@ export default function QuickAppointmentDrawer({ open, onClose }) {
     } finally {
       setSubmitting(false);
     }
-  }, [branchId, form, owner, patients, checkDuplicate, forceSaveAfterDuplicate, onClose]);
+  }, [branchId, form, owner, patients, animalTypes, checkDuplicate, forceSaveAfterDuplicate, onClose]);
 
   const isToday = form.date === todayYMD();
   const now = new Date();
@@ -394,11 +404,12 @@ export default function QuickAppointmentDrawer({ open, onClose }) {
                           onChange={(e) => {
                             const v = e.target.value;
                             const p = patients.find((x) => x.id === Number(v));
+                            const typeId = p?.animalType?.id ?? (p?.animalType?.name && animalTypes.find((t) => t.name === p.animalType?.name)?.id);
                             setForm((f) => ({
                               ...f,
                               petId: v,
                               petNameSnapshot: p?.name ?? f.petNameSnapshot,
-                              petTypeSnapshot: p?.animalType?.name ?? f.petTypeSnapshot,
+                              animalTypeId: typeId != null ? String(typeId) : "",
                             }));
                           }}
                           disabled={!owner}
@@ -426,13 +437,16 @@ export default function QuickAppointmentDrawer({ open, onClose }) {
                       </div>
                       <div className="col-md-3">
                         <label className="form-label small fw-medium mb-1">Species / Type</label>
-                        <input
-                          type="text"
-                          className="form-control form-control-sm"
-                          placeholder="e.g. Dog, Cat"
-                          value={form.petTypeSnapshot}
-                          onChange={(e) => setForm((f) => ({ ...f, petTypeSnapshot: e.target.value }))}
-                        />
+                        <select
+                          className="form-select form-select-sm"
+                          value={form.animalTypeId}
+                          onChange={(e) => setForm((f) => ({ ...f, animalTypeId: e.target.value }))}
+                        >
+                          <option value="">— Select —</option>
+                          {animalTypes.map((t) => (
+                            <option key={t.id} value={t.id}>{t.name}</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
                   </div>

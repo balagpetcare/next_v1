@@ -22,6 +22,29 @@ type ExceptionItem = {
   doctor?: { id: number; user?: { profile?: { displayName?: string } } };
 };
 
+function normalizeScheduleExceptions(raw: unknown): ExceptionItem[] {
+  if (!Array.isArray(raw)) return [];
+  const out: ExceptionItem[] = [];
+  for (const el of raw) {
+    if (!el || typeof el !== "object") continue;
+    const o = el as Record<string, unknown>;
+    const id = typeof o.id === "number" ? o.id : Number(o.id);
+    const doctorId = typeof o.doctorId === "number" ? o.doctorId : Number(o.doctorId);
+    const date = typeof o.date === "string" ? o.date : "";
+    const type = typeof o.type === "string" ? o.type : "";
+    if (!Number.isFinite(id) || !Number.isFinite(doctorId) || !date || !type) continue;
+    const startTime = typeof o.startTime === "string" ? o.startTime : undefined;
+    const endTime = typeof o.endTime === "string" ? o.endTime : undefined;
+    const note = typeof o.note === "string" ? o.note : undefined;
+    const doctor =
+      o.doctor && typeof o.doctor === "object"
+        ? (o.doctor as ExceptionItem["doctor"])
+        : undefined;
+    out.push({ id, doctorId, date, type, startTime, endTime, note, doctor });
+  }
+  return out;
+}
+
 export default function ClinicScheduleExceptionsPage() {
   const params = useParams();
   const branchId = params?.branchId as string | undefined;
@@ -42,7 +65,7 @@ export default function ClinicScheduleExceptionsPage() {
         ownerClinicScheduleExceptions(branchId),
         ownerClinicStaff(branchId),
       ]);
-      setExceptions(Array.isArray(exList) ? exList : []);
+      setExceptions(normalizeScheduleExceptions(exList));
       const members = (staffRes as { members?: typeof staff })?.members ?? [];
       setStaff(Array.isArray(members) ? members : []);
     } catch (e) {

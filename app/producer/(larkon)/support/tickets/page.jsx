@@ -7,6 +7,9 @@ import { producerTicketsList } from "../../../_lib/producerApi";
 import { getProducerErrorMessage } from "../../../_lib/producerApi";
 import ProducerPageShell from "../../../_components/ProducerPageShell";
 import ProducerSectionCard from "../../../_components/ProducerSectionCard";
+import { PaginationBar } from "@/src/components/common/PaginationBar";
+
+const TICKETS_PAGE_SIZE = 20;
 
 const STATUS_OPTIONS = [
   { value: "", label: "All" },
@@ -54,7 +57,7 @@ export default function ProducerSupportTicketsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await producerTicketsList({ status: status || undefined, priority: priority || undefined, page, pageSize: 20 });
+      const res = await producerTicketsList({ status: status || undefined, priority: priority || undefined, page, pageSize: TICKETS_PAGE_SIZE });
       setData(res || { items: [], total: 0, page: 1, pageSize: 20 });
     } catch (e) {
       setError(getProducerErrorMessage(e));
@@ -154,14 +157,17 @@ export default function ProducerSupportTicketsPage() {
             </table>
           </div>
         )}
-        {total > 20 && (
-          <div className="d-flex justify-content-between align-items-center mt-3">
-            <span className="small text-muted">Page {page} of {Math.ceil(total / 20)}</span>
-            <div className="d-flex gap-1">
-              <button type="button" className="btn btn-outline-secondary btn-sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>Previous</button>
-              <button type="button" className="btn btn-outline-secondary btn-sm" disabled={page >= Math.ceil(total / 20)} onClick={() => setPage((p) => p + 1)}>Next</button>
-            </div>
-          </div>
+        {total > 0 && (
+          <PaginationBar
+            page={page}
+            pageSize={TICKETS_PAGE_SIZE}
+            total={total}
+            totalPages={Math.max(1, Math.ceil(total / TICKETS_PAGE_SIZE))}
+            disabled={loading}
+            onPageChange={setPage}
+            className="mt-3 pt-3 border-top"
+            ariaLabel="Support tickets pages"
+          />
         )}
       </ProducerSectionCard>
     </ProducerPageShell>

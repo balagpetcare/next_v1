@@ -23,7 +23,7 @@ import {
   type ProductsKpiStats,
   type ViewMode,
 } from "@/src/components/products-ui";
-import { Pagination } from "@/src/components/common/Pagination";
+import { PaginationBar } from "@/src/components/common/PaginationBar";
 
 const DEFAULT_FILTERS: ProductsFiltersState = {
   search: "",
@@ -418,35 +418,38 @@ export default function OwnerProductsPage() {
                 </div>
               )}
 
-              {!loading && pagination.totalPages > 1 && (
-                <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-3 pt-3 border-top">
-                  <div className="d-flex align-items-center gap-2">
-                    <span className="small text-muted">Page {pagination.page} of {pagination.totalPages}</span>
-                    <select
-                      className="form-select form-select-sm radius-12"
-                      style={{ width: "auto" }}
-                      value={pageSize}
-                      onChange={(e) => {
-                        const v = Number(e.target.value);
-                        setPageSize(v);
-                        setProductsViewState(userId ?? null, role, { pageSize: v }, orgId, null);
-                        setPagination((p) => ({ ...p, page: 1, limit: v }));
-                      }}
-                    >
-                      <option value={10}>10</option>
-                      <option value={20}>20</option>
-                      <option value={50}>50</option>
-                      <option value={100}>100</option>
-                    </select>
-                  </div>
-                  <Pagination
-                    currentPage={pagination.page}
-                    totalPages={pagination.totalPages}
-                    onPageChange={(page) => setPagination((p) => ({ ...p, page }))}
-                    align="end"
-                    ariaLabel="Products pagination"
-                  />
-                </div>
+              {!loading && pagination.total > 0 && (
+                <PaginationBar
+                  page={pagination.page}
+                  pageSize={pageSize}
+                  total={pagination.total}
+                  totalPages={pagination.totalPages}
+                  disabled={loading}
+                  onPageChange={(p) => setPagination((prev) => ({ ...prev, page: p }))}
+                  className="mt-3 pt-3 border-top"
+                  ariaLabel="Products pages"
+                  endBeforeNav={
+                    <label className="d-flex align-items-center gap-1 small text-muted mb-0">
+                      <span className="text-nowrap">Per page</span>
+                      <select
+                        className="form-select form-select-sm radius-12"
+                        style={{ width: "auto" }}
+                        value={pageSize}
+                        onChange={(e) => {
+                          const v = Number(e.target.value);
+                          setPageSize(v);
+                          setProductsViewState(userId ?? null, role, { pageSize: v }, orgId, null);
+                          setPagination((p) => ({ ...p, page: 1, limit: v }));
+                        }}
+                      >
+                        <option value={10}>10</option>
+                        <option value={20}>20</option>
+                        <option value={50}>50</option>
+                        <option value={100}>100</option>
+                      </select>
+                    </label>
+                  }
+                />
               )}
             </div>
           </div>

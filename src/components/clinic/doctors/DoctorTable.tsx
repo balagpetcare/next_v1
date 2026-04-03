@@ -138,11 +138,11 @@ export default function DoctorTable({
                   <td>{d.packagesAssignedCount}</td>
                   <td>
                     <DoctorStatusBadgeGroup
-                      status={d.status}
-                      contractStatus={d.contractStatus}
-                      bookingStatus={d.bookingStatus}
-                      assignmentType={d.assignmentType}
-                      registrationStatus={d.registrationStatus}
+                      status={d.status ?? undefined}
+                      contractStatus={d.contractStatus ?? undefined}
+                      bookingStatus={d.bookingStatus ?? undefined}
+                      assignmentType={d.assignmentType ?? undefined}
+                      registrationStatus={d.registrationStatus ?? undefined}
                     />
                   </td>
                   {canAssign && (

@@ -58,7 +58,10 @@ export default function AdminStaffPage() {
     [roles]
   )
   const branchOptions = useMemo(
-    () => branches.map((b) => ({ id: b.id, label: `${b.code} — ${b.name}` })),
+    () => branches.map((b) => ({ 
+      id: b.id, 
+      label: `${b.code || `#${b.id}`} — ${b.name}` 
+    })),
     [branches]
   )
 

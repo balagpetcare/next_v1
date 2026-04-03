@@ -7,7 +7,8 @@ import { useBranchContext } from "@/lib/useBranchContext";
 import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
 import Card from "@/src/bpa/components/ui/Card";
-import { staffClinicOwnerLookup, staffClinicPatientsList } from "@/lib/api";
+import { staffClinicOwnerLookup } from "@/lib/api";
+import { staffClinicPatientsPath } from "@/lib/staffClinicPatientRoutes";
 
 const CUSTOMERS_PERMS = ["customers.view", "customers.manage"];
 
@@ -97,7 +98,10 @@ export default function StaffBranchCustomersPage() {
                 <h6 className="mb-2">Owner</h6>
                 <p className="mb-1 small"><strong>{owner.profile?.displayName ?? "—"}</strong></p>
                 <p className="mb-1 small text-muted">{owner.auth?.email ?? ""} {owner.auth?.phone ?? ""}</p>
-                <Link href={`/staff/branch/${branchId}/clinic/patients?ownerId=${owner.id}`} className="btn btn-sm btn-outline-primary">
+                <Link
+                  href={staffClinicPatientsPath(branchId, `ownerId=${encodeURIComponent(String(owner.id))}`)}
+                  className="btn btn-sm btn-outline-primary"
+                >
                   View pets (Clinic → Patients)
                 </Link>
               </div>
@@ -109,7 +113,8 @@ export default function StaffBranchCustomersPage() {
       <div className="card radius-12 mt-3">
         <div className="card-body">
           <p className="small text-muted mb-0">
-            For full patient (pet) list and registration, use <Link href={`/staff/branch/${branchId}/clinic/patients`}>Clinic → Patients</Link>.
+            For full patient (pet) list and registration, use{" "}
+            <Link href={staffClinicPatientsPath(branchId)}>Clinic → Patients</Link>.
           </p>
         </div>
       </div>

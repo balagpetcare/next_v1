@@ -35,14 +35,15 @@ export default function ClinicStaffPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!branchId) return;
+    if (typeof branchId !== "string" || branchId === "") return;
+    const id = branchId;
     async function load() {
       try {
         setLoading(true);
         setError("");
-        const data = await ownerClinicStaff(branchId);
+        const data = await ownerClinicStaff(id);
         const d = data as { branch?: { name: string }; members?: Member[] } | null;
-        setBranchName(d?.branch?.name ?? `Branch #${branchId}`);
+        setBranchName(d?.branch?.name ?? `Branch #${id}`);
         setMembers(Array.isArray(d?.members) ? d.members : []);
       } catch (e) {
         setError((e as Error)?.message || "Failed to load staff");

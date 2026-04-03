@@ -9,6 +9,9 @@ import {
   doctorGetMySettlementBatches,
   doctorGetMyContract,
 } from "@/lib/api";
+import { PaginationBar } from "@/src/components/common/PaginationBar";
+
+const SETTLEMENT_BATCH_PAGE_SIZE = 20;
 
 type LedgerRow = {
   id: number;
@@ -63,6 +66,7 @@ export default function DoctorSettlementPage() {
   const [loading, setLoading] = useState(true);
   const [listLoading, setListLoading] = useState(false);
   const [error, setError] = useState("");
+  const [batchPage, setBatchPage] = useState(1);
 
   const loadProfile = useCallback(async () => {
     try {
@@ -114,7 +118,13 @@ export default function DoctorSettlementPage() {
     try {
       const [sum, bat, cont] = await Promise.all([
         doctorGetMySettlementSummary(selectedBranchId, { from: from || undefined, to: to || undefined }),
-        doctorGetMySettlementBatches(selectedBranchId, { status: status || undefined, from: from || undefined, to: to || undefined, page: 1, limit: 20 }),
+        doctorGetMySettlementBatches(selectedBranchId, {
+          status: status || undefined,
+          from: from || undefined,
+          to: to || undefined,
+          page: batchPage,
+          limit: SETTLEMENT_BATCH_PAGE_SIZE,
+        }),
         doctorGetMyContract(selectedBranchId),
       ]);
       setSummary(sum ?? null);
@@ -125,6 +135,10 @@ export default function DoctorSettlementPage() {
       setBatches(null);
       setContract(null);
     }
+  }, [selectedBranchId, status, from, to, batchPage]);
+
+  useEffect(() => {
+    setBatchPage(1);
   }, [selectedBranchId, status, from, to]);
 
   useEffect(() => {
@@ -227,9 +241,18 @@ export default function DoctorSettlementPage() {
                     </tbody>
                   </table>
                 </div>
-                {batches.pagination.totalPages > 1 && (
-                  <div className="px-3 py-2 small text-muted">
-                    Page 1 of {batches.pagination.totalPages} ({batches.pagination.total} batches)
+                {batches.pagination.total > 0 && (
+                  <div className="px-3 pb-3">
+                    <PaginationBar
+                      page={batchPage}
+                      pageSize={SETTLEMENT_BATCH_PAGE_SIZE}
+                      total={batches.pagination.total}
+                      totalPages={Math.max(1, batches.pagination.totalPages)}
+                      disabled={false}
+                      onPageChange={setBatchPage}
+                      className="mt-0 pt-3 border-top"
+                      ariaLabel="Settlement batches pages"
+                    />
                   </div>
                 )}
               </div>

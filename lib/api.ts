@@ -9,12 +9,21 @@ const base =
 
 async function parseError(res: Response): Promise<never> {
   let msg = `Request failed (${res.status})`;
+  let code: string | undefined;
+  let unmet: string[] | undefined;
+  let errors: unknown[] | undefined;
   try {
     const j = await res.json();
     if (j?.message) msg = j.message;
+    if (typeof j?.code === "string") code = j.code;
+    if (Array.isArray(j?.unmet)) unmet = j.unmet as string[];
+    if (Array.isArray(j?.errors)) errors = j.errors as unknown[];
   } catch {}
-  const err = new Error(msg) as Error & { status?: number };
+  const err = new Error(msg) as Error & { status?: number; code?: string; unmet?: string[]; errors?: unknown[] };
   err.status = res.status;
+  if (code) err.code = code;
+  if (unmet?.length) err.unmet = unmet;
+  if (errors?.length) err.errors = errors;
   throw err;
 }
 
@@ -30,6 +39,16 @@ export async function apiGet<T = any>(path: string): Promise<T> {
   });
   if (!res.ok) return parseError(res);
   return res.json();
+}
+
+async function fetchTextResponse(path: string, accept = "text/csv,*/*;q=0.8"): Promise<string> {
+  const res = await fetch(`${base}${path}`, {
+    method: "GET",
+    credentials: "include",
+    headers: { Accept: accept, ...getApiHeaders() },
+  });
+  if (!res.ok) return parseError(res);
+  return res.text();
 }
 
 export async function apiPost<T = any>(path: string, body?: any): Promise<T> {
@@ -84,8 +103,39 @@ export async function getAnimalTypes(): Promise<{ id: number; name: string }[]> 
 
 /** GET /api/v1/common/breeds/:typeId */
 export async function getBreedsByAnimalType(typeId: number): Promise<{ id: number; name: string }[]> {
-  const res = await apiGet<{ success?: boolean; breeds?: { id: number; name: string }[] }>(`/api/v1/common/breeds/${typeId}`);
-  return res?.breeds ?? [];
+  const res = await apiGet<{ success?: boolean; breeds?: { id: number; name: string }[]; data?: { breeds?: { id: number; name: string }[] } }>(`/api/v1/common/breeds/${typeId}`);
+  const list = res?.breeds ?? res?.data?.breeds;
+  return Array.isArray(list) ? list : [];
+}
+
+/** GET /api/v1/common/animal-categories */
+export async function getAnimalCategories(): Promise<{ id: number; code: string; name: string; displayOrder: number }[]> {
+  const res = await apiGet<{ success?: boolean; categories?: { id: number; code: string; name: string; displayOrder: number }[] }>("/api/v1/common/animal-categories");
+  return res?.categories ?? [];
+}
+
+/** GET /api/v1/common/breeds/:breedId/sub-breeds */
+export async function getSubBreedsByBreed(breedId: number): Promise<{ id: number; code: string; name: string }[]> {
+  const res = await apiGet<{ success?: boolean; subBreeds?: { id: number; code: string; name: string }[] }>(`/api/v1/common/breeds/${breedId}/sub-breeds`);
+  return res?.subBreeds ?? [];
+}
+
+/** GET /api/v1/common/animal-colors */
+export async function getAnimalColors(): Promise<{ id: number; code: string; name: string }[]> {
+  const res = await apiGet<{ success?: boolean; colors?: { id: number; code: string; name: string }[] }>("/api/v1/common/animal-colors");
+  return res?.colors ?? [];
+}
+
+/** GET /api/v1/common/coat-patterns */
+export async function getCoatPatterns(): Promise<{ id: number; code: string; name: string }[]> {
+  const res = await apiGet<{ success?: boolean; patterns?: { id: number; code: string; name: string }[] }>("/api/v1/common/coat-patterns");
+  return res?.patterns ?? [];
+}
+
+/** GET /api/v1/common/animal-sizes */
+export async function getAnimalSizes(): Promise<{ id: number; code: string; name: string }[]> {
+  const res = await apiGet<{ success?: boolean; sizes?: { id: number; code: string; name: string }[] }>("/api/v1/common/animal-sizes");
+  return res?.sizes ?? [];
 }
 
 /** GET /api/v1/me/location – profile, places, events, geoKeys */
@@ -402,7 +452,12 @@ export async function staffStockRequestGet(id: number) {
   return res?.data ?? null;
 }
 
-export async function staffStockRequestCreate(body: { branchId: number; items: { productId: number; variantId: number; requestedQty: number; note?: string }[] }) {
+export async function staffStockRequestCreate(body: {
+  branchId: number;
+  orgId?: number;
+  requesterStaffId?: number;
+  items: { productId: number; variantId: number; requestedQty: number; note?: string }[];
+}) {
   return apiPost<{ success?: boolean; data?: any; message?: string }>("/api/v1/stock-requests", body);
 }
 
@@ -418,10 +473,48 @@ export async function staffStockRequestCancel(id: number) {
   return apiPost<{ success?: boolean; data?: any; message?: string }>(`/api/v1/stock-requests/${id}/cancel`, {});
 }
 
+/** AI replenishment suggestions (Phase 4) */
+export async function staffAiReplenishmentSuggestions(branchId: string | number) {
+  const res = await apiGet<{ success?: boolean; data?: any[] }>(
+    `/api/v1/ai/replenishment/suggestions?branchId=${encodeURIComponent(String(branchId))}`
+  );
+  return res?.data ?? [];
+}
+
+export async function staffAiAcceptReplenishmentSuggestion(id: number) {
+  return apiPost<{ success?: boolean; data?: any; message?: string }>(`/api/v1/ai/replenishment/suggestions/${id}/accept`, {});
+}
+
+export async function staffAiDismissReplenishmentSuggestion(id: number) {
+  return apiPost<{ success?: boolean; message?: string }>(`/api/v1/ai/replenishment/suggestions/${id}/dismiss`, {});
+}
+
+export async function staffAiBulkDismissReplenishmentSuggestions(branchId: string | number, ids: number[]) {
+  return apiPost<{ success?: boolean; data?: { dismissed?: number; errors?: string[] } }>(
+    `/api/v1/ai/replenishment/suggestions/bulk-dismiss`,
+    { ids }
+  );
+}
+
+export async function staffAiBulkAcceptReplenishmentSuggestions(branchId: string | number, ids: number[]) {
+  return apiPost<{ success?: boolean; data?: { accepted?: number; stockRequestIds?: number[]; errors?: string[] } }>(
+    `/api/v1/ai/replenishment/suggestions/bulk-accept`,
+    { ids }
+  );
+}
+
 /** GET /api/v1/inventory/dispatches/incoming?branchId= – Incoming (IN_TRANSIT) dispatches for branch */
 export async function staffGetIncomingDispatches(branchId: string | number) {
   const res = await apiGet<{ success?: boolean; data?: any[] }>(`/api/v1/inventory/dispatches/incoming?branchId=${encodeURIComponent(String(branchId))}`);
   return res?.data ?? [];
+}
+
+/** GET /api/v1/inventory/receipts/incoming-unified?branchId= – Dispatches (PACKED|IN_TRANSIT) + transfers (SENT|IN_TRANSIT) for Receive Center */
+export async function staffGetIncomingInboundUnified(branchId: string | number) {
+  const res = await apiGet<{ success?: boolean; data?: any[] }>(
+    `/api/v1/inventory/receipts/incoming-unified?branchId=${encodeURIComponent(String(branchId))}`
+  );
+  return Array.isArray(res?.data) ? res.data : [];
 }
 
 /** GET /api/v1/inventory/dispatches/:id – Dispatch detail with items (for receive flow) */
@@ -442,6 +535,7 @@ export async function staffReceiveDispatch(
 export async function staffStockRequestProducts(
   branchId: string,
   opts?: {
+    orgId?: number;
     search?: string;
     page?: number;
     limit?: number;
@@ -451,17 +545,21 @@ export async function staffStockRequestProducts(
 ) {
   const params = new URLSearchParams();
   params.set("branchId", branchId);
+  if (opts?.orgId != null && Number.isFinite(Number(opts.orgId))) {
+    params.set("orgId", String(opts.orgId));
+  }
   if (opts?.search) params.set("search", opts.search);
   if (opts?.page != null) params.set("page", String(opts.page));
   if (opts?.limit != null) params.set("limit", String(opts.limit));
   if (opts?.sort) params.set("sort", opts.sort);
   if (opts?.stockStatus) params.set("stockStatus", opts.stockStatus);
-  const res = await apiGet<{ success?: boolean; data?: StockRequestProduct[]; pagination?: StockRequestProductsPagination }>(
+  const res = await apiGet<{ success?: boolean; data?: StockRequestProduct[]; pagination?: StockRequestProductsPagination; meta?: StockRequestProductsMeta }>(
     `/api/v1/inventory/stock-request-products?${params}`
   );
   return {
     items: (res as any)?.data ?? [],
     pagination: (res as any)?.pagination ?? { page: 1, limit: 30, total: 0, totalPages: 1 },
+    meta: (res as any)?.meta,
   };
 }
 
@@ -472,8 +570,17 @@ export type StockRequestProductVariant = {
   barcode: string | null;
   productId: number;
   stockOnHand: number;
+  centralOnHand?: number;
+  availableQty?: number;
+  reservedQty?: number;
   lowStockThreshold: number;
   usageMetric: number;
+  batchInfo?: {
+    activeLots: number;
+    nearestExpiry: Date | null;
+    nearExpiryQty: number;
+    expiredQty: number;
+  };
 };
 
 export type StockRequestProduct = {
@@ -483,6 +590,15 @@ export type StockRequestProduct = {
   category: { id: number; name: string } | null;
   brand: { id: number; name: string } | null;
   variants: StockRequestProductVariant[];
+};
+
+export type StockRequestProductsMeta = {
+  pickerRule?: string;
+  branchLocalLocationCount?: number;
+  centralLocationCount?: number;
+  defaultLocationCreated?: boolean;
+  catalogTruncated?: boolean;
+  rawProductCount?: number;
 };
 
 export type StockRequestProductsPagination = {
@@ -678,12 +794,17 @@ export async function getMeInvitations(): Promise<{ id: number; branchId: number
 
 /** POST /api/v1/me/invitations/:id/accept */
 export async function acceptMeInvitation(inviteId: number): Promise<{ success: boolean; message?: string; data?: any }> {
-  return apiPost<{ success?: boolean; message?: string; data?: any }>(`/api/v1/me/invitations/${inviteId}/accept`, {});
+  const res = await apiPost<{ success?: boolean; message?: string; data?: any }>(
+    `/api/v1/me/invitations/${inviteId}/accept`,
+    {}
+  );
+  return { success: Boolean(res?.success), message: res?.message, data: res?.data };
 }
 
 /** POST /api/v1/me/invitations/:id/decline */
 export async function declineMeInvitation(inviteId: number): Promise<{ success: boolean; message?: string }> {
-  return apiPost<{ success?: boolean; message?: string }>(`/api/v1/me/invitations/${inviteId}/decline`, {});
+  const res = await apiPost<{ success?: boolean; message?: string }>(`/api/v1/me/invitations/${inviteId}/decline`, {});
+  return { success: Boolean(res?.success), message: res?.message };
 }
 
 // ========== Doctor Panel – /api/v1/doctor/* ==========
@@ -756,6 +877,43 @@ export async function doctorListAppointments(params?: {
   if (params?.offset != null) q.set("offset", String(params.offset));
   const res = await apiGet<{ success?: boolean; data?: { appointments: any[]; total: number } }>(`/api/v1/doctor/appointments?${q}`);
   return { appointments: res?.data?.appointments ?? [], total: res?.data?.total ?? 0 };
+}
+
+/** GET /api/v1/doctor/surgeries – list surgeries where current doctor is primary or staff */
+export async function doctorListSurgeries(params?: { branchId?: number; dateFrom?: string; dateTo?: string; status?: string; limit?: number; offset?: number }) {
+  const q = new URLSearchParams();
+  if (params?.branchId != null) q.set("branchId", String(params.branchId));
+  if (params?.dateFrom) q.set("dateFrom", params.dateFrom);
+  if (params?.dateTo) q.set("dateTo", params.dateTo);
+  if (params?.status) q.set("status", params.status);
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const res = await apiGet<{ success?: boolean; data?: { items: any[]; total: number } }>(`/api/v1/doctor/surgeries${q.toString() ? `?${q}` : ""}`);
+  return res?.data ?? { items: [], total: 0 };
+}
+
+/** GET /api/v1/doctor/surgeries/:id */
+export async function doctorGetSurgery(id: number) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`/api/v1/doctor/surgeries/${id}`);
+  return res?.data ?? null;
+}
+
+/** PATCH /api/v1/doctor/surgeries/:id/notes */
+export async function doctorUpdateSurgeryNotes(id: number, body: { operativeNotes?: string; postopNotes?: string; complicationNotes?: string }) {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(`/api/v1/doctor/surgeries/${id}/notes`, body);
+  return res?.data ?? null;
+}
+
+/** POST /api/v1/doctor/surgeries/:id/start */
+export async function doctorSurgeryStart(id: number) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`/api/v1/doctor/surgeries/${id}/start`, {});
+  return res?.data ?? null;
+}
+
+/** POST /api/v1/doctor/surgeries/:id/complete */
+export async function doctorSurgeryComplete(id: number) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`/api/v1/doctor/surgeries/${id}/complete`, {});
+  return res?.data ?? null;
 }
 
 /** POST /api/v1/doctor/appointments/:id/confirm - BOOKED -> CONFIRMED */
@@ -865,6 +1023,145 @@ export async function doctorGetVisit(visitId: number) {
   return res?.data ?? null;
 }
 
+export async function doctorAddVisitNote(visitId: number, body: { noteType?: string; contentJson?: Record<string, unknown> }) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`/api/v1/doctor/visits/${visitId}/notes`, body);
+  return res?.data ?? null;
+}
+
+/** `tempC` is degrees Celsius (API/DB storage). Convert in UI via `@/lib/temperature`. */
+export async function doctorAddVisitVital(visitId: number, body: { weightKg?: number; tempC?: number; heartRate?: number; respRate?: number; notes?: string }) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`/api/v1/doctor/visits/${visitId}/vitals`, body);
+  return res?.data ?? null;
+}
+
+export async function doctorGetVisitBillingSummary(visitId: number) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`/api/v1/doctor/visits/${visitId}/billing-summary`);
+  return res?.data ?? null;
+}
+
+export async function doctorGetCompletionEligibility(visitId: number) {
+  const res = await apiGet<{ success?: boolean; data?: { eligible: boolean; unmet: string[]; canOverride: boolean; policy?: unknown; isEmergency?: boolean; isFollowUpOnly?: boolean } }>(
+    `/api/v1/doctor/visits/${visitId}/completion-eligibility`
+  );
+  return res?.data ?? null;
+}
+
+export async function doctorCompleteVisit(visitId: number, body?: { overrideReason?: string }) {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(`/api/v1/doctor/visits/${visitId}/complete`, body ?? {});
+  return res?.data ?? null;
+}
+
+export async function doctorCreateVisitFollowUp(
+  visitId: number,
+  body: { followUpDate: string; followUpNotes?: string; createAppointment?: boolean }
+) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`/api/v1/doctor/visits/${visitId}/follow-up`, body);
+  return res?.data ?? null;
+}
+
+export async function doctorCreateVisitLabRequisition(visitId: number, body: { testsJson: any; notes?: string }) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`/api/v1/doctor/visits/${visitId}/lab-requisitions`, body);
+  return res?.data ?? null;
+}
+
+export type MedicineCatalogSearchItem = {
+  countryMedicineBrandId: number;
+  source: string;
+  countryId: number;
+  brandName: string;
+  manufacturerName: string;
+  genericName: string;
+  strengthDisplay: string;
+  dosageForm: string;
+  packageMarkDisplay: string | null;
+  isActive?: boolean;
+};
+
+export type MedicineCatalogSearchResponse = {
+  items: MedicineCatalogSearchItem[];
+  pagination: { page: number; limit: number; total: number; totalPages: number };
+  notice?: string;
+  /** Organization’s national catalog scope (e.g. BD = Bangladesh). */
+  catalogCountry?: { code: string | null; name: string | null };
+};
+
+export async function doctorMedicineCatalogSearch(
+  branchId: number,
+  params: { q: string; page?: number; limit?: number; genericId?: number; manufacturerId?: number; dosageFormId?: number; strength?: string }
+): Promise<MedicineCatalogSearchResponse> {
+  const q = new URLSearchParams();
+  q.set("branchId", String(branchId));
+  q.set("q", params.q);
+  if (params.page != null) q.set("page", String(params.page));
+  if (params.limit != null) q.set("limit", String(params.limit));
+  if (params.genericId != null) q.set("genericId", String(params.genericId));
+  if (params.manufacturerId != null) q.set("manufacturerId", String(params.manufacturerId));
+  if (params.dosageFormId != null) q.set("dosageFormId", String(params.dosageFormId));
+  if (params.strength) q.set("strength", params.strength);
+  const res = await apiGet<{ success?: boolean; data?: MedicineCatalogSearchResponse }>(
+    `/api/v1/doctor/medicine-catalog/search?${q.toString()}`
+  );
+  return (
+    res?.data ?? {
+      items: [],
+      pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+      catalogCountry: { code: null, name: null },
+    }
+  );
+}
+
+export async function doctorMedicineCatalogBrand(branchId: number, brandListingId: number) {
+  const q = new URLSearchParams({ branchId: String(branchId) });
+  const res = await apiGet<{ success?: boolean; data?: Record<string, unknown> }>(
+    `/api/v1/doctor/medicine-catalog/brands/${brandListingId}?${q}`
+  );
+  return res?.data ?? null;
+}
+
+export type PrescriptionLineInput = {
+  medicineName: string;
+  dosage: string;
+  frequency: string;
+  duration: string;
+  quantity?: number;
+  instructions?: string;
+  productVariantId?: number;
+  clinicalItemVariantId?: number;
+  countryMedicineBrandId?: number | null;
+};
+
+export async function doctorCreateVisitPrescription(visitId: number, body: { notes?: string; items: PrescriptionLineInput[] }) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`/api/v1/doctor/visits/${visitId}/prescriptions`, body);
+  return res?.data ?? null;
+}
+
+export async function doctorFinalizePrescription(prescriptionId: number) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`/api/v1/doctor/prescriptions/${prescriptionId}/finalize`, {});
+  return res?.data ?? null;
+}
+
+export async function doctorUpdatePrescription(
+  prescriptionId: number,
+  body: { notes?: string; items?: PrescriptionLineInput[] }
+) {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(`/api/v1/doctor/prescriptions/${prescriptionId}`, body);
+  return res?.data ?? null;
+}
+
+export async function doctorAddVisitAttachment(
+  visitId: number,
+  body: { fileUrl: string; fileName?: string; fileType?: string; note?: string }
+) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`/api/v1/doctor/visits/${visitId}/attachments`, body);
+  return res?.data ?? null;
+}
+
+export async function doctorGetProductivity(params?: { date?: string }) {
+  const q = params?.date ? `?date=${encodeURIComponent(params.date)}` : "";
+  const res = await apiGet<{ success?: boolean; data?: any }>(`/api/v1/doctor/productivity${q}`);
+  return res?.data ?? null;
+}
+
 export async function doctorUpdateBranchFee(branchMemberId: number, defaultConsultationFee: number | null) {
   const res = await apiPatch<{ success?: boolean; data?: any }>(
     `/api/v1/doctor/profile/branches/${branchMemberId}/fee`,
@@ -913,6 +1210,11 @@ export async function doctorPutMyServices(
   body: { services: Array<{ serviceId: number; fee: number; species?: string | null; durationMin?: number | null; isActive?: boolean; notes?: string | null }> }
 ) {
   const res = await apiPut<{ success?: boolean; data?: any[] }>(`/api/v1/doctor/clinics/${branchId}/my-services`, body);
+  return res?.data ?? [];
+}
+
+export async function doctorPostMyServicesAcknowledge(branchId: number, body: { serviceId: number; species?: string | null }) {
+  const res = await apiPost<{ success?: boolean; data?: any[] }>(`/api/v1/doctor/clinics/${branchId}/my-services/acknowledge`, body);
   return res?.data ?? [];
 }
 
@@ -1401,7 +1703,14 @@ export async function staffClinicDoctors(branchId: string): Promise<{ id: number
     const res = await apiGet<{ success?: boolean; data?: { doctors?: { id: number; displayName: string }[] } }>(`${clinicBase(branchId)}/doctors`);
     const raw = res?.data?.doctors ?? (Array.isArray(res?.data) ? res.data : null);
     if (!Array.isArray(raw)) return [];
-    return raw.map((d: any) => ({ id: Number(d.id), displayName: d.displayName ?? d.name ?? "Doctor #" + d.id }));
+    return raw.map((d: any) => ({
+      id: Number(d.id),
+      displayName:
+        d.displayName ??
+        d.name ??
+        d.user?.profile?.displayName ??
+        (Number.isFinite(Number(d.id)) ? `Doctor #${d.id}` : "Doctor"),
+    }));
   } catch {
     return [];
   }
@@ -1532,13 +1841,79 @@ export async function staffDoctorApprovals(branchId: string, memberId: number) {
   return Array.isArray(res?.data) ? res.data : [];
 }
 
-/** GET /api/v1/clinic/branches/:branchId/approval-requests */
-export async function staffClinicApprovalRequestsList(branchId: string, params?: { status?: string; requestType?: string }) {
+export type StaffClinicApprovalListParams = {
+  status?: string;
+  requestType?: string;
+  requestTypes?: string;
+  doctorQueue?: boolean;
+  requestedByUserId?: number;
+  memberId?: number;
+  from?: string;
+  to?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+};
+
+function normalizeClinicApprovalListPayload(data: unknown): { items: any[]; total: number } {
+  if (Array.isArray(data)) return { items: data, total: data.length };
+  if (data && typeof data === "object" && Array.isArray((data as { items?: unknown }).items)) {
+    const items = (data as { items: any[] }).items;
+    const total = Number((data as { total?: unknown }).total);
+    return { items, total: Number.isFinite(total) ? total : items.length };
+  }
+  return { items: [], total: 0 };
+}
+
+/** GET /api/v1/clinic/branches/:branchId/approval-requests — returns `{ items, total }`. */
+export async function staffClinicApprovalRequestsList(
+  branchId: string,
+  params?: StaffClinicApprovalListParams
+): Promise<{ items: any[]; total: number }> {
   const q = new URLSearchParams();
   if (params?.status) q.set("status", params.status);
   if (params?.requestType) q.set("requestType", params.requestType);
-  const res = await apiGet<{ success?: boolean; data?: any[] }>(`${clinicBase(branchId)}/approval-requests${q.toString() ? `?${q}` : ""}`);
-  return Array.isArray(res?.data) ? res.data : [];
+  if (params?.requestTypes) q.set("requestTypes", params.requestTypes);
+  if (params?.doctorQueue) q.set("doctorQueue", "1");
+  if (params?.requestedByUserId != null) q.set("requestedByUserId", String(params.requestedByUserId));
+  if (params?.memberId != null) q.set("memberId", String(params.memberId));
+  if (params?.from) q.set("from", params.from);
+  if (params?.to) q.set("to", params.to);
+  if (params?.q?.trim()) q.set("q", params.q.trim());
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const res = await apiGet<{ success?: boolean; data?: unknown }>(
+    `${clinicBase(branchId)}/approval-requests${q.toString() ? `?${q}` : ""}`
+  );
+  return normalizeClinicApprovalListPayload(res?.data);
+}
+
+/** GET /api/v1/clinic/branches/:branchId/approval-requests/summary */
+export async function staffClinicApprovalRequestsSummary(
+  branchId: string,
+  params?: { doctorQueue?: boolean }
+): Promise<{
+  totalPending: number;
+  highPriority: number;
+  slaBreached: number;
+  approvedToday: number;
+  rejectedToday: number;
+} | null> {
+  const q = new URLSearchParams();
+  if (params?.doctorQueue) q.set("doctorQueue", "1");
+  const suffix = q.toString() ? `?${q}` : "";
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/approval-requests/summary${suffix}`
+  );
+  return res?.data ?? null;
+}
+
+/** GET /api/v1/clinic/branches/:branchId/approval-requests/:requestId */
+export async function staffClinicApprovalRequestById(branchId: string, requestId: number) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/approval-requests/${requestId}`
+  );
+  return res?.data ?? null;
 }
 
 export async function staffApprovalDecide(
@@ -1624,6 +1999,8 @@ export async function staffDoctorsPerformanceSummary(branchId: string, params?: 
 export type StaffDoctorsAuditLogsParams = {
   memberId?: number;
   action?: string;
+  /** Backend filters DoctorAuditLog.action with startsWith (e.g. SERVICE_MAPPING). */
+  actionPrefix?: string;
   from?: string;
   to?: string;
   limit?: number;
@@ -1634,6 +2011,7 @@ export async function staffDoctorsAuditLogs(branchId: string, params?: StaffDoct
   const q = new URLSearchParams();
   if (params?.memberId != null) q.set("memberId", String(params.memberId));
   if (params?.action) q.set("action", params.action);
+  if (params?.actionPrefix) q.set("actionPrefix", params.actionPrefix);
   if (params?.from) q.set("from", params.from);
   if (params?.to) q.set("to", params.to);
   if (params?.limit != null) q.set("limit", String(params.limit));
@@ -1744,6 +2122,149 @@ export async function staffDoctorDeleteScheduleException(branchId: string, membe
 export async function staffDoctorsPutServiceMatrix(branchId: string, body: { bulkAssign?: boolean; assignments?: any[] }) {
   const res = await apiPut<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/service-matrix`, body);
   return res?.data ?? res;
+}
+
+/** Enterprise doctor–service assignment: directory summary (doctor list + counts). */
+export async function staffDoctorsServiceAssignmentSummary(branchId: string) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/doctors/service-assignment/summary`
+  );
+  return res?.data ?? { doctors: [], totalDoctors: 0, totalActiveServices: 0 };
+}
+
+/** Per-doctor assignment workspace payload (categories, allowed roles, fees). */
+export async function staffDoctorsServiceAssignmentDetail(branchId: string, memberId: number) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/doctors/${memberId}/service-assignment`
+  );
+  return res?.data ?? null;
+}
+
+export async function staffDoctorsPatchServiceAssignmentBulk(
+  branchId: string,
+  memberId: number,
+  body: { ops: Array<{ op: "upsert" | "delete"; serviceId: number; role?: string; isAllowed?: boolean }> }
+) {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/doctors/${memberId}/service-assignment/bulk`,
+    body
+  );
+  return res?.data ?? res;
+}
+
+export async function staffDoctorsServiceAssignmentTemplates(branchId: string, params?: { memberId?: number }) {
+  const q = new URLSearchParams();
+  if (params?.memberId != null) q.set("memberId", String(params.memberId));
+  const suffix = q.toString() ? `?${q}` : "";
+  const res = await apiGet<{ success?: boolean; data?: { items?: any[] } }>(
+    `${clinicBase(branchId)}/doctors/service-assignment/templates${suffix}`
+  );
+  return Array.isArray(res?.data?.items) ? res.data.items : [];
+}
+
+export async function staffDoctorsPostServiceAssignmentTemplate(branchId: string, body: Record<string, unknown>) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/doctors/service-assignment/templates`,
+    body
+  );
+  return res?.data ?? res;
+}
+
+export async function staffDoctorsPatchServiceAssignmentTemplate(
+  branchId: string,
+  templateId: number,
+  body: Record<string, unknown>
+) {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/doctors/service-assignment/templates/${templateId}`,
+    body
+  );
+  return res?.data ?? res;
+}
+
+export async function staffDoctorsDeleteServiceAssignmentTemplate(branchId: string, templateId: number) {
+  await apiDelete(`${clinicBase(branchId)}/doctors/service-assignment/templates/${templateId}`);
+}
+
+export async function staffDoctorsApplyServiceAssignmentTemplate(
+  branchId: string,
+  templateId: number,
+  body: { memberId: number; mode?: "merge" | "replace" }
+) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/doctors/service-assignment/templates/${templateId}/apply`,
+    body
+  );
+  return res?.data ?? res;
+}
+
+export async function staffClinicServicePricingMatrix(branchId: string, params?: { limit?: number }) {
+  const q = new URLSearchParams();
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  const suffix = q.toString() ? `?${q}` : "";
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/service-pricing/matrix${suffix}`);
+  return res?.data ?? { services: [], doctors: [], feeRows: [], mappings: [] };
+}
+
+export async function staffClinicPatchServicePricing(branchId: string, serviceId: number, body: Record<string, unknown>) {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/services/${serviceId}/pricing`, body);
+  return res?.data ?? res;
+}
+
+export async function staffClinicGetServicePricingHistory(
+  branchId: string,
+  serviceId: number,
+  params?: { limit?: number }
+): Promise<any[]> {
+  const q = new URLSearchParams();
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  const suffix = q.toString() ? `?${q}` : "";
+  const res = await apiGet<{ success?: boolean; data?: { items?: any[] } }>(
+    `${clinicBase(branchId)}/services/${serviceId}/pricing-history${suffix}`
+  );
+  const items = res?.data?.items;
+  return Array.isArray(items) ? items : [];
+}
+
+export async function staffClinicGetDoctorFeeHistory(
+  branchId: string,
+  memberId: number,
+  params?: { limit?: number }
+): Promise<any[]> {
+  const q = new URLSearchParams();
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  const suffix = q.toString() ? `?${q}` : "";
+  const res = await apiGet<{ success?: boolean; data?: { items?: any[] } }>(
+    `${clinicBase(branchId)}/doctors/${memberId}/fee-history${suffix}`
+  );
+  const items = res?.data?.items;
+  return Array.isArray(items) ? items : [];
+}
+
+export async function staffClinicPutService(branchId: string, serviceId: number, body: Record<string, unknown>) {
+  const res = await apiPut<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/services/${serviceId}`, body);
+  return res?.data ?? res;
+}
+
+export async function staffClinicListServiceMedia(branchId: string, serviceId: number) {
+  const res = await apiGet<{ success?: boolean; data?: { items?: any[] } }>(`${clinicBase(branchId)}/services/${serviceId}/media`);
+  return res?.data?.items ?? [];
+}
+
+export async function staffClinicPutServiceMedia(
+  branchId: string,
+  serviceId: number,
+  items: Array<{ mediaId: number; kind?: string; sortOrder?: number }>
+) {
+  const res = await apiPut<{ success?: boolean; data?: { items?: any[] } }>(`${clinicBase(branchId)}/services/${serviceId}/media`, { items });
+  return res?.data?.items ?? [];
+}
+
+/** Full service row from branch services list (includes pricing/content fields when API returns them). */
+export async function staffClinicGetServiceById(branchId: string, serviceId: number): Promise<any | null> {
+  const res = await apiGet<{ success?: boolean; data?: { items?: any[] } }>(`${clinicBase(branchId)}/services`);
+  const items = res?.data?.items ?? [];
+  return items.find((s: any) => Number(s.id) === serviceId) ?? null;
 }
 
 export async function staffClinicItemSearch(branchId: string, params?: { q?: string; limit?: number }): Promise<unknown[]> {
@@ -2268,6 +2789,49 @@ export async function staffClinicCheckDuplicate(
   return { possibleDuplicate: d.possibleDuplicate ?? false, existing: d.existing ?? [] };
 }
 
+/** Owner lookup by phone or email (clinic patients). */
+export async function staffClinicFindOwner(branchId: string, q: string): Promise<{ id: number; profile?: { displayName?: string; username?: string }; auth?: { email?: string | null; phone?: string | null } } | null> {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/patients/owner-lookup?q=${encodeURIComponent(q)}`);
+  return res?.data ?? null;
+}
+
+/** Ensure owner exists by phone and/or email; create minimal User + OwnerProfile if needed. At least one of phone or email is required. */
+export async function staffClinicEnsureOwner(branchId: string, body: { phone?: string; email?: string; displayName?: string }): Promise<{ id: number; profile?: { displayName?: string; username?: string }; auth?: { email?: string | null; phone?: string | null } }> {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/patients/ensure-owner`, body);
+  if (!res?.data) throw new Error("Ensure owner failed");
+  return res.data;
+}
+
+/** Register patient (pet) for clinic; canonical Pet with userId. Same endpoint as staffClinicPatientRegister below; prefer staffClinicPatientRegister in app code. */
+export async function staffClinicRegisterPatient(
+  branchId: string,
+  body: {
+    userId: number;
+    name: string;
+    animalTypeId: number;
+    breedId?: number;
+    sex?: string;
+    dateOfBirth?: string;
+    microchipNumber?: string;
+    allergies?: any;
+    bloodType?: string;
+    notes?: string;
+    isRescue?: boolean;
+    isNeutered?: boolean;
+    foodHabits?: string;
+    healthDisorders?: string;
+  }
+): Promise<any> {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/patients`, body);
+  return res?.data;
+}
+
+/** Link pet to another owner (reassign Pet.userId). */
+export async function staffClinicLinkOwner(branchId: string, petId: number, userId: number): Promise<any> {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/patients/${petId}/link-owner`, { userId });
+  return res?.data;
+}
+
 // ========== Staff Clinic Enterprise: Packages, Cases, Consumption, Vial Returns ==========
 const clinicApiBase = "/api/v1/clinic";
 
@@ -2452,11 +3016,12 @@ export async function staffClinicVialReturnMarkReturned(branchId: string, contro
 // ---------- Medicine Control (CCMLPA) ----------
 export async function staffClinicDispenseRequestsList(
   branchId: string,
-  params?: { status?: string; requestType?: string; take?: number; skip?: number }
+  params?: { status?: string; requestType?: string; transactionType?: string; take?: number; skip?: number }
 ): Promise<any[]> {
   const q = new URLSearchParams();
   if (params?.status) q.set("status", params.status);
   if (params?.requestType) q.set("requestType", params.requestType);
+  if (params?.transactionType) q.set("transactionType", params.transactionType);
   if (params?.take != null) q.set("take", String(params.take));
   if (params?.skip != null) q.set("skip", String(params.skip));
   const res = await apiGet<{ success?: boolean; data?: any }>(
@@ -2464,6 +3029,26 @@ export async function staffClinicDispenseRequestsList(
   );
   const d = res?.data;
   return Array.isArray(d) ? d : (d?.list ?? d?.items ?? []);
+}
+
+/** Create dispense request (optional prescriptionId, transactionType; items may include clinicalItemVariantId). */
+export async function staffClinicDispenseRequestCreate(
+  branchId: string,
+  body: {
+    visitId?: number | null;
+    prescriptionId?: number | null;
+    transactionType?: string | null;
+    requestType?: string | null;
+    requestReason?: string | null;
+    patientId?: number | null;
+    items: { variantId: number; clinicalItemVariantId?: number | null; requestedQty: number; unit?: string | null; reason?: string | null }[];
+  }
+): Promise<any> {
+  const res = await apiPost<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/dispense-request`,
+    body
+  );
+  return res?.data;
 }
 
 /** Internal Order + Vial Workflow: treatment course, billing, internal orders */
@@ -2681,6 +3266,15 @@ export async function staffClinicDispenseRequestIssue(branchId: string, requestI
   return res?.data;
 }
 
+/** Mark dispense request as received (injection room / pharmacy handoff). Only for ISSUED or PARTIALLY_ISSUED. */
+export async function staffClinicReceiveDispenseRequest(branchId: string, requestId: number): Promise<any> {
+  const res = await apiPost<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/dispense-request/${requestId}/receive`,
+    {}
+  );
+  return res?.data;
+}
+
 export async function staffClinicVialSessionsList(
   branchId: string,
   params?: { status?: string; variantId?: number; take?: number; skip?: number }
@@ -2690,45 +3284,109 @@ export async function staffClinicVialSessionsList(
   if (params?.variantId != null) q.set("variantId", String(params.variantId));
   if (params?.take != null) q.set("take", String(params.take));
   if (params?.skip != null) q.set("skip", String(params.skip));
-  const res = await apiGet<{ success?: boolean; data?: { list?: any[]; total?: number } | any[] }>(
+  const res = await apiGet<{ success?: boolean; data?: { list?: any[]; total?: number; items?: any[] } | any[] }>(
     `${clinicBase(branchId)}/medicine-control/vial-sessions${q.toString() ? `?${q}` : ""}`
   );
   const d = res?.data;
-  if (d && typeof d === "object" && "list" in d && "total" in d) {
-    return { list: Array.isArray(d.list) ? d.list : [], total: Number(d.total ?? 0) };
+  if (d && typeof d === "object" && !Array.isArray(d) && "list" in d && "total" in d) {
+    const obj = d as { list?: any[]; total?: number };
+    return { list: Array.isArray(obj.list) ? obj.list : [], total: Number(obj.total ?? 0) };
   }
-  const arr = Array.isArray(d) ? d : (d?.list ?? d?.items ?? []);
-  return { list: arr, total: arr.length };
+  if (Array.isArray(d)) {
+    return { list: d, total: d.length };
+  }
+  if (d && typeof d === "object") {
+    const obj = d as { list?: any[]; items?: any[] };
+    const arr = Array.isArray(obj.list) ? obj.list : Array.isArray(obj.items) ? obj.items : [];
+    return { list: arr, total: arr.length };
+  }
+  return { list: [], total: 0 };
 }
 
 export async function staffClinicAuditBinsList(branchId: string): Promise<any[]> {
-  const res = await apiGet<{ success?: boolean; data?: any[] }>(`${clinicBase(branchId)}/medicine-control/audit-bins`);
+  const res = await apiGet<{ success?: boolean; data?: any[] | { items?: any[] } }>(
+    `${clinicBase(branchId)}/medicine-control/audit-bins`
+  );
   const d = res?.data;
-  return Array.isArray(d) ? d : (d?.items ?? []);
+  if (Array.isArray(d)) return d;
+  if (d && typeof d === "object" && Array.isArray((d as { items?: any[] }).items)) {
+    return (d as { items: any[] }).items;
+  }
+  return [];
 }
 
 export async function staffClinicMedicinePoliciesList(branchId: string): Promise<any[]> {
-  const res = await apiGet<{ success?: boolean; data?: any[] }>(`${clinicBase(branchId)}/medicine-control/policies`);
+  const res = await apiGet<{ success?: boolean; data?: any[] | { list?: any[]; items?: any[] } }>(
+    `${clinicBase(branchId)}/medicine-control/policies`
+  );
   const d = res?.data;
-  return Array.isArray(d) ? d : (d?.list ?? d?.items ?? []);
+  if (Array.isArray(d)) return d;
+  if (d && typeof d === "object") {
+    const o = d as { list?: any[]; items?: any[] };
+    if (Array.isArray(o.list)) return o.list;
+    if (Array.isArray(o.items)) return o.items;
+  }
+  return [];
 }
 
 export async function staffClinicGenerateInjectionToken(
   branchId: string,
   body: {
-    visitId: number;
-    variantId: number;
-    expectedDose: number;
+    visitId?: number;
+    /** Legacy single medicine; omit when medicationLines is set. */
+    variantId?: number;
+    expectedDose?: number;
+    medicationLines?: Array<{
+      medicineSource: string;
+      variantId?: number | null;
+      manualMedicineName?: string | null;
+      manualStrength?: string | null;
+      manualBatch?: string | null;
+      manualManufacturer?: string | null;
+      route: string;
+      expectedDose: number;
+      unit?: string | null;
+      durationText?: string | null;
+      frequencyText?: string | null;
+      longevityNote?: string | null;
+      lineNote?: string | null;
+      selectedVialSessionId?: number | null;
+      medicineFeeSnapshot?: number | null;
+      billingUnitPrice?: number | null;
+    }>;
     prescriptionId?: number | null;
     orderId?: number | null;
     patientId?: number | null;
     petId?: number | null;
     unit?: string | null;
-    medicineSource?: "INTERNAL" | "EXTERNAL" | "OUTSIDE";
+    medicineSource?: "INTERNAL_CLINIC" | "CLINIC_PROVIDED_MEDICINE" | "OUTSIDE_PRESCRIPTION_PATIENT_BROUGHT" | string;
+    encounterKind?: "INTERNAL_VISIT" | "EXTERNAL_WALK_IN";
+    externalPrescriberName?: string | null;
+    externalPrescriberClinic?: string | null;
+    externalRxNotes?: string | null;
+    externalRxEvidenceUrl?: string | null;
+    serviceChargeAmount?: number | null;
+    medicineChargeAmount?: number | null;
+    consumablesChargeAmount?: number | null;
     expiresInHours?: number;
     treatmentCourseId?: number | null;
     treatmentDayId?: number | null;
     selectedVialSessionId?: number | null;
+    /** Creates Order + OrderItem rows (and optional paid status) before token generation. */
+    billingCheckout?: {
+      walkIn?: { patientId: number; petId: number; doctorBranchMemberId?: number | null };
+      injectionServiceId?: number | null;
+      servicePrice?: number | null;
+      medicineVariantId?: number | null;
+      medicineQuantity?: number | null;
+      medicineUnitPrice?: number | null;
+      medicineLineBillings?: Array<{ variantId: number; quantity?: number; unitPrice: number }> | null;
+      consumablesServiceId?: number | null;
+      consumablesPrice?: number | null;
+      paymentMethod?: string | null;
+      markPaid: boolean;
+      notes?: string | null;
+    } | null;
   }
 ): Promise<any> {
   const res = await apiPost<{ success?: boolean; data?: any }>(
@@ -2758,6 +3416,8 @@ export async function staffClinicInjectionTokensList(
     toDate?: string;
     take?: number;
     skip?: number;
+    medicineSource?: string;
+    encounterKind?: "INTERNAL_VISIT" | "EXTERNAL_WALK_IN";
     /** Server resolves to current user id when true (operator accountability). */
     validatedByMe?: boolean;
     /** Server resolves to current user id when true (operator accountability). */
@@ -2773,6 +3433,8 @@ export async function staffClinicInjectionTokensList(
   if (params?.toDate) q.set("toDate", params.toDate);
   if (params?.take != null) q.set("take", String(params.take));
   if (params?.skip != null) q.set("skip", String(params.skip));
+  if (params?.medicineSource) q.set("medicineSource", params.medicineSource);
+  if (params?.encounterKind) q.set("encounterKind", params.encounterKind);
   if (params?.validatedByMe === true) q.set("validatedByMe", "true");
   if (params?.generatedByMe === true) q.set("generatedByMe", "true");
   const res = await apiGet<{ success?: boolean; data?: { list?: any[]; total?: number } }>(
@@ -2807,7 +3469,7 @@ export async function staffClinicRecordDose(
     surgeryCaseId?: number | null;
     vialSessionId?: number | null;
     injectionTokenId?: number | null;
-    medicineSource?: "INTERNAL" | "EXTERNAL" | "OUTSIDE";
+    medicineSource?: "INTERNAL_CLINIC" | "CLINIC_PROVIDED_MEDICINE" | "OUTSIDE_PRESCRIPTION_PATIENT_BROUGHT" | string;
     prescribedDose?: number | null;
     unit?: string | null;
     route?: string | null;
@@ -2917,6 +3579,92 @@ export async function staffClinicAcknowledgeDailyReconciliation(
   return res?.data;
 }
 
+/** Handover summary: active vials, pending tokens, expired vials in window. */
+export async function staffClinicHandoverSummary(
+  branchId: string,
+  params?: { expiredWithinHours?: number }
+): Promise<{
+  activeVialSessions: Array<{ id: number; variantId: number; variantTitle: string; remainingQty: number; validUntil: string | null }>;
+  pendingTokenCount: number;
+  pendingTokens: Array<{ id: number; tokenCode: string; variantTitle: string; expectedDose: number }>;
+  expiredVialsInWindow: Array<{ id: number; variantTitle: string; validUntil: string }>;
+}> {
+  const q = new URLSearchParams();
+  if (params?.expiredWithinHours != null) q.set("expiredWithinHours", String(params.expiredWithinHours));
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/handover-summary${q.toString() ? `?${q}` : ""}`
+  );
+  const d = res?.data ?? {};
+  return {
+    activeVialSessions: Array.isArray(d.activeVialSessions) ? d.activeVialSessions : [],
+    pendingTokenCount: Number(d.pendingTokenCount ?? 0),
+    pendingTokens: Array.isArray(d.pendingTokens) ? d.pendingTokens : [],
+    expiredVialsInWindow: Array.isArray(d.expiredVialsInWindow) ? d.expiredVialsInWindow : [],
+  };
+}
+
+/** EOD status: canClose, blockers, counts. */
+export async function staffClinicEodStatus(
+  branchId: string,
+  date?: string
+): Promise<{
+  date: string;
+  canClose: boolean;
+  blockers: string[];
+  pendingTokenCount: number;
+  activeVialSessionCount: number;
+  reconciliationDone: boolean;
+  reconciliationAcknowledged: boolean;
+  reconciliationHasMismatch: boolean;
+}> {
+  const q = date ? `?date=${encodeURIComponent(date)}` : "";
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/eod-status${q}`
+  );
+  const d = res?.data ?? {};
+  return {
+    date: d.date ?? "",
+    canClose: Boolean(d.canClose),
+    blockers: Array.isArray(d.blockers) ? d.blockers : [],
+    pendingTokenCount: Number(d.pendingTokenCount ?? 0),
+    activeVialSessionCount: Number(d.activeVialSessionCount ?? 0),
+    reconciliationDone: Boolean(d.reconciliationDone),
+    reconciliationAcknowledged: Boolean(d.reconciliationAcknowledged),
+    reconciliationHasMismatch: Boolean(d.reconciliationHasMismatch),
+  };
+}
+
+/** EOD close: validates blockers then closes day. */
+export async function staffClinicEodClose(
+  branchId: string,
+  body?: { date?: string; notes?: string }
+): Promise<{ closed: boolean; date: string; closedAt?: string; closedByUserId?: number }> {
+  const res = await apiPost<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/eod-close`,
+    body ?? {}
+  );
+  const d = res?.data ?? {};
+  return {
+    closed: Boolean(d.closed),
+    date: d.date ?? "",
+    closedAt: d.closedAt,
+    closedByUserId: d.closedByUserId,
+  };
+}
+
+export async function staffClinicDayClose(
+  branchId: string,
+  date?: string
+): Promise<{ closeDate?: string; closedAt?: string; closedByUserId?: number; closedBy?: { profile?: { displayName?: string } } } | null> {
+  const q = date ? `?date=${encodeURIComponent(date)}` : "";
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/medicine-control/day-close${q}`
+  );
+  const d = res?.data ?? {};
+  if (!d.closeDate && !d.closedAt) return null;
+  return d;
+}
+
 /** Search appointments by ID, token, phone, owner name, pet name */
 export async function staffClinicAppointmentSearch(
   branchId: string,
@@ -2973,6 +3721,12 @@ export async function staffClinicAppointmentAssignDoctor(
 
 export async function staffClinicAppointmentCheckIn(branchId: string, appointmentId: number) {
   const res = await apiPost<{ success?: boolean; data?: { appointmentId: number; ticket: any } }>(`${clinicBase(branchId)}/appointments/${appointmentId}/check-in`, {});
+  return res?.data;
+}
+
+/** POST /enqueue — explicit CHECKED_IN → IN_QUEUE transition (adds to queue without immediately calling) */
+export async function staffClinicAppointmentEnqueue(branchId: string, appointmentId: number) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/appointments/${appointmentId}/enqueue`, {});
   return res?.data;
 }
 
@@ -3048,18 +3802,31 @@ export async function staffClinicQueueScreen(branchId: string, date?: string) {
 }
 
 // ========== Clinic Patients (Pets) ==========
-export async function staffClinicPatientsList(branchId: string, params?: { limit?: number; offset?: number; search?: string; ownerId?: number }) {
+export async function staffClinicPatientsList(
+  branchId: string,
+  params?: { limit?: number; offset?: number; search?: string; ownerId?: number; animalTypeId?: number }
+) {
   const q = new URLSearchParams();
   if (params?.limit != null) q.set("limit", String(params.limit));
   if (params?.offset != null) q.set("offset", String(params.offset));
   if (params?.search) q.set("search", params.search);
   if (params?.ownerId != null) q.set("ownerId", String(params.ownerId));
+  if (params?.animalTypeId != null) q.set("animalTypeId", String(params.animalTypeId));
   const res = await apiGet<{ success?: boolean; data?: { patients: any[]; total: number } }>(`${clinicBase(branchId)}/patients${q.toString() ? `?${q}` : ""}`);
   return res?.data ?? { patients: [], total: 0 };
 }
 
 export async function staffClinicPatientGet(branchId: string, petId: number) {
   const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/patients/${petId}`);
+  return res?.data ?? null;
+}
+
+/**
+ * Staff patient workspace aggregate (GET .../patients/:petId/clinical-overview).
+ * `petId` is `Pet.id` — same numeric id as Next segment `[patientId]` under staff clinic patients.
+ */
+export async function staffClinicPatientClinicalOverview(branchId: string, petId: number) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/patients/${petId}/clinical-overview`);
   return res?.data ?? null;
 }
 
@@ -3073,12 +3840,22 @@ export async function staffClinicOwnerLookup(branchId: string, q: string) {
   return res?.data ?? null;
 }
 
-export async function staffClinicPatientRegister(branchId: string, body: { userId: number; name: string; animalTypeId: number; breedId?: number; sex?: string; dateOfBirth?: string; microchipNumber?: string; allergies?: string[]; bloodType?: string; notes?: string }) {
+/** Register patient (POST /patients). Prefer this over staffClinicRegisterPatient; both call the same endpoint. */
+export async function staffClinicPatientRegister(branchId: string, body: {
+  userId: number; name: string; animalTypeId: number;
+  breedId?: number; subBreedId?: number; colorId?: number; coatPatternId?: number; sizeId?: number;
+  customBreedText?: string; customColorText?: string;
+  sex?: string; dateOfBirth?: string; microchipNumber?: string; allergies?: string[]; bloodType?: string; notes?: string;
+}) {
   const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/patients`, body);
   return res?.data ?? null;
 }
 
-export async function staffClinicPatientUpdate(branchId: string, petId: number, body: Partial<{ name: string; breedId: number | null; sex: string; dateOfBirth: string | null; microchipNumber: string | null; allergies: string[]; bloodType: string | null; healthCardJson: any; notes: string | null; qrCodeUrl: string | null }>) {
+export async function staffClinicPatientUpdate(branchId: string, petId: number, body: Partial<{
+  name: string; breedId: number | null; subBreedId: number | null; colorId: number | null; coatPatternId: number | null; sizeId: number | null;
+  customBreedText: string | null; customColorText: string | null;
+  sex: string; dateOfBirth: string | null; microchipNumber: string | null; allergies: string[]; bloodType: string | null; healthCardJson: any; notes: string | null; qrCodeUrl: string | null;
+}>) {
   const res = await apiPatch<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/patients/${petId}`, body);
   return res?.data ?? null;
 }
@@ -3103,6 +3880,7 @@ export async function staffClinicIntakeUpsert(
     symptomsJson?: string[] | null;
     additionalSymptoms?: string | null;
     weightKg?: number | null;
+    /** Degrees Celsius (storage). */
     tempC?: number | null;
     heartRate?: number | null;
     respRate?: number | null;
@@ -3140,6 +3918,14 @@ export async function staffClinicVisitsList(
     fromDate?: string;
     toDate?: string;
     search?: string;
+    status?: string | string[];
+    doctorId?: number;
+    appointmentId?: number;
+    hasAppointment?: boolean;
+    sortField?: string;
+    sortDir?: "asc" | "desc";
+    includeSignals?: boolean;
+    unpaidOnly?: boolean;
   }
 ) {
   const q = new URLSearchParams();
@@ -3151,8 +3937,91 @@ export async function staffClinicVisitsList(
   if (params?.fromDate) q.set("fromDate", params.fromDate);
   if (params?.toDate) q.set("toDate", params.toDate);
   if (params?.search) q.set("search", params.search);
+  if (params?.doctorId != null) q.set("doctorId", String(params.doctorId));
+  if (params?.appointmentId != null) q.set("appointmentId", String(params.appointmentId));
+  if (params?.hasAppointment === true) q.set("hasAppointment", "true");
+  if (params?.hasAppointment === false) q.set("hasAppointment", "false");
+  if (params?.sortField) q.set("sortField", params.sortField);
+  if (params?.sortDir) q.set("sortDir", params.sortDir);
+  if (params?.includeSignals === false) q.set("includeSignals", "false");
+  if (params?.unpaidOnly) q.set("unpaidOnly", "true");
+  const st = params?.status;
+  if (st != null) {
+    const list = Array.isArray(st) ? st : [st];
+    list.filter(Boolean).forEach((s) => q.append("status", String(s)));
+  }
   const res = await apiGet<{ success?: boolean; data?: { visits: any[]; total: number } }>(`${clinicBase(branchId)}/visits${q.toString() ? `?${q}` : ""}`);
   return res?.data ?? { visits: [], total: 0 };
+}
+
+export async function staffClinicVisitsSummary(
+  branchId: string,
+  params?: { fromDate?: string; toDate?: string }
+): Promise<{
+  byStatus: Record<string, number>;
+  openPipelineCount: number;
+  completedInDateRange: number;
+  visitsInDateRange: number;
+  visitsWithUnpaidOrders: number;
+}> {
+  const q = new URLSearchParams();
+  if (params?.fromDate) q.set("fromDate", params.fromDate);
+  if (params?.toDate) q.set("toDate", params.toDate);
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/visits/summary${q.toString() ? `?${q}` : ""}`);
+  return (
+    res?.data ?? {
+      byStatus: {},
+      openPipelineCount: 0,
+      completedInDateRange: 0,
+      visitsInDateRange: 0,
+      visitsWithUnpaidOrders: 0,
+    }
+  );
+}
+
+/** CSV text; caller should download as file. Uses same filters as list (except pagination uses export limit on server). */
+export async function staffClinicVisitsExportCsv(
+  branchId: string,
+  params?: Parameters<typeof staffClinicVisitsList>[1] & { limit?: number }
+): Promise<string> {
+  const q = new URLSearchParams();
+  if (params?.petId != null) q.set("petId", String(params.petId));
+  if (params?.patientId != null) q.set("patientId", String(params.patientId));
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.treatmentCode) q.set("treatmentCode", params.treatmentCode);
+  if (params?.fromDate) q.set("fromDate", params.fromDate);
+  if (params?.toDate) q.set("toDate", params.toDate);
+  if (params?.search) q.set("search", params.search);
+  if (params?.doctorId != null) q.set("doctorId", String(params.doctorId));
+  if (params?.appointmentId != null) q.set("appointmentId", String(params.appointmentId));
+  if (params?.hasAppointment === true) q.set("hasAppointment", "true");
+  if (params?.hasAppointment === false) q.set("hasAppointment", "false");
+  if (params?.sortField) q.set("sortField", params.sortField);
+  if (params?.sortDir) q.set("sortDir", params.sortDir);
+  if (params?.unpaidOnly) q.set("unpaidOnly", "true");
+  const st = params?.status;
+  if (st != null) {
+    const list = Array.isArray(st) ? st : [st];
+    list.filter(Boolean).forEach((s) => q.append("status", String(s)));
+  }
+  return fetchTextResponse(`${clinicBase(branchId)}/visits/export${q.toString() ? `?${q}` : ""}`);
+}
+
+export async function staffClinicVisitCompletionEligibility(branchId: string, visitId: number) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/visits/${visitId}/completion-eligibility`);
+  return res?.data ?? null;
+}
+
+export async function staffClinicVisitComplete(branchId: string, visitId: number, body?: { overrideReason?: string }) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/visits/${visitId}/complete`, body ?? {});
+  return res?.data ?? null;
+}
+
+export async function staffClinicVisitQueueEvents(branchId: string, visitId: number) {
+  const res = await apiGet<{ success?: boolean; data?: { tickets: any[]; events: any[] } }>(
+    `${clinicBase(branchId)}/visits/${visitId}/queue-events`
+  );
+  return res?.data ?? { tickets: [], events: [] };
 }
 
 export async function staffClinicVisitGet(branchId: string, visitId: number) {
@@ -3170,6 +4039,7 @@ export async function staffClinicVisitUpdate(branchId: string, visitId: number, 
   return res?.data ?? null;
 }
 
+/** `tempC` is degrees Celsius (API/DB storage). Convert in UI via `@/lib/temperature`. */
 export async function staffClinicVitalAdd(branchId: string, visitId: number, body: { weightKg?: number; tempC?: number; heartRate?: number; respRate?: number; notes?: string }) {
   const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/visits/${visitId}/vitals`, body);
   return res?.data ?? null;
@@ -3216,15 +4086,10 @@ export async function staffClinicDischargeAdd(branchId: string, visitId: number,
   return res?.data ?? null;
 }
 
-// ========== Prescriptions ==========
+// ========== Prescriptions (staff/clinic: read + print + QR verify + billing order lines only; authoring is doctor API) ==========
 export async function staffClinicPrescriptionsByVisit(branchId: string, visitId: number) {
   const res = await apiGet<{ success?: boolean; data?: { prescriptions: any[] } }>(`${clinicBase(branchId)}/visits/${visitId}/prescriptions`);
   return res?.data?.prescriptions ?? [];
-}
-
-export async function staffClinicPrescriptionCreate(branchId: string, visitId: number, body: { petId: number; doctorId: number; notes?: string; items: any[] }) {
-  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/visits/${visitId}/prescriptions`, body);
-  return res?.data ?? null;
 }
 
 export async function staffClinicPrescriptionGet(branchId: string, prescriptionId: number) {
@@ -3237,21 +4102,35 @@ export async function staffClinicPrescriptionByQr(branchId: string, qrToken: str
   return res?.data ?? null;
 }
 
-export async function staffClinicPrescriptionFinalize(branchId: string, prescriptionId: number) {
-  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/prescriptions/${prescriptionId}/finalize`, {});
-  return res?.data ?? null;
-}
-
-export async function staffClinicPrescriptionDispense(branchId: string, prescriptionId: number) {
-  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/prescriptions/${prescriptionId}/dispense`, {});
-  return res?.data ?? null;
-}
-
 export async function staffClinicMedicineSearch(branchId: string, query: string, limit?: number) {
   const q = new URLSearchParams({ q: query });
   if (limit != null) q.set("limit", String(limit));
   const res = await apiGet<{ success?: boolean; data?: { items: any[] } }>(`${clinicBase(branchId)}/medicine-search?${q}`);
   return res?.data?.items ?? [];
+}
+
+export async function staffClinicMedicineCatalogSearch(
+  branchId: string,
+  params: { q: string; page?: number; limit?: number; genericId?: number; manufacturerId?: number; dosageFormId?: number; strength?: string }
+): Promise<MedicineCatalogSearchResponse> {
+  const q = new URLSearchParams();
+  q.set("q", params.q);
+  if (params.page != null) q.set("page", String(params.page));
+  if (params.limit != null) q.set("limit", String(params.limit));
+  if (params.genericId != null) q.set("genericId", String(params.genericId));
+  if (params.manufacturerId != null) q.set("manufacturerId", String(params.manufacturerId));
+  if (params.dosageFormId != null) q.set("dosageFormId", String(params.dosageFormId));
+  if (params.strength) q.set("strength", params.strength);
+  const res = await apiGet<{ success?: boolean; data?: MedicineCatalogSearchResponse }>(
+    `${clinicBase(branchId)}/medicine-catalog/search?${q}`
+  );
+  return (
+    res?.data ?? {
+      items: [],
+      pagination: { page: 1, limit: 20, total: 0, totalPages: 0 },
+      catalogCountry: { code: null, name: null },
+    }
+  );
 }
 
 // ========== Billing ==========
@@ -3272,7 +4151,15 @@ export async function staffClinicVisitPaymentStatus(branchId: string, visitId: n
   return res?.data?.servicePaymentStatus ?? [];
 }
 
-export async function staffClinicCreateInvoice(branchId: string, visitId: number, body: { customerId: number; items: { productId: number; variantId?: number; quantity: number; price: number }[]; paymentMethod?: string; notes?: string }) {
+export type VisitInvoiceItem =
+  | { productId: number; variantId?: number; quantity: number; price: number }
+  | { serviceId: number; quantity: number; price: number };
+
+export async function staffClinicCreateInvoice(
+  branchId: string,
+  visitId: number,
+  body: { customerId: number; items: VisitInvoiceItem[]; paymentMethod?: string; notes?: string }
+) {
   const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/visits/${visitId}/create-invoice`, body);
   return res?.data ?? null;
 }
@@ -3373,7 +4260,10 @@ export async function staffClinicSettlementBatchGet(batchId: number) {
 }
 
 /** POST /api/v1/clinic/branches/:branchId/settlement-batches/generate */
-export async function staffClinicSettlementBatchesGenerate(branchId: string, body?: { periodStart?: string; periodEnd?: string }) {
+export async function staffClinicSettlementBatchesGenerate(
+  branchId: string,
+  body?: { periodStart?: string; periodEnd?: string; doctorProfileIds?: number[] }
+) {
   const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/settlement-batches/generate`, body ?? {});
   return res?.data ?? null;
 }
@@ -3391,9 +4281,157 @@ export async function staffClinicSettlementBatchApprove(batchId: number) {
 }
 
 /** POST /api/v1/clinic/settlement-batches/:batchId/pay */
-export async function staffClinicSettlementBatchPay(batchId: number, body?: { paidAt?: string; reference?: string }) {
+export async function staffClinicSettlementBatchPay(
+  batchId: number,
+  body?: {
+    amount?: number;
+    paymentMethod?: string;
+    reference?: string;
+    receiptRef?: string;
+  }
+) {
   const res = await apiPost<{ success?: boolean; data?: any }>(`/api/v1/clinic/settlement-batches/${batchId}/pay`, body ?? {});
   return res?.data ?? null;
+}
+
+// ========== Enterprise Surgery Module (staff clinic) ==========
+/** GET /api/v1/clinic/branches/:branchId/surgeries */
+export async function staffClinicSurgeriesList(
+  branchId: string,
+  params?: {
+    dateFrom?: string;
+    dateTo?: string;
+    status?: string;
+    primaryDoctorId?: number;
+    serviceId?: number;
+    petId?: number;
+    limit?: number;
+    offset?: number;
+  }
+) {
+  const q = new URLSearchParams();
+  if (params?.dateFrom) q.set("dateFrom", params.dateFrom);
+  if (params?.dateTo) q.set("dateTo", params.dateTo);
+  if (params?.status) q.set("status", params.status);
+  if (params?.primaryDoctorId != null) q.set("primaryDoctorId", String(params.primaryDoctorId));
+  if (params?.serviceId != null) q.set("serviceId", String(params.serviceId));
+  if (params?.petId != null) q.set("petId", String(params.petId));
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  if (params?.offset != null) q.set("offset", String(params.offset));
+  const res = await apiGet<{ success?: boolean; data?: { items: any[]; total: number } }>(
+    `${clinicBase(branchId)}/surgeries${q.toString() ? `?${q}` : ""}`
+  );
+  const data = res?.data ?? { items: [], total: 0 };
+  return data;
+}
+
+/** GET /api/v1/clinic/branches/:branchId/surgeries/:id */
+export async function staffClinicSurgeryGet(branchId: string, id: number) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/surgeries/${id}`);
+  return res?.data ?? null;
+}
+
+/** POST /api/v1/clinic/branches/:branchId/surgeries */
+export async function staffClinicSurgeryCreate(branchId: string, body: Record<string, unknown>) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/surgeries`, body);
+  return res?.data ?? null;
+}
+
+/** PATCH /api/v1/clinic/branches/:branchId/surgeries/:id */
+export async function staffClinicSurgeryUpdate(branchId: string, id: number, body: Record<string, unknown>) {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/surgeries/${id}`, body);
+  return res?.data ?? null;
+}
+
+/** POST /api/v1/clinic/branches/:branchId/surgeries/:id/status */
+export async function staffClinicSurgeryStatus(branchId: string, id: number, body: { toStatus: string; reason?: string }) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/surgeries/${id}/status`, body);
+  return res?.data ?? null;
+}
+
+/** POST /api/v1/clinic/branches/:branchId/surgeries/:id/staff */
+export async function staffClinicSurgeryAddStaff(branchId: string, id: number, body: { branchMemberId: number; role: string; feeType?: string; feeValue?: number; notes?: string }) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/surgeries/${id}/staff`, body);
+  return res?.data ?? null;
+}
+
+/** PATCH /api/v1/clinic/branches/:branchId/surgeries/:id/staff/:staffId */
+export async function staffClinicSurgeryUpdateStaff(branchId: string, surgeryId: number, staffId: number, body: Record<string, unknown>) {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/surgeries/${surgeryId}/staff/${staffId}`, body);
+  return res?.data ?? null;
+}
+
+/** DELETE /api/v1/clinic/branches/:branchId/surgeries/:id/staff/:staffId */
+export async function staffClinicSurgeryRemoveStaff(branchId: string, surgeryId: number, staffId: number) {
+  const res = await apiDelete<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/surgeries/${surgeryId}/staff/${staffId}`);
+  return res?.data ?? null;
+}
+
+/** GET /api/v1/clinic/branches/:branchId/surgeries/:id/checklist */
+export async function staffClinicSurgeryChecklistGet(branchId: string, surgeryId: number, params?: { phase?: string }) {
+  const q = new URLSearchParams();
+  if (params?.phase) q.set("phase", params.phase);
+  const res = await apiGet<{ success?: boolean; data?: { items: any[] } }>(`${clinicBase(branchId)}/surgeries/${surgeryId}/checklist${q.toString() ? `?${q}` : ""}`);
+  return res?.data ?? { items: [] };
+}
+
+/** POST /api/v1/clinic/branches/:branchId/surgeries/:id/checklist */
+export async function staffClinicSurgeryChecklistAdd(branchId: string, surgeryId: number, body: { phase: string; itemLabel: string; sortOrder?: number }) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/surgeries/${surgeryId}/checklist`, body);
+  return res?.data ?? null;
+}
+
+/** PATCH /api/v1/clinic/branches/:branchId/surgeries/:id/checklist/:itemId */
+export async function staffClinicSurgeryChecklistUpdate(branchId: string, surgeryId: number, itemId: number, body: { isCompleted?: boolean; notes?: string }) {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/surgeries/${surgeryId}/checklist/${itemId}`, body);
+  return res?.data ?? null;
+}
+
+/** GET /api/v1/clinic/branches/:branchId/surgeries/room-conflict */
+export async function staffClinicSurgeryRoomConflict(branchId: string, params: { roomId: number; startAt: string; endAt: string; excludeSurgeryCaseId?: number }) {
+  const q = new URLSearchParams();
+  q.set("roomId", String(params.roomId));
+  q.set("startAt", params.startAt);
+  q.set("endAt", params.endAt);
+  if (params.excludeSurgeryCaseId != null) q.set("excludeSurgeryCaseId", String(params.excludeSurgeryCaseId));
+  const res = await apiGet<{ success?: boolean; data?: { conflicting: any[]; total: number } }>(`${clinicBase(branchId)}/surgeries/room-conflict?${q}`);
+  return res?.data ?? { conflicting: [], total: 0 };
+}
+
+/** GET /api/v1/clinic/branches/:branchId/surgeries/:id/consumables */
+export async function staffClinicSurgeryConsumablesList(branchId: string, surgeryId: number) {
+  const res = await apiGet<{ success?: boolean; data?: { items: any[] } }>(`${clinicBase(branchId)}/surgeries/${surgeryId}/consumables`);
+  return res?.data ?? { items: [] };
+}
+
+/** POST /api/v1/clinic/branches/:branchId/surgeries/:id/consumables */
+export async function staffClinicSurgeryConsumablesPlan(branchId: string, surgeryId: number, body: { items: Array<{ clinicalItemId?: number; productId?: number; quantityPlanned: number }> }) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/surgeries/${surgeryId}/consumables`, body);
+  return res?.data ?? null;
+}
+
+/** GET /api/v1/clinic/branches/:branchId/surgeries/:id/billing */
+export async function staffClinicSurgeryBillingGet(branchId: string, surgeryId: number) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/surgeries/${surgeryId}/billing`);
+  return res?.data ?? null;
+}
+
+/** POST /api/v1/clinic/branches/:branchId/surgeries/:id/estimate */
+export async function staffClinicSurgeryEstimateCreate(branchId: string, surgeryId: number, body: Record<string, unknown>) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/surgeries/${surgeryId}/estimate`, body);
+  return res?.data ?? null;
+}
+
+/** POST /api/v1/clinic/branches/:branchId/surgeries/:id/finalize-bill */
+export async function staffClinicSurgeryFinalizeBill(branchId: string, surgeryId: number) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/surgeries/${surgeryId}/finalize-bill`, {});
+  return res?.data ?? null;
+}
+
+/** GET /api/v1/clinic/branches/:branchId/surgeries/:id/payouts */
+export async function staffClinicSurgeryPayoutsList(branchId: string, surgeryId: number) {
+  const res = await apiGet<{ success?: boolean; data?: { items: any[] } }>(`${clinicBase(branchId)}/surgeries/${surgeryId}/payouts`);
+  return res?.data ?? { items: [] };
 }
 
 // ========== Clinic reports (analytics) ==========
@@ -3505,6 +4543,17 @@ export async function staffBranchAccessForBranch(branchId: string) {
   return Array.isArray(res?.data) ? res.data : [];
 }
 
+/** POST /api/v1/branch-access/request – branch or warehouse extension (same BranchAccessPermission row) */
+export async function staffRequestBranchAccess(body: {
+  branchId: number;
+  role?: string;
+  requestScope?: "BRANCH" | "WAREHOUSE";
+  warehouseId?: number | null;
+  requestedPermissionKeys?: string[];
+}) {
+  return apiPost<{ success?: boolean; data?: any; message?: string }>("/api/v1/branch-access/request", body);
+}
+
 /** POST /api/v1/branch-access/:id/approve */
 export async function staffBranchAccessApprove(permissionId: number, body?: { expiresAt?: string }) {
   return apiPost<{ success?: boolean; data?: any; message?: string }>(`/api/v1/branch-access/${permissionId}/approve`, body ?? {});
@@ -3532,4 +4581,865 @@ export async function staffBranchInvite(branchId: string, _body: { email?: strin
   } catch (e: any) {
     return { success: false, message: e?.message ?? "Invite not available" };
   }
+}
+
+// ========== Medicine Requisitions (Pharmacy Supply Chain) ==========
+
+/** Only add orgId/branchId query params when they are positive integers (avoids NaN / "undefined" strings). */
+function appendMedicineRequisitionScopeParams(
+  q: URLSearchParams,
+  params?: { orgId?: string; branchId?: string }
+): void {
+  if (params?.orgId != null && String(params.orgId).trim() !== "") {
+    const n = Number(params.orgId);
+    if (Number.isFinite(n) && n > 0) q.set("orgId", String(Math.trunc(n)));
+  }
+  if (params?.branchId != null && String(params.branchId).trim() !== "") {
+    const n = Number(params.branchId);
+    if (Number.isFinite(n) && n > 0) q.set("branchId", String(Math.trunc(n)));
+  }
+}
+
+export async function medicineRequisitionList(params?: {
+  branchId?: string;
+  orgId?: string;
+  status?: string;
+  urgency?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ items: unknown[]; pagination: unknown }> {
+  const q = new URLSearchParams();
+  appendMedicineRequisitionScopeParams(q, { orgId: params?.orgId, branchId: params?.branchId });
+  if (params?.status) q.set("status", params.status);
+  if (params?.urgency) q.set("urgency", params.urgency);
+  if (params?.dateFrom) q.set("dateFrom", params.dateFrom);
+  if (params?.dateTo) q.set("dateTo", params.dateTo);
+  if (params?.page) q.set("page", String(params.page));
+  if (params?.limit) q.set("limit", String(params.limit));
+  const res = await apiGet<{ success?: boolean; data?: unknown[]; pagination?: unknown }>(`/api/v1/medicine-requisitions${q.toString() ? `?${q}` : ""}`);
+  return { items: Array.isArray(res?.data) ? res.data : [], pagination: (res as any)?.pagination ?? {} };
+}
+
+/** Owner dashboard: GET /api/v1/medicine-requisitions/summary — same tenancy scope as list. */
+export async function medicineRequisitionSummary(params?: { orgId?: string; branchId?: string }): Promise<{
+  total: number;
+  pending: number;
+  approved: number;
+  dispatched: number;
+} | null> {
+  const q = new URLSearchParams();
+  appendMedicineRequisitionScopeParams(q, params);
+  const res = await apiGet<{ success?: boolean; data?: { total?: number; pending?: number; approved?: number; dispatched?: number } }>(
+    `/api/v1/medicine-requisitions/summary${q.toString() ? `?${q}` : ""}`
+  );
+  const d = res?.data;
+  if (!d || typeof d !== "object") return null;
+  return {
+    total: Number(d.total) || 0,
+    pending: Number(d.pending) || 0,
+    approved: Number(d.approved) || 0,
+    dispatched: Number(d.dispatched) || 0,
+  };
+}
+
+export async function medicineRequisitionById(id: number): Promise<unknown> {
+  const res = await apiGet<{ success?: boolean; data?: unknown }>(`/api/v1/medicine-requisitions/${id}`);
+  return res?.data ?? null;
+}
+
+export async function medicineRequisitionCreate(body: {
+  branchId: number;
+  urgency?: string;
+  note?: string;
+  items: Array<{ medicineListingId: number; requestedQty: number; unit?: string; note?: string; allowSubstitute?: boolean }>;
+}): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>("/api/v1/medicine-requisitions", body);
+  return res?.data ?? res;
+}
+
+export async function medicineRequisitionUpdate(id: number, body: {
+  items: Array<{ medicineListingId: number; requestedQty: number; unit?: string; note?: string; allowSubstitute?: boolean }>;
+}): Promise<unknown> {
+  const res = await apiPatch<{ success?: boolean; data?: unknown }>(`/api/v1/medicine-requisitions/${id}`, body);
+  return res?.data ?? res;
+}
+
+export async function medicineRequisitionSubmit(id: number): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(`/api/v1/medicine-requisitions/${id}/submit`, {});
+  return res?.data ?? res;
+}
+
+export async function medicineRequisitionCancel(id: number, reason?: string): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(`/api/v1/medicine-requisitions/${id}/cancel`, { reason });
+  return res?.data ?? res;
+}
+
+export async function medicineRequisitionReceive(id: number, items: Array<{ itemId: number; receivedQty: number }>): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(`/api/v1/medicine-requisitions/${id}/receive`, { items });
+  return res?.data ?? res;
+}
+
+export async function medicineSearch(params?: {
+  q?: string;
+  countryId?: number;
+  branchId?: string | number;
+  limit?: number;
+}): Promise<unknown[]> {
+  const qs = new URLSearchParams();
+  if (params?.q) qs.set("q", params.q);
+  if (params?.countryId != null) qs.set("countryId", String(params.countryId));
+  if (params?.branchId != null && params.branchId !== "") qs.set("branchId", String(params.branchId));
+  if (params?.limit) qs.set("limit", String(params.limit));
+  const res = await apiGet<{ success?: boolean; data?: unknown[] }>(`/api/v1/medicine-requisitions/search-medicine${qs.toString() ? `?${qs}` : ""}`);
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+// ========== Central Warehouse Module ==========
+
+export async function warehouseList(orgId: number | string, opts?: { isActive?: boolean }): Promise<unknown[]> {
+  const q = new URLSearchParams();
+  q.set("orgId", String(orgId));
+  if (opts?.isActive !== undefined) q.set("isActive", String(opts.isActive));
+  const res = await apiGet<{ success?: boolean; data?: unknown[] }>(`/api/v1/warehouse?${q}`);
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+/** Warehouses the current user may access (org owner/member or warehouse staff). */
+export async function warehouseAccessible(): Promise<unknown[]> {
+  const res = await apiGet<{ success?: boolean; data?: unknown[] }>("/api/v1/warehouse/accessible");
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export async function warehouseEnsureDefault(orgId: number | string): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>("/api/v1/warehouse/ensure-default", {
+    orgId: Number(orgId),
+  });
+  return res?.data ?? res;
+}
+
+export async function warehouseById(id: number): Promise<unknown> {
+  const res = await apiGet<{ success?: boolean; data?: unknown }>(`/api/v1/warehouse/${id}`);
+  return res?.data ?? null;
+}
+
+export async function warehouseCreate(body: {
+  orgId: number;
+  name: string;
+  code?: string;
+  type?: string;
+  addressJson?: unknown;
+  location?: unknown;
+  managerId?: number;
+}): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>("/api/v1/warehouse", body);
+  return res?.data ?? res;
+}
+
+export async function warehouseUpdate(id: number, body: Record<string, unknown>): Promise<unknown> {
+  const res = await apiPatch<{ success?: boolean; data?: unknown }>(`/api/v1/warehouse/${id}`, body);
+  return res?.data ?? res;
+}
+
+export async function warehouseDashboard(id: number): Promise<{
+  totalLocations: number;
+  activeStaff: number;
+  pendingDispatches: number;
+  inTransitDispatches: number;
+  recentGrns: number;
+  lowStockCount: number;
+} | null> {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`/api/v1/warehouse/${id}/dashboard`);
+  return res?.data ?? null;
+}
+
+export async function warehouseStaffList(warehouseId: number, opts?: { isActive?: boolean }): Promise<unknown[]> {
+  const q = new URLSearchParams();
+  if (opts?.isActive !== undefined) q.set("isActive", String(opts.isActive));
+  const res = await apiGet<{ success?: boolean; data?: unknown[] }>(`/api/v1/warehouse/${warehouseId}/staff${q.toString() ? `?${q}` : ""}`);
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export async function warehouseStaffOverview(
+  warehouseId: number
+): Promise<{ staff: unknown[]; invites: unknown[] }> {
+  const res = await apiGet<{ success?: boolean; data?: { staff?: unknown[]; invites?: unknown[] } }>(
+    `/api/v1/warehouse/${warehouseId}/staff/overview`
+  );
+  return {
+    staff: Array.isArray(res?.data?.staff) ? res!.data!.staff : [],
+    invites: Array.isArray(res?.data?.invites) ? res!.data!.invites : [],
+  };
+}
+
+export async function warehouseStaffInvite(
+  warehouseId: number,
+  body: { email?: string; phone?: string; displayName?: string; role: string }
+): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(`/api/v1/warehouse/${warehouseId}/staff/invite`, body);
+  return res?.data ?? res;
+}
+
+export async function warehouseStaffInviteResend(warehouseId: number, inviteId: number): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(
+    `/api/v1/warehouse/${warehouseId}/staff/invitations/${inviteId}/resend`,
+    {}
+  );
+  return res?.data ?? res;
+}
+
+export async function warehouseStaffInviteReinvite(warehouseId: number, inviteId: number): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(
+    `/api/v1/warehouse/${warehouseId}/staff/invitations/${inviteId}/reinvite`,
+    {}
+  );
+  return res?.data ?? res;
+}
+
+export async function warehouseStaffInviteCancel(warehouseId: number, inviteId: number): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(
+    `/api/v1/warehouse/${warehouseId}/staff/invitations/${inviteId}/cancel`,
+    {}
+  );
+  return res?.data ?? res;
+}
+
+export async function warehouseStaffAdd(warehouseId: number, body: { targetUserId: number; role: string }): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(`/api/v1/warehouse/${warehouseId}/staff`, body);
+  return res?.data ?? res;
+}
+
+export async function warehouseStaffRemove(warehouseId: number, assignmentId: number): Promise<unknown> {
+  const res = await apiDelete<{ success?: boolean; data?: unknown }>(`/api/v1/warehouse/${warehouseId}/staff/${assignmentId}`);
+  return res?.data ?? res;
+}
+
+export async function warehouseLinkLocation(warehouseId: number, locationId: number): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(`/api/v1/warehouse/${warehouseId}/locations/link`, { locationId });
+  return res?.data ?? res;
+}
+
+export async function warehouseUnlinkLocation(warehouseId: number, locationId: number): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(`/api/v1/warehouse/${warehouseId}/locations/unlink`, { locationId });
+  return res?.data ?? res;
+}
+
+export async function warehouseZonesList(warehouseId: number): Promise<unknown[]> {
+  const res = await apiGet<{ success?: boolean; data?: unknown[] }>(`/api/v1/warehouse/${warehouseId}/zones`);
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export async function warehouseZoneCreate(
+  warehouseId: number,
+  body: { code: string; name: string; purpose?: string; sortOrder?: number; note?: string }
+): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(`/api/v1/warehouse/${warehouseId}/zones`, body);
+  return res?.data ?? res;
+}
+
+export async function warehouseZoneUpdate(
+  warehouseId: number,
+  zoneId: number,
+  body: Record<string, unknown>
+): Promise<unknown> {
+  const res = await apiPatch<{ success?: boolean; data?: unknown }>(`/api/v1/warehouse/${warehouseId}/zones/${zoneId}`, body);
+  return res?.data ?? res;
+}
+
+export async function warehouseLocationSetZone(
+  warehouseId: number,
+  body: { locationId: number; zoneId: number | null }
+): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(`/api/v1/warehouse/${warehouseId}/locations/zone`, body);
+  return res?.data ?? res;
+}
+
+/** Same-origin CSV download path (use with session cookie or proxy). */
+export function warehouseAuditExportCsvPath(
+  warehouseId: number,
+  opts?: { categories?: string[]; from?: string; to?: string }
+): string {
+  const q = new URLSearchParams();
+  if (opts?.categories?.length) q.set("categories", opts.categories.join(","));
+  if (opts?.from) q.set("from", opts.from);
+  if (opts?.to) q.set("to", opts.to);
+  const qs = q.toString();
+  return `/api/v1/warehouse/${warehouseId}/audit/export.csv${qs ? `?${qs}` : ""}`;
+}
+
+export async function qcInspectionsList(
+  orgId: number,
+  opts?: { warehouseId?: number; status?: string; page?: number }
+): Promise<unknown> {
+  const q = new URLSearchParams();
+  q.set("orgId", String(orgId));
+  if (opts?.warehouseId != null) q.set("warehouseId", String(opts.warehouseId));
+  if (opts?.status) q.set("status", opts.status);
+  if (opts?.page != null) q.set("page", String(opts.page));
+  const res = await apiGet<{ success?: boolean; data?: unknown }>(`/api/v1/qc-inspections?${q}`);
+  return res?.data ?? res;
+}
+
+export async function qcInspectionQuarantineList(
+  orgId: number,
+  opts?: { warehouseId?: number; page?: number }
+): Promise<unknown> {
+  const q = new URLSearchParams();
+  q.set("orgId", String(orgId));
+  if (opts?.warehouseId != null) q.set("warehouseId", String(opts.warehouseId));
+  if (opts?.page != null) q.set("page", String(opts.page));
+  const res = await apiGet<{ success?: boolean; data?: unknown }>(`/api/v1/qc-inspections/quarantine?${q}`);
+  return res?.data ?? res;
+}
+
+export async function qcInspectionEscalationsList(orgId: number, opts?: { warehouseId?: number }): Promise<unknown[]> {
+  const q = new URLSearchParams();
+  q.set("orgId", String(orgId));
+  if (opts?.warehouseId != null) q.set("warehouseId", String(opts.warehouseId));
+  const res = await apiGet<{ success?: boolean; data?: unknown[] }>(`/api/v1/qc-inspections/escalations?${q}`);
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export async function qcInspectionById(id: number, orgId: number): Promise<unknown> {
+  const q = new URLSearchParams();
+  q.set("orgId", String(orgId));
+  const res = await apiGet<{ success?: boolean; data?: unknown }>(`/api/v1/qc-inspections/${id}?${q}`);
+  return res?.data ?? null;
+}
+
+export async function qcInspectionSubmit(id: number, orgId: number, body: Record<string, unknown>): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(`/api/v1/qc-inspections/${id}/submit`, { orgId, ...body });
+  return res?.data ?? res;
+}
+
+export async function qcQuarantineRelease(
+  id: number,
+  orgId: number,
+  body: { quantity: number; targetLocationId: number }
+): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(`/api/v1/qc-inspections/${id}/quarantine/release`, {
+    orgId,
+    ...body,
+  });
+  return res?.data ?? res;
+}
+
+export async function qcQuarantineDispose(
+  id: number,
+  orgId: number,
+  body: { quantity: number; note?: string }
+): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(`/api/v1/qc-inspections/${id}/quarantine/dispose`, {
+    orgId,
+    ...body,
+  });
+  return res?.data ?? res;
+}
+
+export async function inventoryRecallReleaseAllocation(recallId: number, orgId: number): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; recall?: unknown }>(`/api/v1/inventory/recalls/${recallId}/release-allocation`, {
+    orgId,
+  });
+  return (res as any)?.recall ?? res;
+}
+
+export async function inventoryListRecalls(orgId: number, opts?: { status?: string; page?: number; limit?: number }): Promise<unknown> {
+  const q = new URLSearchParams();
+  q.set("orgId", String(orgId));
+  if (opts?.status) q.set("status", opts.status);
+  if (opts?.page != null) q.set("page", String(opts.page));
+  if (opts?.limit != null) q.set("limit", String(opts.limit));
+  return apiGet<unknown>(`/api/v1/inventory/recalls?${q}`);
+}
+
+export async function warehouseDispatches(warehouseId: number, opts?: { take?: number; skip?: number }): Promise<unknown[]> {
+  const q = new URLSearchParams();
+  if (opts?.take != null) q.set("take", String(opts.take));
+  if (opts?.skip != null) q.set("skip", String(opts.skip));
+  const res = await apiGet<{ success?: boolean; data?: unknown[] }>(
+    `/api/v1/warehouse/${warehouseId}/dispatches${q.toString() ? `?${q}` : ""}`
+  );
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export async function warehouseDeliveryAssignments(warehouseId: number, opts?: { take?: number }): Promise<unknown[]> {
+  const q = new URLSearchParams();
+  if (opts?.take != null) q.set("take", String(opts.take));
+  const res = await apiGet<{ success?: boolean; data?: unknown[] }>(
+    `/api/v1/warehouse/${warehouseId}/delivery-assignments${q.toString() ? `?${q}` : ""}`
+  );
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export async function warehouseReportsSummary(warehouseId: number): Promise<unknown> {
+  const res = await apiGet<{ success?: boolean; data?: unknown }>(`/api/v1/warehouse/${warehouseId}/reports/summary`);
+  return res?.data ?? null;
+}
+
+export async function warehouseOperationsSummary(warehouseId: number): Promise<unknown> {
+  const res = await apiGet<{ success?: boolean; data?: unknown }>(`/api/v1/warehouse/${warehouseId}/operations/summary`);
+  return res?.data ?? null;
+}
+
+export async function warehouseOperationsDashboard(
+  warehouseId: number,
+  opts?: { page?: number; limitPerQueue?: number; q?: string; sortBy?: string; sortDir?: "asc" | "desc" }
+): Promise<unknown> {
+  const q = new URLSearchParams();
+  if (opts?.page != null) q.set("page", String(opts.page));
+  if (opts?.limitPerQueue != null) q.set("limitPerQueue", String(opts.limitPerQueue));
+  if (opts?.q) q.set("q", opts.q);
+  if (opts?.sortBy) q.set("sortBy", opts.sortBy);
+  if (opts?.sortDir) q.set("sortDir", opts.sortDir);
+  const res = await apiGet<{ success?: boolean; data?: unknown }>(
+    `/api/v1/warehouse/${warehouseId}/operations/dashboard${q.toString() ? `?${q}` : ""}`
+  );
+  return res?.data ?? null;
+}
+
+export async function warehouseOperationsInbound(
+  warehouseId: number,
+  opts?: { page?: number; limit?: number }
+): Promise<{ items: unknown[]; pagination?: Record<string, unknown> }> {
+  const q = new URLSearchParams();
+  if (opts?.page != null) q.set("page", String(opts.page));
+  if (opts?.limit != null) q.set("limit", String(opts.limit));
+  const res = await apiGet<{ success?: boolean; data?: unknown[]; pagination?: Record<string, unknown> }>(
+    `/api/v1/warehouse/${warehouseId}/operations/inbound${q.toString() ? `?${q}` : ""}`
+  );
+  return { items: Array.isArray(res?.data) ? res.data : [], pagination: res?.pagination };
+}
+
+export async function warehouseOperationsRequisitions(
+  warehouseId: number,
+  opts?: { page?: number; limit?: number }
+): Promise<{ items: unknown[]; pagination?: Record<string, unknown> }> {
+  const q = new URLSearchParams();
+  if (opts?.page != null) q.set("page", String(opts.page));
+  if (opts?.limit != null) q.set("limit", String(opts.limit));
+  const res = await apiGet<{ success?: boolean; data?: unknown[]; pagination?: Record<string, unknown> }>(
+    `/api/v1/warehouse/${warehouseId}/operations/requisitions${q.toString() ? `?${q}` : ""}`
+  );
+  return { items: Array.isArray(res?.data) ? res.data : [], pagination: res?.pagination };
+}
+
+export async function warehouseOperationsOutbound(
+  warehouseId: number,
+  opts?: { page?: number; limit?: number }
+): Promise<{ items: unknown[]; pagination?: Record<string, unknown> }> {
+  const q = new URLSearchParams();
+  if (opts?.page != null) q.set("page", String(opts.page));
+  if (opts?.limit != null) q.set("limit", String(opts.limit));
+  const res = await apiGet<{ success?: boolean; data?: unknown[]; pagination?: Record<string, unknown> }>(
+    `/api/v1/warehouse/${warehouseId}/operations/outbound${q.toString() ? `?${q}` : ""}`
+  );
+  return { items: Array.isArray(res?.data) ? res.data : [], pagination: res?.pagination };
+}
+
+export async function warehouseOperationsDiscrepancies(
+  warehouseId: number,
+  opts?: { page?: number; limit?: number }
+): Promise<{ items: unknown[]; pagination?: Record<string, unknown> }> {
+  const q = new URLSearchParams();
+  if (opts?.page != null) q.set("page", String(opts.page));
+  if (opts?.limit != null) q.set("limit", String(opts.limit));
+  const res = await apiGet<{ success?: boolean; data?: unknown[]; pagination?: Record<string, unknown> }>(
+    `/api/v1/warehouse/${warehouseId}/operations/discrepancies${q.toString() ? `?${q}` : ""}`
+  );
+  return { items: Array.isArray(res?.data) ? res.data : [], pagination: res?.pagination };
+}
+
+export async function warehouseOperationsVisibility(
+  warehouseId: number,
+  kind: "returns" | "recalls" | "near_expiry" | "expired" | "quarantine" | "writeoffs",
+  opts?: { limit?: number }
+): Promise<unknown[]> {
+  const q = new URLSearchParams();
+  q.set("kind", kind);
+  if (opts?.limit != null) q.set("limit", String(opts.limit));
+  const res = await apiGet<{ success?: boolean; data?: unknown[] }>(
+    `/api/v1/warehouse/${warehouseId}/operations/visibility?${q}`
+  );
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+// ── Delivery Assignments ──
+
+export async function deliveryAssign(dispatchId: number, body: { assignedToUserId: number; note?: string }): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(`/api/v1/warehouse/dispatches/${dispatchId}/assign-delivery`, body);
+  return res?.data ?? res;
+}
+
+export async function deliveryMyAssignments(status?: string): Promise<unknown[]> {
+  const q = new URLSearchParams();
+  if (status) q.set("status", status);
+  const res = await apiGet<{ success?: boolean; data?: unknown[] }>(`/api/v1/warehouse/delivery/assignments${q.toString() ? `?${q}` : ""}`);
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export async function deliveryAssignmentById(id: number): Promise<unknown> {
+  const res = await apiGet<{ success?: boolean; data?: unknown }>(`/api/v1/warehouse/delivery/assignments/${id}`);
+  return res?.data ?? null;
+}
+
+export async function deliveryStart(id: number): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(`/api/v1/warehouse/delivery/${id}/start`, {});
+  return res?.data ?? res;
+}
+
+export async function deliveryArrive(id: number): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(`/api/v1/warehouse/delivery/${id}/arrive`, {});
+  return res?.data ?? res;
+}
+
+export async function deliveryComplete(
+  id: number,
+  pod?: {
+    receivedByName?: string;
+    recipientPhone?: string;
+    podNote?: string;
+    gpsLat?: number;
+    gpsLng?: number;
+    signatureFileKey?: string;
+    photoFileKey?: string;
+  }
+): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(`/api/v1/warehouse/delivery/${id}/complete`, pod || {});
+  return res?.data ?? res;
+}
+
+// ── Purchase orders / allocation / pick (Phase 3 warehouse enterprise) ──
+
+export async function purchaseOrdersList(params?: { orgId?: number; status?: string; page?: number; limit?: number }): Promise<{ items: unknown[]; pagination?: unknown }> {
+  const q = new URLSearchParams();
+  if (params?.orgId) q.set("orgId", String(params.orgId));
+  if (params?.status) q.set("status", params.status);
+  if (params?.page) q.set("page", String(params.page));
+  if (params?.limit) q.set("limit", String(params.limit));
+  const res = await apiGet<{ success?: boolean; data?: unknown[]; pagination?: unknown }>(
+    `/api/v1/purchase-orders${q.toString() ? `?${q}` : ""}`
+  );
+  return { items: Array.isArray(res?.data) ? res.data : [], pagination: res?.pagination };
+}
+
+export async function purchaseOrderGet(id: number, orgId?: number): Promise<unknown | null> {
+  const q = orgId ? `?orgId=${orgId}` : "";
+  const res = await apiGet<{ success?: boolean; data?: unknown }>(`/api/v1/purchase-orders/${id}${q}`);
+  return res?.data ?? null;
+}
+
+export async function purchaseOrderCreate(body: Record<string, unknown>): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(`/api/v1/purchase-orders`, body);
+  if (!res?.success && (res as { message?: string })?.message) throw new Error((res as { message: string }).message);
+  return (res as { data?: unknown })?.data ?? res;
+}
+
+export async function purchaseOrderAction(
+  id: number,
+  action: "submit" | "approve" | "reject" | "cancel",
+  body?: Record<string, unknown>
+): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(
+    `/api/v1/purchase-orders/${id}/${action}`,
+    body || {}
+  );
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+export async function grnGet(id: number, orgId?: number): Promise<unknown | null> {
+  const q = orgId ? `?orgId=${orgId}` : "";
+  const res = await apiGet<{ success?: boolean; data?: unknown }>(`/api/v1/grn/${id}${q}`);
+  return res?.data ?? null;
+}
+
+export async function grnVoid(id: number, body?: { reason?: string }): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/grn/${id}/void`, body || {});
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+export async function networkBalanceRecompute(orgId: number, branchId?: number): Promise<unknown> {
+  const q = new URLSearchParams({ orgId: String(orgId) });
+  if (branchId != null) q.set("branchId", String(branchId));
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(
+    `/api/v1/network-balance/recompute?${q}`,
+    {}
+  );
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+export async function purchaseRequisitionsList(params?: { orgId?: number; status?: string; page?: number; limit?: number }): Promise<{ items: unknown[]; pagination?: unknown }> {
+  const q = new URLSearchParams();
+  if (params?.orgId) q.set("orgId", String(params.orgId));
+  if (params?.status) q.set("status", params.status);
+  if (params?.page) q.set("page", String(params.page));
+  if (params?.limit) q.set("limit", String(params.limit));
+  const res = await apiGet<{ success?: boolean; data?: unknown[]; pagination?: unknown }>(
+    `/api/v1/purchase-requisitions${q.toString() ? `?${q}` : ""}`
+  );
+  return { items: Array.isArray(res?.data) ? res.data : [], pagination: res?.pagination };
+}
+
+export async function purchaseRequisitionGet(id: number, orgId?: number): Promise<unknown | null> {
+  const q = orgId ? `?orgId=${orgId}` : "";
+  const res = await apiGet<{ success?: boolean; data?: unknown }>(`/api/v1/purchase-requisitions/${id}${q}`);
+  return res?.data ?? null;
+}
+
+export async function purchaseRequisitionCreate(body: Record<string, unknown>): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/purchase-requisitions`, body);
+  if (!res?.success && (res as { message?: string })?.message) throw new Error((res as { message: string }).message);
+  return (res as { data?: unknown })?.data ?? res;
+}
+
+export async function purchaseRequisitionAction(
+  id: number,
+  action: "submit" | "approve" | "reject" | "convert-to-po",
+  body?: Record<string, unknown>
+): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(
+    `/api/v1/purchase-requisitions/${id}/${action}`,
+    body || {}
+  );
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+export async function inboundShipmentCreate(body: Record<string, unknown>): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/inbound-shipments`, body);
+  if (!res?.success && (res as { message?: string })?.message) throw new Error((res as { message: string }).message);
+  return (res as { data?: unknown })?.data ?? res;
+}
+
+export async function inboundShipmentsList(params?: { orgId?: number; status?: string; vendorId?: number; page?: number; limit?: number }): Promise<{ items: unknown[]; pagination?: unknown }> {
+  const q = new URLSearchParams();
+  if (params?.orgId) q.set("orgId", String(params.orgId));
+  if (params?.status) q.set("status", params.status);
+  if (params?.vendorId) q.set("vendorId", String(params.vendorId));
+  if (params?.page) q.set("page", String(params.page));
+  if (params?.limit) q.set("limit", String(params.limit));
+  const res = await apiGet<{ success?: boolean; data?: unknown[]; pagination?: unknown }>(
+    `/api/v1/inbound-shipments${q.toString() ? `?${q}` : ""}`
+  );
+  return { items: Array.isArray(res?.data) ? res.data : [], pagination: res?.pagination };
+}
+
+export async function inboundShipmentGet(id: number, orgId?: number): Promise<unknown | null> {
+  const q = orgId ? `?orgId=${orgId}` : "";
+  const res = await apiGet<{ success?: boolean; data?: unknown }>(`/api/v1/inbound-shipments/${id}${q}`);
+  return res?.data ?? null;
+}
+
+export async function putawayTasksList(params?: { orgId?: number; status?: string; warehouseId?: number; page?: number; limit?: number }): Promise<{ items: unknown[]; pagination?: unknown }> {
+  const q = new URLSearchParams();
+  if (params?.orgId) q.set("orgId", String(params.orgId));
+  if (params?.status) q.set("status", params.status);
+  if (params?.warehouseId) q.set("warehouseId", String(params.warehouseId));
+  if (params?.page) q.set("page", String(params.page));
+  if (params?.limit) q.set("limit", String(params.limit));
+  const res = await apiGet<{ success?: boolean; data?: unknown[]; pagination?: unknown }>(
+    `/api/v1/putaway/tasks${q.toString() ? `?${q}` : ""}`
+  );
+  return { items: Array.isArray(res?.data) ? res.data : [], pagination: res?.pagination };
+}
+
+export async function putawayRecommendations(grnLineId: number, orgId?: number): Promise<unknown | null> {
+  const q = new URLSearchParams();
+  q.set("grnLineId", String(grnLineId));
+  if (orgId) q.set("orgId", String(orgId));
+  const res = await apiGet<{ success?: boolean; data?: unknown }>(`/api/v1/putaway/recommendations?${q}`);
+  return res?.data ?? null;
+}
+
+export async function putawayTaskConfirm(id: number, body: { toLocationId: number; orgId?: number }): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/putaway/tasks/${id}/confirm`, body);
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+export async function inboundDiscrepanciesList(params?: { orgId?: number; status?: string; grnId?: number; page?: number; limit?: number }): Promise<{ items: unknown[]; pagination?: unknown }> {
+  const q = new URLSearchParams();
+  if (params?.orgId) q.set("orgId", String(params.orgId));
+  if (params?.status) q.set("status", params.status);
+  if (params?.grnId) q.set("grnId", String(params.grnId));
+  if (params?.page) q.set("page", String(params.page));
+  if (params?.limit) q.set("limit", String(params.limit));
+  const res = await apiGet<{ success?: boolean; data?: unknown[]; pagination?: unknown }>(
+    `/api/v1/inbound-discrepancies${q.toString() ? `?${q}` : ""}`
+  );
+  return { items: Array.isArray(res?.data) ? res.data : [], pagination: res?.pagination };
+}
+
+export async function inboundDiscrepancyCreate(body: Record<string, unknown>): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/inbound-discrepancies`, body);
+  if (!res?.success && (res as { message?: string })?.message) throw new Error((res as { message: string }).message);
+  return (res as { data?: unknown })?.data ?? res;
+}
+
+export async function inboundDiscrepancyResolve(id: number, body?: Record<string, unknown>): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(
+    `/api/v1/inbound-discrepancies/${id}/resolve`,
+    body || {}
+  );
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+export async function allocationPlansList(params?: { orgId?: number; status?: string }): Promise<{ items: unknown[]; pagination?: unknown }> {
+  const q = new URLSearchParams();
+  if (params?.orgId) q.set("orgId", String(params.orgId));
+  if (params?.status) q.set("status", params.status);
+  const res = await apiGet<{ success?: boolean; data?: unknown[]; pagination?: unknown }>(
+    `/api/v1/allocation-plans${q.toString() ? `?${q}` : ""}`
+  );
+  return { items: Array.isArray(res?.data) ? res.data : [], pagination: res?.pagination };
+}
+
+export async function allocationPlanGet(id: number, orgId?: number): Promise<unknown | null> {
+  const q = orgId ? `?orgId=${orgId}` : "";
+  const res = await apiGet<{ success?: boolean; data?: unknown }>(`/api/v1/allocation-plans/${id}${q}`);
+  return res?.data ?? null;
+}
+
+export async function allocationPlanFromStockRequest(body: Record<string, unknown>): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/allocation-plans/from-stock-request`, body);
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+export async function allocationPlanRunFefo(id: number, orgId?: number): Promise<unknown> {
+  const q = orgId ? `?orgId=${orgId}` : "";
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/allocation-plans/${id}/run-fefo${q}`, {});
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+export async function allocationPlanConfirm(id: number, orgId?: number): Promise<unknown> {
+  const q = orgId ? `?orgId=${orgId}` : "";
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/allocation-plans/${id}/confirm${q}`, {});
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+export async function pickListsList(params?: { orgId?: number; mine?: boolean; status?: string }): Promise<{ items: unknown[]; pagination?: unknown }> {
+  const q = new URLSearchParams();
+  if (params?.orgId) q.set("orgId", String(params.orgId));
+  if (params?.mine) q.set("mine", "1");
+  if (params?.status) q.set("status", params.status);
+  const res = await apiGet<{ success?: boolean; data?: unknown[]; pagination?: unknown }>(
+    `/api/v1/pick-lists${q.toString() ? `?${q}` : ""}`
+  );
+  return { items: Array.isArray(res?.data) ? res.data : [], pagination: res?.pagination };
+}
+
+export async function pickListGet(id: number, orgId?: number): Promise<unknown | null> {
+  const q = orgId ? `?orgId=${orgId}` : "";
+  const res = await apiGet<{ success?: boolean; data?: unknown }>(`/api/v1/pick-lists/${id}${q}`);
+  return res?.data ?? null;
+}
+
+export async function pickListFromPlan(planId: number, orgId?: number): Promise<unknown> {
+  const q = orgId ? `?orgId=${orgId}` : "";
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/pick-lists/from-plan/${planId}${q}`, {});
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+export async function pickListStart(id: number, orgId?: number): Promise<unknown> {
+  const q = orgId ? `?orgId=${orgId}` : "";
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/pick-lists/${id}/start${q}`, {});
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+export async function pickListComplete(id: number, orgId?: number): Promise<unknown> {
+  const q = orgId ? `?orgId=${orgId}` : "";
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/pick-lists/${id}/complete${q}`, {});
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+export async function pickListUpdateLine(
+  pickListId: number,
+  lineId: number,
+  body: { quantityPicked: number; orgId?: number }
+): Promise<unknown> {
+  const q = body.orgId ? `?orgId=${body.orgId}` : "";
+  const { orgId, ...rest } = body;
+  const res = await apiPatch<{ success?: boolean; data?: unknown; message?: string }>(
+    `/api/v1/pick-lists/${pickListId}/lines/${lineId}${q}`,
+    rest
+  );
+  if (!res?.success && (res as { message?: string })?.message) throw new Error((res as { message?: string }).message);
+  return (res as { data?: unknown })?.data ?? res;
+}
+
+export async function pickListHandoff(
+  id: number,
+  body: { orgId?: number; toLocationId: number; transport?: Record<string, unknown> }
+): Promise<unknown> {
+  const q = body.orgId ? `?orgId=${body.orgId}` : "";
+  const { orgId, ...rest } = body;
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(
+    `/api/v1/pick-lists/${id}/handoff-dispatch${q}`,
+    rest
+  );
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+export async function deliveryFail(id: number, reason: string): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown }>(`/api/v1/warehouse/delivery/${id}/fail`, { reason });
+  return res?.data ?? res;
+}
+
+/** POST /api/v1/fulfillment/stock-requests/:id/start — create allocation plan draft for enterprise path */
+export async function fulfillmentStartFromStockRequest(
+  stockRequestId: number,
+  body: { fromLocationId: number; warehouseId?: number; orgId?: number }
+): Promise<unknown> {
+  const q = body.orgId ? `?orgId=${body.orgId}` : "";
+  const { orgId, ...rest } = body;
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(
+    `/api/v1/fulfillment/stock-requests/${stockRequestId}/start${q}`,
+    rest
+  );
+  if (!res?.success && (res as { message?: string })?.message) throw new Error((res as { message?: string }).message);
+  return (res as { data?: unknown })?.data ?? res;
+}
+
+/** GET /api/v1/fulfillment/stock-requests/:id/status — plan / pick / dispatch aggregate */
+export async function fulfillmentStockRequestStatus(stockRequestId: number, orgId?: number): Promise<unknown | null> {
+  const q = orgId ? `?orgId=${orgId}` : "";
+  const res = await apiGet<{ success?: boolean; data?: unknown }>(`/api/v1/fulfillment/stock-requests/${stockRequestId}/status${q}`);
+  return res?.data ?? null;
+}
+
+export async function dispatchDiscrepanciesList(dispatchId: number): Promise<unknown[]> {
+  const res = await apiGet<{ success?: boolean; data?: unknown[] }>(`/api/v1/inventory/dispatches/${dispatchId}/discrepancies`);
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export async function dispatchDiscrepancyCreate(
+  dispatchId: number,
+  body: { variantId: number; lotId?: number; reasonCode: string; quantity: number; notes?: string }
+): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(
+    `/api/v1/inventory/dispatches/${dispatchId}/discrepancies`,
+    body
+  );
+  if (!res?.success && (res as { message?: string })?.message) throw new Error((res as { message?: string }).message);
+  return (res as { data?: unknown })?.data ?? res;
+}
+
+export async function dispatchDiscrepancyResolve(discrepancyId: number, resolutionNote?: string): Promise<unknown> {
+  const res = await apiPatch<{ success?: boolean; data?: unknown; message?: string }>(
+    `/api/v1/inventory/dispatches/discrepancies/${discrepancyId}/resolve`,
+    { resolutionNote: resolutionNote ?? "" }
+  );
+  if (!res?.success && (res as { message?: string })?.message) throw new Error((res as { message?: string }).message);
+  return (res as { data?: unknown })?.data ?? res;
 }

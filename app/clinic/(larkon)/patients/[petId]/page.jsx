@@ -1,9 +1,12 @@
 "use client";
 
-import { useEffect, useState } from "react";
+/** Read-only /clinic/patients/[petId]?branchId= — parallel to staff patient-detail; same API. See docs/CLINIC_STANDALONE_VS_STAFF_PATIENT_ROUTES.md. */
+
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { staffClinicPatientGet } from "@/lib/api";
+import { PRIMARY_NOT_FOUND } from "@/lib/clinicNotFoundHelpers";
 
 export default function ClinicPatientDetailPage() {
   const params = useParams();
@@ -14,22 +17,25 @@ export default function ClinicPatientDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
+  const loadPatient = useCallback(async () => {
     if (!branchId || !petId) return;
-    (async () => {
-      setLoading(true);
+    setLoading(true);
+    setError("");
+    try {
+      const data = await staffClinicPatientGet(branchId, petId);
+      setPatient(data ?? null);
       setError("");
-      try {
-        const data = await staffClinicPatientGet(branchId, petId);
-        setPatient(data);
-      } catch (e) {
-        setError(e?.message || "Failed to load patient");
-        setPatient(null);
-      } finally {
-        setLoading(false);
-      }
-    })();
+    } catch {
+      setPatient(null);
+      setError(PRIMARY_NOT_FOUND.patient);
+    } finally {
+      setLoading(false);
+    }
   }, [branchId, petId]);
+
+  useEffect(() => {
+    loadPatient();
+  }, [loadPatient]);
 
   if (!branchId) {
     return (
@@ -57,8 +63,11 @@ export default function ClinicPatientDetailPage() {
       <div className="dashboard-main-body">
         <div className="card radius-12">
           <div className="card-body">
-            <p className="text-danger mb-0">{error || "Patient not found."}</p>
-            <Link href={`/clinic/patients?branchId=${branchId}`} className="btn btn-sm btn-outline-primary mt-2">Back to Patients</Link>
+            <p className="text-danger mb-2">{error || PRIMARY_NOT_FOUND.patient}</p>
+            <div className="d-flex flex-wrap gap-2">
+              <button type="button" className="btn btn-sm btn-outline-primary" onClick={loadPatient}>Retry</button>
+              <Link href={`/clinic/patients?branchId=${branchId}`} className="btn btn-sm btn-outline-secondary">Back to Patients</Link>
+            </div>
           </div>
         </div>
       </div>

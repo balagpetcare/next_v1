@@ -5,6 +5,9 @@ import { DoctorAppointmentStatusBadge } from "./DoctorAppointmentStatusBadge";
 import { DoctorPriorityBadge, getPriorityRowBorderClass } from "./DoctorPriorityBadge";
 import { DoctorPaymentBadge } from "./DoctorPaymentBadge";
 import { formatVisitType, formatAppointmentType } from "@/src/lib/displayFormatters";
+import { formatPetTaxonomyLine } from "@/lib/formatPetTaxonomy";
+import { branchLocalToUTCISO, DEFAULT_CLINIC_TIMEZONE } from "@/lib/clinicScheduleTime";
+import { PaginationBar } from "@/src/components/common/PaginationBar";
 
 export interface AppointmentRow {
   id: number;
@@ -24,7 +27,7 @@ export interface AppointmentRow {
   petNameSnapshot?: string | null;
   branch?: { name?: string };
   service?: { name?: string };
-  visit?: { completedAt?: string | null };
+  visit?: { id?: number; completedAt?: string | null };
 }
 
 export interface DoctorAppointmentTableProps {
@@ -36,8 +39,11 @@ export interface DoctorAppointmentTableProps {
   onComplete: (id: number) => void;
   onReschedule: (id: number, data: { scheduledStartAt: string; scheduledEndAt: string }) => void;
   onCancel: (id: number, reason: string) => void;
+  onOpenVisit?: (visitId: number) => void;
   actioningId: number | null;
   date: string;
+  /** Branch timezone (e.g. Asia/Dhaka) so reschedule date+time is sent as UTC. Defaults to Asia/Dhaka. */
+  branchTimezone?: string;
   total?: number;
   limit?: number;
   offset?: number;
@@ -84,8 +90,10 @@ export function DoctorAppointmentTable({
   onComplete,
   onReschedule,
   onCancel,
+  onOpenVisit,
   actioningId,
   date,
+  branchTimezone = DEFAULT_CLINIC_TIMEZONE,
   total = 0,
   limit = 50,
   offset = 0,
@@ -110,8 +118,8 @@ export function DoctorAppointmentTable({
   const submitReschedule = () => {
     if (!rescheduleApt || !rescheduleDate || !rescheduleStart || !rescheduleEnd) return;
     onReschedule(rescheduleApt.id, {
-      scheduledStartAt: `${rescheduleDate}T${rescheduleStart}:00.000Z`,
-      scheduledEndAt: `${rescheduleDate}T${rescheduleEnd}:00.000Z`,
+      scheduledStartAt: branchLocalToUTCISO(rescheduleDate, rescheduleStart, branchTimezone),
+      scheduledEndAt: branchLocalToUTCISO(rescheduleDate, rescheduleEnd, branchTimezone),
     });
     setRescheduleApt(null);
   };
@@ -128,9 +136,9 @@ export function DoctorAppointmentTable({
     setCancelReason("");
   };
 
-  const totalPages = limit > 0 ? Math.ceil(total / limit) : 0;
+  const totalPages = limit > 0 ? Math.max(1, Math.ceil(total / limit)) : 1;
   const currentPage = limit > 0 ? Math.floor(offset / limit) + 1 : 1;
-  const hasPagination = total > limit && onPaginate && limit > 0;
+  const hasPagination = Boolean(onPaginate && limit > 0 && total > 0);
 
   return (
     <>
@@ -159,7 +167,10 @@ export function DoctorAppointmentTable({
               const isToday =
                 apt.scheduledStartAt &&
                 new Date(apt.scheduledStartAt).toISOString().slice(0, 10) === new Date().toISOString().slice(0, 10);
-              const isInConsult = apt.status === "IN_CONSULT";
+              const statusUpper = (apt.status ?? "").toString().toUpperCase();
+              const isInConsult = statusUpper === "IN_CONSULT";
+              const visitId = apt.visit != null && typeof apt.visit === "object" && "id" in apt.visit ? (apt.visit as { id?: number }).id : undefined;
+              const canStart = visitId == null && ["BOOKED", "CONFIRMED", "CHECKED_IN", "IN_QUEUE", "CALLED"].includes(statusUpper);
               const isOverdue =
                 apt.scheduledStartAt &&
                 ["BOOKED", "CONFIRMED"].includes(apt.status) &&
@@ -198,8 +209,8 @@ export function DoctorAppointmentTable({
                     <span className="d-block text-truncate" style={{ maxWidth: 100 }} title={petName(apt)}>
                       {petName(apt)}
                     </span>
-                    {apt?.pet?.animalType?.name && (
-                      <span className="d-block small text-muted">{apt.pet.animalType.name}</span>
+                    {apt?.pet && (formatPetTaxonomyLine(apt.pet) || apt.pet.animalType?.name) && (
+                      <span className="d-block small text-muted">{formatPetTaxonomyLine(apt.pet) || apt.pet.animalType?.name}</span>
                     )}
                   </td>
                   <td className="small text-truncate" style={{ maxWidth: 100 }} title={serviceName(apt)}>
@@ -220,7 +231,7 @@ export function DoctorAppointmentTable({
                     {branchName(apt)}
                   </td>
                   <td className="text-end" onClick={(e) => e.stopPropagation()}>
-                    {["IN_QUEUE", "CHECKED_IN"].includes(apt.status) && (
+                    {["IN_QUEUE", "CHECKED_IN"].includes(statusUpper) && (
                       <button
                         type="button"
                         className="btn btn-sm btn-info me-1"
@@ -230,7 +241,16 @@ export function DoctorAppointmentTable({
                         Call
                       </button>
                     )}
-                    {apt.status === "CALLED" && (
+                    {visitId != null && onOpenVisit && (
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-primary me-1"
+                        onClick={() => onOpenVisit(visitId)}
+                      >
+                        Open Visit
+                      </button>
+                    )}
+                    {canStart && (
                       <button
                         type="button"
                         className="btn btn-sm btn-success me-1"
@@ -240,17 +260,17 @@ export function DoctorAppointmentTable({
                         Start
                       </button>
                     )}
-                    {apt.status === "IN_CONSULT" && (
+                    {statusUpper === "IN_CONSULT" && (
                       <button
                         type="button"
-                        className="btn btn-sm btn-primary me-1"
+                        className="btn btn-sm btn-outline-primary me-1"
                         disabled={actioningId === apt.id}
                         onClick={() => onComplete(apt.id)}
                       >
                         Complete
                       </button>
                     )}
-                    {["BOOKED", "CONFIRMED"].includes(apt.status) && (
+                    {["BOOKED", "CONFIRMED"].includes(statusUpper) && (
                       <>
                         <button
                           type="button"
@@ -282,29 +302,16 @@ export function DoctorAppointmentTable({
       </div>
 
       {hasPagination && (
-        <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mt-2 py-2 border-top">
-          <span className="small text-muted">
-            Page {currentPage} of {totalPages} ({total} total)
-          </span>
-          <div className="d-flex gap-1">
-            <button
-              type="button"
-              className="btn btn-sm btn-outline-secondary"
-              disabled={offset <= 0}
-              onClick={() => onPaginate!(Math.max(0, offset - limit))}
-            >
-              Previous
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm btn-outline-secondary"
-              disabled={offset + limit >= total}
-              onClick={() => onPaginate!(offset + limit)}
-            >
-              Next
-            </button>
-          </div>
-        </div>
+        <PaginationBar
+          page={currentPage}
+          pageSize={limit}
+          total={total}
+          totalPages={totalPages}
+          disabled={false}
+          onPageChange={(p) => onPaginate!((p - 1) * limit)}
+          className="mt-2 pt-2 border-top"
+          ariaLabel="Appointments pages"
+        />
       )}
 
       {/* Reschedule modal */}

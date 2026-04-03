@@ -4,7 +4,13 @@
  */
 
 export type InjectionTokenStatus = "PENDING" | "USED" | "EXPIRED" | "CANCELLED";
-export type MedicineSource = "INTERNAL" | "EXTERNAL" | "OUTSIDE";
+/** Aligns with Prisma MedicineSource (enterprise injection). Legacy INTERNAL/EXTERNAL/OUTSIDE accepted by API but normalized server-side. */
+export type MedicineSource =
+  | "INTERNAL_CLINIC"
+  | "CLINIC_PROVIDED_MEDICINE"
+  | "OUTSIDE_PRESCRIPTION_PATIENT_BROUGHT";
+
+export type InjectionEncounterKind = "INTERNAL_VISIT" | "EXTERNAL_WALK_IN";
 
 export interface InjectionTokenVariant {
   id: number;
@@ -15,6 +21,7 @@ export interface InjectionTokenVariant {
 export interface InjectionTokenVisit {
   id: number;
   treatmentCode?: string | null;
+  doctorId?: number | null;
 }
 
 export interface InjectionTokenOrder {
@@ -56,6 +63,29 @@ export interface TreatmentDaySummary {
   status?: string | null;
 }
 
+/** One medicine/administration row on a multi-line injection token (API + Prisma). */
+export interface InjectionTokenMedicationLine {
+  id?: number;
+  lineIndex?: number;
+  medicineSource: MedicineSource;
+  variantId?: number | null;
+  manualMedicineName?: string | null;
+  manualStrength?: string | null;
+  manualBatch?: string | null;
+  manualManufacturer?: string | null;
+  route: string;
+  expectedDose: number | string;
+  unit?: string | null;
+  durationText?: string | null;
+  frequencyText?: string | null;
+  longevityNote?: string | null;
+  lineNote?: string | null;
+  selectedVialSessionId?: number | null;
+  medicineFeeSnapshot?: string | number | null;
+  variant?: InjectionTokenVariant | null;
+  selectedVialSession?: VialSessionSummary | null;
+}
+
 export interface InjectionToken {
   id: number;
   tokenCode: string;
@@ -65,13 +95,23 @@ export interface InjectionToken {
   orderId: number | null;
   patientId: number | null;
   petId: number | null;
-  variantId: number;
+  /** Legacy mirror of first clinic line; null when outside-only multi-line. */
+  variantId?: number | null;
   treatmentCourseId: number | null;
   treatmentDayId: number | null;
   selectedVialSessionId: number | null;
-  expectedDose: number;
+  expectedDose?: number | string | null;
   unit: string | null;
   medicineSource: MedicineSource;
+  encounterKind?: InjectionEncounterKind;
+  externalPrescriberName?: string | null;
+  externalPrescriberClinic?: string | null;
+  externalRxNotes?: string | null;
+  externalRxEvidenceUrl?: string | null;
+  serviceChargeAmount?: string | number | null;
+  medicineChargeAmount?: string | number | null;
+  consumablesChargeAmount?: string | number | null;
+  lifecycleLabel?: string;
   status: InjectionTokenStatus;
   generatedByUserId: number | null;
   validatedByUserId?: number | null;
@@ -92,6 +132,7 @@ export interface InjectionToken {
   treatmentCourse?: TreatmentCourseSummary | null;
   treatmentDay?: TreatmentDaySummary | null;
   selectedVialSession?: VialSessionSummary | null;
+  medicationLines?: InjectionTokenMedicationLine[] | null;
   generatedBy?: { id: number; profile?: { displayName?: string | null } } | null;
   validatedBy?: { id: number; profile?: { displayName?: string | null } } | null;
   usedBy?: { id: number; profile?: { displayName?: string | null } } | null;
@@ -120,6 +161,7 @@ export interface VialSessionListItem {
   status?: string | null;
   openedAt?: string | null;
   variant?: { id: number; title?: string | null; sku?: string | null } | null;
+  room?: { id: number; name?: string | null; code?: string | null } | null;
 }
 
 export interface MedicationAdministration {

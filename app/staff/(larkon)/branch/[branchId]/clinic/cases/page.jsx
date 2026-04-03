@@ -9,6 +9,7 @@ import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
 import EmptyState from "@/src/components/dashboard/EmptyState";
 import StatusBadge from "@/src/components/dashboard/StatusBadge";
+import { PaginationBar } from "@/src/components/common/PaginationBar";
 
 export default function StaffClinicCasesPage() {
   const params = useParams();
@@ -162,30 +163,17 @@ export default function StaffClinicCasesPage() {
               </table>
             </div>
           )}
-          {pagination.totalPages > 1 && (
-            <div className="d-flex justify-content-between align-items-center mt-3 small text-muted">
-              <span>
-                Page {pagination.page} of {pagination.totalPages} ({pagination.total} cases)
-              </span>
-              <div className="d-flex gap-2">
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-secondary"
-                  disabled={pagination.page <= 1}
-                  onClick={() => setPagination((p) => ({ ...p, page: p.page - 1 }))}
-                >
-                  Previous
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-secondary"
-                  disabled={pagination.page >= pagination.totalPages}
-                  onClick={() => setPagination((p) => ({ ...p, page: p.page + 1 }))}
-                >
-                  Next
-                </button>
-              </div>
-            </div>
+          {pagination.total > 0 && (
+            <PaginationBar
+              page={pagination.page}
+              pageSize={pagination.limit}
+              total={pagination.total}
+              totalPages={Math.max(1, pagination.totalPages || 1)}
+              disabled={loading}
+              onPageChange={(p) => setPagination((prev) => ({ ...prev, page: p }))}
+              className="mt-3 pt-3 border-top"
+              ariaLabel="Clinical cases pages"
+            />
           )}
         </div>
       </div>

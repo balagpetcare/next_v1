@@ -11,6 +11,7 @@ import EmptyState from '@/src/bpa/admin/components/EmptyState'
 import ErrorState from '@/src/bpa/admin/components/ErrorState'
 import LoadingSkeleton from '@/src/bpa/admin/components/LoadingSkeleton'
 import { getGovernance, postGovernance } from '@/src/bpa/admin/lib/governanceApi'
+import { PaginationBar } from '@/src/components/common/PaginationBar'
 
 type ApprovalRow = {
   id: number
@@ -216,9 +217,6 @@ export default function AdminApprovalsQueuePage() {
     setSearch('')
     setPage(1)
   }
-
-  const from = total === 0 ? 0 : (page - 1) * limit + 1
-  const to = Math.min(page * limit, total)
 
   return (
     <AdminPageShell
@@ -429,40 +427,37 @@ export default function AdminApprovalsQueuePage() {
                 }
               />
               {total > 0 && (
-                <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 border-top p-3">
-                  <div className="d-flex align-items-center gap-2">
-                    <span className="small text-muted">
-                      Showing {from}–{to} of {total}
-                    </span>
-                    <select
-                      className="form-select form-select-sm"
-                      style={{ width: 70 }}
-                      value={limit}
-                      onChange={(e) => { setLimit(Number(e.target.value)); setPage(1); }}
-                    >
-                      {PAGE_SIZES.map((n) => (
-                        <option key={n} value={n}>{n}</option>
-                      ))}
-                    </select>
-                    <span className="small text-muted">per page</span>
-                  </div>
-                  <nav aria-label="Approvals pagination">
-                    <ul className="pagination pagination-sm mb-0">
-                      <li className={`page-item ${page <= 1 ? 'disabled' : ''}`}>
-                        <button type="button" className="page-link" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page <= 1}>
-                          Previous
-                        </button>
-                      </li>
-                      <li className="page-item disabled">
-                        <span className="page-link">Page {page} of {totalPages}</span>
-                      </li>
-                      <li className={`page-item ${page >= totalPages ? 'disabled' : ''}`}>
-                        <button type="button" className="page-link" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page >= totalPages}>
-                          Next
-                        </button>
-                      </li>
-                    </ul>
-                  </nav>
+                <div className="border-top p-3">
+                  <PaginationBar
+                    page={page}
+                    pageSize={limit}
+                    total={total}
+                    totalPages={totalPages}
+                    disabled={loading}
+                    onPageChange={setPage}
+                    className="mt-0 pt-0 border-0"
+                    ariaLabel="Approvals pages"
+                    endBeforeNav={
+                      <label className="d-flex align-items-center gap-1 small text-muted mb-0">
+                        <span className="text-nowrap">Per page</span>
+                        <select
+                          className="form-select form-select-sm"
+                          style={{ width: 70 }}
+                          value={limit}
+                          onChange={(e) => {
+                            setLimit(Number(e.target.value))
+                            setPage(1)
+                          }}
+                        >
+                          {PAGE_SIZES.map((n) => (
+                            <option key={n} value={n}>
+                              {n}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    }
+                  />
                 </div>
               )}
             </>

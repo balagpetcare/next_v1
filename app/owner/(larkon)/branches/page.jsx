@@ -16,6 +16,20 @@ function pickArray(resp) {
   return [];
 }
 
+/**
+ * Business-visible status for owner branch list: use API displayStatus when present,
+ * else derive from status/verificationStatus (for backward compatibility).
+ */
+function branchDisplayStatus(branch) {
+  if (branch?.displayStatus != null && branch.displayStatus !== "") return branch.displayStatus;
+  const status = branch?.status || "DRAFT";
+  const verificationStatus = branch?.verificationStatus || "";
+  if (verificationStatus === "VERIFIED" && status !== "BLOCKED" && status !== "INACTIVE") {
+    return "ACTIVE";
+  }
+  return status;
+}
+
 export default function BranchesPage() {
   const { t } = useLanguage();
   const [branches, setBranches] = useState([]);
@@ -44,7 +58,7 @@ export default function BranchesPage() {
   const filteredBranches = useMemo(() => {
     let list = branches;
     if (statusFilter) {
-      list = list.filter((b) => String(b.status || "ACTIVE").toUpperCase() === statusFilter.toUpperCase());
+      list = list.filter((b) => String(branchDisplayStatus(b)).toUpperCase() === statusFilter.toUpperCase());
     }
     if (typeFilter) {
       list = list.filter((b) =>
@@ -59,7 +73,7 @@ export default function BranchesPage() {
   }, [branches, statusFilter, typeFilter]);
 
   const uniqueStatuses = useMemo(() => {
-    const s = new Set((branches || []).map((b) => (b.status || "ACTIVE").toUpperCase()));
+    const s = new Set((branches || []).map((b) => branchDisplayStatus(b).toUpperCase()));
     return Array.from(s).sort();
   }, [branches]);
 
@@ -207,7 +221,7 @@ export default function BranchesPage() {
                           </div>
                         </td>
                         <td>
-                          <StatusBadge status={branch.status || "ACTIVE"} />
+                          <StatusBadge status={branchDisplayStatus(branch)} />
                         </td>
                         <td>
                           <div className="d-flex gap-2">
@@ -231,7 +245,7 @@ export default function BranchesPage() {
                                       <i className="ri-file-list-line" />
                                     </Link>
                                     <Link
-                                      href={`/owner/organizations/${orgId}/branches/${branchId}/edit`}
+                                      href={`/owner/branches/${branchId}/edit`}
                                       className="btn btn-sm btn-outline-secondary radius-12"
                                       title="Edit Branch"
                                     >

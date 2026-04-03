@@ -2,10 +2,11 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Offcanvas } from "react-bootstrap";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 import { ownerGet } from "@/app/owner/_lib/ownerApi";
-import { Pagination } from "@/src/components/common/Pagination";
+import { PaginationBar } from "@/src/components/common/PaginationBar";
 
 type Location = { id: number; name: string; branch?: { id: number; name: string } };
 
@@ -17,6 +18,7 @@ type GrnRow = {
   invoiceDate?: string | null;
   notes?: string | null;
   vendor?: { id: number; name: string } | null;
+  purchaseOrder?: { id: number; poNumber: string; status: string } | null;
   location?: { id: number; name: string } | null;
   lines?: Array<{ id: number; quantity: number; variant?: { id: number; sku: string; title: string } }>;
 };
@@ -51,6 +53,10 @@ function pickArray(resp: any): unknown[] {
 }
 
 export default function OwnerInventoryReceiptsPage() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [warehouseFilter, setWarehouseFilter] = useState("");
+  const [poFilter, setPoFilter] = useState("");
   const [items, setItems] = useState<GrnRow[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,6 +94,13 @@ export default function OwnerInventoryReceiptsPage() {
     };
   }, []);
 
+  useEffect(() => {
+    const w = searchParams.get("warehouseId");
+    if (w) setWarehouseFilter(String(w));
+    const po = searchParams.get("purchaseOrderId");
+    if (po) setPoFilter(String(po));
+  }, [searchParams]);
+
   const loadList = useCallback(async () => {
     if (!orgId) {
       setItems([]);
@@ -101,6 +114,8 @@ export default function OwnerInventoryReceiptsPage() {
       if (filters.status) params.set("status", filters.status);
       if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
       if (filters.dateTo) params.set("dateTo", filters.dateTo);
+      if (warehouseFilter) params.set("warehouseId", warehouseFilter);
+      if (poFilter) params.set("purchaseOrderId", poFilter);
       const res: any = await ownerGet(`/api/v1/grn?${params.toString()}`);
       const data = res?.data ?? [];
       const pag = res?.pagination ?? { page: 1, limit: 20, total: 0, totalPages: 1 };
@@ -112,7 +127,7 @@ export default function OwnerInventoryReceiptsPage() {
     } finally {
       setLoading(false);
     }
-  }, [orgId, filters, pagination.page, pagination.limit]);
+  }, [orgId, filters, pagination.page, pagination.limit, warehouseFilter, poFilter]);
 
   useEffect(() => {
     if (!orgLoaded) return;
@@ -167,7 +182,7 @@ export default function OwnerInventoryReceiptsPage() {
     win.close();
   }, [drawerGrnId]);
 
-  const hasFilters = !!(filters.locationId || filters.status || filters.dateFrom || filters.dateTo);
+  const hasFilters = !!(filters.locationId || filters.status || filters.dateFrom || filters.dateTo || warehouseFilter);
 
   return (
     <div className="dashboard-main-body">
@@ -185,6 +200,45 @@ export default function OwnerInventoryReceiptsPage() {
           </Link>,
         ]}
       />
+
+      {warehouseFilter ? (
+        <div className="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+          <span>
+            Filtered to GRNs at locations linked to warehouse <strong>#{warehouseFilter}</strong> (from operations / receipts link).
+          </span>
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-secondary"
+            onClick={() => {
+              setWarehouseFilter("");
+              router.replace("/owner/inventory/receipts");
+            }}
+          >
+            Clear warehouse filter
+          </button>
+        </div>
+      ) : null}
+
+      {poFilter ? (
+        <div className="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+          <span>
+            Showing GRNs for purchase order <strong>#{poFilter}</strong>.{" "}
+            <Link href={`/owner/inventory/purchase-orders/${poFilter}`} className="fw-semibold">
+              Back to PO
+            </Link>
+          </span>
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-secondary"
+            onClick={() => {
+              setPoFilter("");
+              router.replace("/owner/inventory/receipts");
+            }}
+          >
+            Clear PO filter
+          </button>
+        </div>
+      ) : null}
 
       <div className="card radius-12 mb-3">
         <div className="card-body">
@@ -285,6 +339,7 @@ export default function OwnerInventoryReceiptsPage() {
                     <th>Date</th>
                     <th>Location</th>
                     <th>Vendor</th>
+                    <th>PO</th>
                     <th>Status</th>
                     <th>Lines</th>
                     <th style={{ width: 140 }}></th>
@@ -297,6 +352,15 @@ export default function OwnerInventoryReceiptsPage() {
                       <td className="text-muted small">{formatDate(r.createdAt)}</td>
                       <td>{r.location?.name ?? "—"}</td>
                       <td>{r.vendor?.name ?? "—"}</td>
+                      <td className="small">
+                        {r.purchaseOrder ? (
+                          <Link href={`/owner/inventory/purchase-orders/${r.purchaseOrder.id}`} className="text-decoration-none">
+                            {r.purchaseOrder.poNumber}
+                          </Link>
+                        ) : (
+                          "—"
+                        )}
+                      </td>
                       <td>
                         <span className={`badge ${statusClass(r.status)}`}>{r.status ?? "—"}</span>
                       </td>
@@ -322,13 +386,17 @@ export default function OwnerInventoryReceiptsPage() {
                 </tbody>
               </table>
             </div>
-            {pagination.totalPages > 1 && (
+            {pagination.total > 0 && (
               <div className="p-3 border-top">
-                <Pagination
-                  currentPage={pagination.page}
+                <PaginationBar
+                  page={pagination.page}
+                  pageSize={pagination.limit}
+                  total={pagination.total}
                   totalPages={pagination.totalPages}
+                  disabled={false}
                   onPageChange={(p) => setPagination((prev) => ({ ...prev, page: p }))}
-                  align="end"
+                  className="mt-0 pt-0 border-0"
+                  ariaLabel="Receipts pages"
                 />
               </div>
             )}
@@ -358,6 +426,15 @@ export default function OwnerInventoryReceiptsPage() {
                 <p className="mb-1"><strong>Date:</strong> {formatDate(drawerData.createdAt)}</p>
                 <p className="mb-1"><strong>Location:</strong> {drawerData.location?.name ?? "—"}</p>
                 <p className="mb-1"><strong>Vendor:</strong> {drawerData.vendor?.name ?? "—"}</p>
+                {drawerData.purchaseOrder && (
+                  <p className="mb-1">
+                    <strong>PO:</strong>{" "}
+                    <Link href={`/owner/inventory/purchase-orders/${drawerData.purchaseOrder.id}`}>
+                      {drawerData.purchaseOrder.poNumber}
+                    </Link>{" "}
+                    <span className="text-muted">({drawerData.purchaseOrder.status})</span>
+                  </p>
+                )}
                 {drawerData.invoiceNo && <p className="mb-1"><strong>Invoice:</strong> {drawerData.invoiceNo}</p>}
                 {drawerData.notes && <p className="mb-2 text-muted">{drawerData.notes}</p>}
                 <table className="table table-sm table-bordered mb-0">

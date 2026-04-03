@@ -34,17 +34,18 @@ export default function ClinicBranchDashboardPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!branchId) return;
+    if (typeof branchId !== "string" || branchId === "") return;
+    const id = branchId;
     async function load() {
       try {
         setLoading(true);
         setError("");
         const [branchesRes, dashboardStats] = await Promise.all([
           ownerClinicBranches(),
-          ownerClinicDashboardStatsSafe(branchId),
+          ownerClinicDashboardStatsSafe(id),
         ]);
         const branches = pickBranches(branchesRes as { success?: boolean; data?: unknown[] });
-        const current = branches.find((b) => String(b.id) === String(branchId));
+        const current = branches.find((b) => String(b.id) === String(id));
         setBranch(current ?? null);
         setStats(dashboardStats);
       } catch (e) {

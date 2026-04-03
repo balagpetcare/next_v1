@@ -25,7 +25,7 @@
   - `src\`
 - **Root files copied:**
   - `package.json`, `package-lock.json`
-  - `next.config.js`, `next.config.mjs`
+  - `next.config.js` (canonical; do not reintroduce `next.config.mjs`)
   - `tsconfig.json`, `jsconfig.json`
   - `postcss.config.js`, `tailwind.config.js`
   - `eslint.config.mjs`, `.eslintrc.json` (`.eslintrc.json.bak` also present)

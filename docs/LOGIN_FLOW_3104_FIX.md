@@ -24,8 +24,9 @@
 
 ### 4. Dual Next config – API route never ran (remaining 401 after login)
 
-- The repo has two Next config files: `next.config.mjs` and `next.config.js`. When both exist, `next.config.js` is the one loaded by `next dev` (and by `dev:owner` on port 3104). Only `next.config.mjs` had been updated to remove the `/api/v1/*` rewrite from `beforeFiles`. `next.config.js` still had `beforeFiles: [{ source: "/api/v1/:path*", ... }]`.
+- **Historical:** The repo had two Next config files: `next.config.mjs` and `next.config.js`. When both existed, `next.config.js` was the one loaded by `next dev` (and by `dev:owner` on port 3104). Only `next.config.mjs` had been updated to remove the `/api/v1/*` rewrite from `beforeFiles`. `next.config.js` still had `beforeFiles: [{ source: "/api/v1/:path*", ... }]`.
 - So at runtime, every `/api/v1/*` request (including login and auth/me) was rewritten to the backend before the filesystem was checked. The App Router API route never ran, so Set-Cookie forwarding had no effect. The browser often did not receive the session cookie; post-auth-landing then called auth/me without a cookie and got 401 Unauthorized.
+- **Current (2026-03-21):** **`next.config.mjs` was removed.** All behavior is merged into **`next.config.js`** (including Turbopack nested-route flag and redirects). Do not add a parallel `.mjs` config again.
 
 ## Fix Summary
 
@@ -36,7 +37,7 @@
 - After calling the backend, copy all `Set-Cookie` headers from the backend response into the NextResponse (using `getSetCookie()` when available, else `get("set-cookie")`).
 - Both JSON and non-JSON responses now forward these headers so cookie-based auth works.
 
-**Files:** `next.config.mjs` and **`next.config.js`** (the one actually used by `next dev`)
+**Files:** **`next.config.js`** (canonical; formerly duplicated in removed `next.config.mjs`)
 
 - The `/api/v1/:path*` rewrite must **not** be in `beforeFiles`. So Next.js checks the filesystem first and the App Router API route `app/api/v1/[[...path]]/route.js` handles all `/api/v1/*` requests. That guarantees login and `/auth/me` go through the proxy route and Set-Cookie is always forwarded. The rewrite remains in `fallback` only.
 - **Critical:** Apply the same change in **`next.config.js`** (empty `beforeFiles`, `fallback: [apiRewrite]`). Otherwise the API route never runs and the session is not established.
@@ -87,8 +88,7 @@
 | `app/staff/layout.jsx` | Use `getAuthMeBase()` from lib. |
 | `app/post-auth-landing/page.tsx` | Use `getBrowserSafeApiBase()` from lib. |
 | `app/staff/login/page.jsx` | **New.** Redirect to `/login?app=staff&returnTo=...`. |
-| `next.config.mjs` | Remove api rewrite from `beforeFiles`; use `fallback` for API rewrite. |
-| **`next.config.js`** | **Same as above.** This is the config loaded by `next dev` when both exist; without this change, the API route never runs and login session is not established (auth/me 401). |
+| **`next.config.js`** | API rewrite only in `fallback`, not `beforeFiles`; includes merged redirects/Turbopack settings. **Do not reintroduce `next.config.mjs`.** |
 | `app/post-auth-landing/page.tsx` | Dev-only log of auth/me status and URL; log when auth/me fails before redirect to /login. |
 
 ## Test Scenarios

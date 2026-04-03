@@ -37,6 +37,9 @@ export type SelectedRow = {
   lotCode: string;
   mfgDate: string;
   expDate: string;
+  /** When receiving against a PO, set automatically or per-line for duplicate variants */
+  purchaseOrderLineId?: string;
+  supplierBarcode?: string;
   requiresLot?: boolean;
   requiresExpiry?: boolean;
   requiresMfg?: boolean;

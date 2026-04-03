@@ -1,0 +1,33 @@
+.consoleCard {
+  border: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+.sectionLabel {
+  font-size: 0.7rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  font-weight: 600;
+  color: var(--bs-secondary-color, #6c757d);
+}
+
+.exactZone {
+  border-left: 3px solid var(--bs-primary, #0d6efd);
+  padding-left: 0.75rem;
+}
+
+.containsZone {
+  border-left: 3px solid rgba(var(--bs-secondary-rgb, 108, 117, 125), 0.45);
+  padding-left: 0.75rem;
+}
+
+.stickyActionBar {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+  margin-left: -1px;
+  margin-right: -1px;
+  margin-bottom: -1px;
+  background: var(--bs-body-bg, #fff);
+  border-top: 1px solid rgba(0, 0, 0, 0.08);
+  box-shadow: 0 -6px 16px rgba(0, 0, 0, 0.04);
+}

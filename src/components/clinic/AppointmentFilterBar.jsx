@@ -79,6 +79,7 @@ export default function AppointmentFilterBar({
   onCreateWalkIn,
   onCreatePhone,
   onCreateOnline,
+  onQuickAppointment,
   onOpenWizard,
   onExport,
   showMoreFilters,
@@ -212,6 +213,9 @@ export default function AppointmentFilterBar({
         )}
         {canManage && (
           <div className="d-flex gap-2 ms-auto">
+            {onQuickAppointment && (
+              <button type="button" className="btn btn-outline-primary btn-sm" onClick={onQuickAppointment}>Quick</button>
+            )}
             <button type="button" className="btn btn-outline-primary btn-sm" onClick={onCreateWalkIn}>Walk-in</button>
             <button type="button" className="btn btn-outline-primary btn-sm" onClick={onCreatePhone}>Phone</button>
             <button type="button" className="btn btn-primary btn-sm" onClick={onCreateOnline}>New appointment</button>

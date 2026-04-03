@@ -73,10 +73,12 @@ export const entityConfigs = {
       { key: "user.auth.email", label: "Email" },
     ],
     filters: ["status", "role", "branchId"],
-    stats: ["total", "active", "inactive"],
+    stats: ["total", "active", "inactive", "invited", "expired"],
     quickFilters: [
       { key: "status", value: "ACTIVE", label: "Active" },
       { key: "status", value: "INACTIVE", label: "Inactive" },
+      { key: "status", value: "INVITED", label: "Invited" },
+      { key: "status", value: "EXPIRED", label: "Expired" },
       { key: "role", value: "BRANCH_MANAGER", label: "Managers" },
     ],
     advancedFilters: [

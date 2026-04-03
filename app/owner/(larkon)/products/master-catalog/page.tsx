@@ -11,7 +11,7 @@ import { useAlreadyAddedSet } from "./_components/useAlreadyAddedSet";
 import { MasterCatalogSkeleton } from "./_components/MasterCatalogSkeleton";
 import { BulkAddConfirmModal } from "./_components/BulkAddConfirmModal";
 import type { MasterProduct, Brand, Category, StatusFilter } from "./_components/masterCatalog.types";
-import { Pagination } from "@/src/components/common/Pagination";
+import { PaginationBar } from "@/src/components/common/PaginationBar";
 
 const SEARCH_DEBOUNCE_MS = 300;
 const BULK_CONCURRENCY = 6;
@@ -81,6 +81,8 @@ export default function MasterCatalogPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
+  const [listTotal, setListTotal] = useState(0);
+  const MASTER_PAGE_SIZE = 20;
   const [cloningId, setCloningId] = useState<number | null>(null);
   const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
@@ -118,7 +120,13 @@ export default function MasterCatalogPage() {
       };
       const items = res?.data ?? res?.items ?? [];
       setProducts(items);
-      if (res?.pagination) setTotalPages(res.pagination.totalPages);
+      if (res?.pagination) {
+        setTotalPages(Math.max(1, res.pagination.totalPages));
+        setListTotal(typeof res.pagination.total === "number" ? res.pagination.total : items.length);
+      } else {
+        setTotalPages(1);
+        setListTotal(items.length);
+      }
     } catch (e: any) {
       toast.error(e?.message || "Failed to load master catalog");
       setProducts([]);
@@ -634,16 +642,17 @@ export default function MasterCatalogPage() {
               )}
 
               {/* Pagination: shared by both grid and table, outside overflow container */}
-              {!loading && filteredByStatus.length > 0 && totalPages > 1 && (
-                <div className="d-flex justify-content-center mt-4">
-                  <Pagination
-                    currentPage={page}
-                    totalPages={totalPages}
-                    onPageChange={setPage}
-                    align="center"
-                    ariaLabel="Master catalog pagination"
-                  />
-                </div>
+              {!loading && filteredByStatus.length > 0 && listTotal > 0 && (
+                <PaginationBar
+                  page={page}
+                  pageSize={MASTER_PAGE_SIZE}
+                  total={listTotal}
+                  totalPages={totalPages}
+                  disabled={loading}
+                  onPageChange={setPage}
+                  className="mt-4 pt-3 border-top"
+                  ariaLabel="Master catalog pages"
+                />
               )}
             </div>
           </div>

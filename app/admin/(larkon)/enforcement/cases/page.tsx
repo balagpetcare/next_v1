@@ -9,6 +9,7 @@ import EmptyState from '@/src/bpa/admin/components/EmptyState'
 import ErrorState from '@/src/bpa/admin/components/ErrorState'
 import LoadingSkeleton from '@/src/bpa/admin/components/LoadingSkeleton'
 import StatusChip from '@/src/bpa/admin/components/StatusChip'
+import { PaginationBar } from '@/src/components/common/PaginationBar'
 import {
   getEnforcementCasesStats,
   listEnforcementCases,
@@ -139,9 +140,6 @@ export default function EnforcementCasesPage() {
     setSearchQ('')
     setPage(1)
   }
-
-  const from = total === 0 ? 0 : (page - 1) * limit + 1
-  const to = Math.min(page * limit, total)
 
   return (
     <AdminPageShell
@@ -320,49 +318,38 @@ export default function EnforcementCasesPage() {
             rows={items}
             keyField="id"
             loading={loading}
-            emptyState={<EmptyState title="No cases" message="No complaint cases match the filters." />}
+            emptyState={<EmptyState title="No cases" description="No complaint cases match the filters." />}
           />
-          <div className="d-flex justify-content-between align-items-center mt-2">
-            <span className="text-muted small">
-              {from}–{to} of {total}
-            </span>
-            <div className="d-flex gap-1 align-items-center">
-              <select
-                className="form-select form-select-sm"
-                style={{ width: 70 }}
-                value={limit}
-                onChange={(e) => {
-                  setLimit(Number(e.target.value))
-                  setPage(1)
-                }}
-              >
-                {PAGE_SIZES.map((n) => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="button"
-                className="btn btn-sm btn-outline-secondary"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                Prev
-              </button>
-              <span className="small">
-                Page {page} / {totalPages}
-              </span>
-              <button
-                type="button"
-                className="btn btn-sm btn-outline-secondary"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              >
-                Next
-              </button>
-            </div>
-          </div>
+          <PaginationBar
+            page={page}
+            pageSize={limit}
+            total={total}
+            totalPages={totalPages}
+            disabled={loading}
+            onPageChange={setPage}
+            className="mt-2 border-0 pt-2"
+            ariaLabel="Enforcement cases pages"
+            endBeforeNav={
+              <label className="d-flex align-items-center gap-1 small text-muted mb-0">
+                <span className="text-nowrap">Per page</span>
+                <select
+                  className="form-select form-select-sm"
+                  style={{ width: 70 }}
+                  value={limit}
+                  onChange={(e) => {
+                    setLimit(Number(e.target.value))
+                    setPage(1)
+                  }}
+                >
+                  {PAGE_SIZES.map((n) => (
+                    <option key={n} value={n}>
+                      {n}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            }
+          />
         </>
       )}
     </AdminPageShell>

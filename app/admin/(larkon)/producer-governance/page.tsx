@@ -9,6 +9,7 @@ import EmptyState from '@/src/bpa/admin/components/EmptyState'
 import ErrorState from '@/src/bpa/admin/components/ErrorState'
 import LoadingSkeleton from '@/src/bpa/admin/components/LoadingSkeleton'
 import { getGovernance } from '@/src/bpa/admin/lib/governanceApi'
+import { PaginationBar } from '@/src/components/common/PaginationBar'
 
 type ProducerRow = {
   orgId: number
@@ -189,29 +190,18 @@ export default function ProducerGovernanceListPage() {
                 </div>
               }
             />
-            {totalPages > 1 && data && !error && (
-              <div className="d-flex justify-content-between align-items-center px-4 py-3 border-top bg-light">
-                <span className="text-secondary small">
-                  Page {data.page} of {totalPages}
-                </span>
-                <div className="d-flex gap-1">
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-secondary"
-                    disabled={page <= 1}
-                    onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  >
-                    Previous
-                  </button>
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-secondary"
-                    disabled={page >= totalPages}
-                    onClick={() => setPage((p) => p + 1)}
-                  >
-                    Next
-                  </button>
-                </div>
+            {data && !error && total > 0 && (
+              <div className="px-4 py-3 border-top bg-light">
+                <PaginationBar
+                  page={page}
+                  pageSize={pageSize}
+                  total={total}
+                  totalPages={totalPages}
+                  disabled={loading}
+                  onPageChange={setPage}
+                  className="mt-0 pt-0 border-0"
+                  ariaLabel="Producer organizations pages"
+                />
               </div>
             )}
           </>

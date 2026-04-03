@@ -8,12 +8,14 @@ import {
   staffClinicTreatmentDayBillCreate,
   staffClinicInternalOrderCreate,
   staffClinicOpenVialAvailability,
+  staffClinicGenerateInjectionToken,
 } from "@/lib/api";
 import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
+import { PageWorkspace } from "@/src/components/dashboard";
 import { toast } from "react-toastify";
 
-const PERMS = ["clinic.billing.view", "medicine.dose.read", "medicine.dose.record"];
+const PERMS = ["clinic.billing.view", "medicine.dose.read", "medicine.dose.record", "injection.token.generate"];
 
 export default function TreatmentBillingPage() {
   const params = useParams();
@@ -27,7 +29,10 @@ export default function TreatmentBillingPage() {
   const [creating, setCreating] = useState(false);
   const [customerId, setCustomerId] = useState("");
   const [treatmentDayId, setTreatmentDayId] = useState("");
+  const [visitId, setVisitId] = useState("");
   const [serviceFee, setServiceFee] = useState("0");
+  const [lastCreatedOrder, setLastCreatedOrder] = useState<{ id: number; orderNumber?: string } | null>(null);
+  const [generatingToken, setGeneratingToken] = useState(false);
 
   const loadSummary = useCallback(() => {
     if (!branchId || !courseId) return;
@@ -48,19 +53,62 @@ export default function TreatmentBillingPage() {
       return;
     }
     setCreating(true);
+    setLastCreatedOrder(null);
     staffClinicTreatmentDayBillCreate(branchId, Number(courseId), {
       customerId: Number(customerId),
       treatmentDayId: Number(treatmentDayId),
       serviceFee: Number(serviceFee) || 0,
+      visitId: visitId ? Number(visitId) : null,
     })
-      .then(() => {
+      .then((order: any) => {
         toast.success("Bill created");
-        setCustomerId("");
-        setTreatmentDayId("");
+        if (order?.id) setLastCreatedOrder({ id: order.id, orderNumber: order.orderNumber });
       })
       .catch((e) => toast.error(e?.message || "Failed"))
       .finally(() => setCreating(false));
-  }, [branchId, courseId, customerId, treatmentDayId, serviceFee]);
+  }, [branchId, courseId, customerId, treatmentDayId, serviceFee, visitId]);
+
+  const canGenerateToken = (myAccess?.permissions as string[] || []).includes("injection.token.generate");
+  const handleGenerateToken = useCallback(async () => {
+    if (!branchId || !summary || !lastCreatedOrder?.id) return;
+    const visitIdNum = visitId ? Number(visitId) : (summary.course as any)?.visitId ?? null;
+    if (!visitIdNum) {
+      toast.error("Visit ID is required for token generation. Enter it above and create the bill, or use Injection Tokens page.");
+      return;
+    }
+    const course = summary.course as any;
+    const patientId = course?.patientId ?? customerId;
+    const petId = course?.visit?.petId ?? course?.petId ?? null;
+    const currentDay = summary.currentDay as any;
+    const dayId = currentDay?.id ?? treatmentDayId ? Number(treatmentDayId) : null;
+    if (!dayId) {
+      toast.error("Treatment day context missing.");
+      return;
+    }
+    setGeneratingToken(true);
+    let ok = 0;
+    const items = summary.todayDueItems || [];
+    for (const row of items) {
+      try {
+        await staffClinicGenerateInjectionToken(branchId, {
+          visitId: visitIdNum,
+          variantId: row.variantId,
+          expectedDose: Number(row.dosageMl) || 1,
+          orderId: lastCreatedOrder.id,
+          patientId: patientId ? Number(patientId) : undefined,
+          petId: petId ? Number(petId) : undefined,
+          treatmentCourseId: Number(courseId),
+          treatmentDayId: Number(dayId),
+          unit: "ml",
+        });
+        ok += 1;
+      } catch (e) {
+        toast.error((e as Error)?.message || `Failed to generate token for ${row.medicineName}`);
+      }
+    }
+    if (ok > 0) toast.success(ok === items.length ? "All tokens generated." : `${ok} token(s) generated.`);
+    setGeneratingToken(false);
+  }, [branchId, summary, lastCreatedOrder, visitId, customerId, treatmentDayId, courseId]);
 
   const handleInternalOrder = useCallback(
     (items: { variantId: number; requestedQty: number; dosageMl?: number }[]) => {
@@ -84,7 +132,7 @@ export default function TreatmentBillingPage() {
 
   if (isLoading) {
     return (
-      <div className="container py-40 text-center">
+      <div className="py-40 px-3 text-center">
         <div className="spinner-border text-primary" />
       </div>
     );
@@ -94,7 +142,7 @@ export default function TreatmentBillingPage() {
   }
 
   return (
-    <div className="container py-24">
+    <PageWorkspace>
       <BranchHeader branch={branch} myAccess={myAccess} branchId={branchId} />
       <h1 className="h4 mb-4">Treatment Billing</h1>
       <div className="card mb-4">
@@ -198,7 +246,7 @@ export default function TreatmentBillingPage() {
             <div className="card-body">
               <h6 className="card-title">Create bill for today</h6>
               <div className="row g-2">
-                <div className="col-md-3">
+                <div className="col-md-2">
                   <label className="form-label small">Customer ID</label>
                   <input
                     type="number"
@@ -207,7 +255,7 @@ export default function TreatmentBillingPage() {
                     onChange={(e) => setCustomerId(e.target.value)}
                   />
                 </div>
-                <div className="col-md-3">
+                <div className="col-md-2">
                   <label className="form-label small">Treatment Day ID</label>
                   <input
                     type="number"
@@ -215,6 +263,16 @@ export default function TreatmentBillingPage() {
                     value={treatmentDayId}
                     onChange={(e) => setTreatmentDayId(e.target.value)}
                     placeholder={summary.currentDay?.id}
+                  />
+                </div>
+                <div className="col-md-2">
+                  <label className="form-label small">Visit ID (for token)</label>
+                  <input
+                    type="number"
+                    className="form-control form-control-sm"
+                    value={visitId}
+                    onChange={(e) => setVisitId(e.target.value)}
+                    placeholder="Optional"
                   />
                 </div>
                 <div className="col-md-2">
@@ -237,10 +295,25 @@ export default function TreatmentBillingPage() {
                   </button>
                 </div>
               </div>
+              {lastCreatedOrder && (
+                <div className="mt-3 p-2 bg-light radius-8">
+                  <span className="small fw-semibold">Order #{lastCreatedOrder.orderNumber ?? lastCreatedOrder.id} created.</span>
+                  {canGenerateToken && (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-success ms-2"
+                      onClick={handleGenerateToken}
+                      disabled={generatingToken || !summary.todayDueItems?.length}
+                    >
+                      {generatingToken ? "Generating…" : "Generate injection token(s)"}
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         </>
       )}
-    </div>
+    </PageWorkspace>
   );
 }

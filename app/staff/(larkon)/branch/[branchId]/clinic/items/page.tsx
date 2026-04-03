@@ -335,8 +335,8 @@ export default function StaffClinicItemsPage() {
                     {(ledgerData.items as Array<Record<string, unknown>>).map((row) => (
                       <tr key={Number(row.id)}>
                         <td>{row.createdAt ? new Date(String(row.createdAt)).toLocaleString() : "—"}</td>
-                        <td>{(row.clinicalItem as { name?: string })?.name ?? row.clinicalItemId}</td>
-                        <td>{(row.variant as { variantName?: string })?.variantName ?? row.variantId}</td>
+                        <td>{(row.clinicalItem as { name?: string })?.name ?? String(row.clinicalItemId ?? "—")}</td>
+                        <td>{(row.variant as { variantName?: string })?.variantName ?? String(row.variantId ?? "—")}</td>
                         <td>{String(row.txnType ?? "—")}</td>
                         <td>{Number(row.quantityDelta)}</td>
                         <td>{Number(row.balanceAfter)}</td>
@@ -460,8 +460,8 @@ export default function StaffClinicItemsPage() {
                 <tbody>
                   {openInstrumentLogs.map((l) => (
                     <tr key={Number(l.id)}>
-                      <td>{(l.item as { name?: string })?.name ?? l.itemId}</td>
-                      <td>{(l.variant as { variantName?: string })?.variantName ?? l.variantId}</td>
+                      <td>{(l.item as { name?: string })?.name ?? String(l.itemId ?? "—")}</td>
+                      <td>{(l.variant as { variantName?: string })?.variantName ?? String(l.variantId ?? "—")}</td>
                       <td>{Number(l.issuedQty ?? 0)}</td>
                       <td>{l.issuedAt ? new Date(String(l.issuedAt)).toLocaleString() : "—"}</td>
                       <td className="text-end">

@@ -11,12 +11,77 @@ import {
 } from "@/src/lib/location/normalizeLocation";
 import ImageUploader from "./ImageUploader";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
 
 const normalizeLoc = (loc) => {
   const n = normalizeLocation(loc, "BD");
   return n ? withLegacyLocationFields(n, loc || {}) : loc || { countryCode: "BD" };
 };
+
+// Extract form field values from a branch API response object
+function extractFormData(branchData) {
+  // Merge types from both BranchToType (canonical) and BranchTypeOnBranch (legacy) tables
+  const typesFromNew = Array.isArray(branchData?.types)
+    ? branchData.types.map((t) => t?.type?.code || t?.code).filter(Boolean).map(String)
+    : [];
+  const typesFromLegacy = Array.isArray(branchData?.typeLinks)
+    ? branchData.typeLinks.map((t) => t?.branchType?.code || t?.type?.code || t?.code).filter(Boolean).map(String)
+    : [];
+  const typeCodes = Array.from(new Set([...typesFromNew, ...typesFromLegacy]));
+
+  const profile = branchData?.profileDetails || {};
+  const branchAddr = branchData?.addressJson || {};
+  const profileAddr = profile?.addressJson || {};
+  const addr = { ...branchAddr, ...profileAddr };
+  const addressText =
+    addr?.text || addr?.fullPathText || profile?.addressText || branchData?.addressText || branchData?.address || "";
+
+  return {
+    name: branchData?.name || "",
+    typeCodes,
+    branchPhone: profile?.branchPhone || branchData?.branchPhone || branchData?.phone || "",
+    branchEmail: profile?.branchEmail || branchData?.branchEmail || branchData?.email || "",
+    addressText,
+    googleMapLink: profile?.googleMapLink || branchData?.googleMapLink || branchData?.googleMapUrl || "",
+    managerName: profile?.managerName || branchData?.managerName || "",
+    managerPhone: profile?.managerPhone || branchData?.managerPhone || "",
+    location: normalizeLoc({
+      ...addr,
+      kind:
+        addr?.kind ||
+        (addr?.dhakaAreaId ? "DHAKA_AREA" : addr?.bdAreaId ? "BD_AREA" : addr?.latitude ? "COORDINATES" : "BD_AREA"),
+      text: addressText,
+      fullPathText: addr?.fullPathText || addressText,
+      latitude: profile?.latitude || addr?.latitude || null,
+      longitude: profile?.longitude || addr?.longitude || null,
+    }),
+  };
+}
+
+// Extract documents map from a branch API response object
+function extractDocuments(branchData) {
+  const profile = branchData?.profileDetails || {};
+  const profileDocuments = profile?.documents || branchData?.documents || [];
+  const byType = {};
+  profileDocuments.forEach((doc) => {
+    const docType = doc.type || doc.documentType;
+    if (docType) {
+      byType[docType] = {
+        id: doc.id,
+        mediaId: doc.mediaId || doc.media?.id,
+        url: doc.url || doc.media?.url || doc.media?.fileUrl,
+        fileName: doc.fileName || doc.media?.fileName || "Document",
+      };
+    }
+  });
+  return {
+    STORE_FRONT_PHOTO: byType.STORE_FRONT_PHOTO || null,
+    SIGNBOARD_PHOTO: byType.SIGNBOARD_PHOTO || null,
+    BRANCH_LOGO: byType.BRANCH_LOGO || byType.OTHER || null,
+    TRADE_LICENSE: byType.TRADE_LICENSE || null,
+    STORE_INSIDE_PHOTO: byType.STORE_INSIDE_PHOTO || null,
+    OTHER: byType.OTHER || null,
+  };
+}
 
 // Helper to extract array from API response
 function pickArray(resp) {
@@ -32,10 +97,11 @@ export default function BranchForm({
   mode = "create",
   organizationId,
   branchId: branchIdProp,
+  initialBranch = null,
   onDone,
 }) {
   const [step, setStep] = useState(1);
-  const [loading, setLoading] = useState(mode === "edit");
+  const [loading, setLoading] = useState(mode === "edit" && initialBranch == null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [notice, setNotice] = useState("");
@@ -45,49 +111,62 @@ export default function BranchForm({
   const [branchTypes, setBranchTypes] = useState([]);
   const [typesLoading, setTypesLoading] = useState(true);
 
-  // Form data
-  const [formData, setFormData] = useState({
-    name: "",
-    typeCodes: [],
-    branchPhone: "",
-    branchEmail: "",
-    addressText: "",
-    googleMapLink: "",
-    managerName: "",
-    managerPhone: "",
-    location: normalizeLoc({ countryCode: "BD" }),
-  });
+  // Form data — synchronously seeded from initialBranch when available (avoids flash of empty fields)
+  const [formData, setFormData] = useState(() =>
+    mode === "edit" && initialBranch != null
+      ? extractFormData(initialBranch)
+      : {
+          name: "",
+          typeCodes: [],
+          branchPhone: "",
+          branchEmail: "",
+          addressText: "",
+          googleMapLink: "",
+          managerName: "",
+          managerPhone: "",
+          location: normalizeLoc({ countryCode: "BD" }),
+        }
+  );
 
-  // Documents
-  const [documents, setDocuments] = useState({
-    STORE_FRONT_PHOTO: null,
-    SIGNBOARD_PHOTO: null,
-    BRANCH_LOGO: null,
-    TRADE_LICENSE: null,
-    STORE_INSIDE_PHOTO: null,
-    OTHER: null,
-  });
+  // Documents — synchronously seeded from initialBranch when available
+  const [documents, setDocuments] = useState(() =>
+    mode === "edit" && initialBranch != null
+      ? extractDocuments(initialBranch)
+      : {
+          STORE_FRONT_PHOTO: null,
+          SIGNBOARD_PHOTO: null,
+          BRANCH_LOGO: null,
+          TRADE_LICENSE: null,
+          STORE_INSIDE_PHOTO: null,
+          OTHER: null,
+        }
+  );
 
   /** In edit mode, only hydrate formData once per branchId so user edits are not overwritten by effect re-runs (e.g. Strict Mode). */
   const hydratedBranchIdRef = useRef(null);
   /** Once user edits name or typeCodes, never overwrite them from the load effect. */
   const userEditedStep1Ref = useRef(false);
 
-  // Load branch types
+  // When caller provides initialBranch, hydrate form data directly (no fetch needed)
+  useEffect(() => {
+    if (mode !== "edit" || !initialBranch) return;
+    const branchKey = String(branchIdProp || "");
+    if (String(hydratedBranchIdRef.current) === branchKey) return;
+    hydratedBranchIdRef.current = branchKey;
+    setBranchId(branchKey);
+    setFormData(extractFormData(initialBranch));
+    setDocuments(extractDocuments(initialBranch));
+  }, [mode, initialBranch, branchIdProp]);
+
+  // Load branch types via same-origin proxy (avoids CORS credential issues with direct API_BASE)
   useEffect(() => {
     let alive = true;
     setTypesLoading(true);
-    fetch(`${API_BASE}/api/v1/meta/branch-types`, {
-      method: "GET",
-      credentials: "include",
-      cache: "no-store",
-    })
-      .then(async (r) => {
-        const j = await r.json().catch(() => null);
-        if (!r.ok || !j?.success) throw new Error(j?.message || `Failed (${r.status})`);
-        return j.data || [];
-      })
-      .then((items) => {
+    ownerGet("/api/v1/meta/branch-types")
+      .then((j) => {
+        if (!j) throw new Error("Failed to load branch types");
+        const resp = j && typeof j === "object" ? j : {};
+        const items = Array.isArray(resp.data) ? resp.data : (Array.isArray(j) ? j : []);
         if (!alive) return;
         setBranchTypes(items);
       })
@@ -103,9 +182,9 @@ export default function BranchForm({
     };
   }, []);
 
-  // Load existing branch data for edit mode
+  // Load existing branch data for edit mode (skipped when initialBranch is provided by caller)
   useEffect(() => {
-    if (mode !== "edit" || !branchIdProp) return;
+    if (mode !== "edit" || !branchIdProp || initialBranch != null) return;
 
     const branchKey = String(branchIdProp);
     if (String(hydratedBranchIdRef.current) !== branchKey) {
@@ -118,127 +197,36 @@ export default function BranchForm({
 
     (async () => {
       try {
-        let response;
         let branchData;
-        
-        // Try primary endpoint first
         try {
-          response = await ownerGet(`/api/v1/owner/branches/${branchIdProp}`);
+          const response = await ownerGet(`/api/v1/owner/branches/${branchIdProp}`);
           branchData = response?.data || response;
-        } catch (e1) {
-          // Fallback: try organization-specific endpoint
-          console.log("Primary endpoint failed, trying fallback...");
-          try {
-            response = await ownerGet(`/api/v1/owner/organizations/${organizationId}/branches/${branchIdProp}`);
-            branchData = response?.data || response;
-          } catch (e2) {
-            throw e1; // Throw original error
-          }
-        }
-        
-        if (!alive || !branchData) {
-          throw new Error("Branch not found");
+        } catch (_e1) {
+          const response = await ownerGet(`/api/v1/owner/organizations/${organizationId}/branches/${branchIdProp}`);
+          branchData = response?.data || response;
         }
 
-        console.log("Loaded branch data:", branchData);
+        if (!alive || !branchData) throw new Error("Branch not found");
 
         setBranchId(String(branchIdProp));
 
-        // Extract type codes from types array
-        const typeCodes = Array.isArray(branchData?.types)
-          ? branchData.types
-              .map((t) => t?.type?.code || t?.code)
-              .filter(Boolean)
-              .map((c) => String(c))
-          : [];
-
-        console.log("Extracted type codes:", typeCodes);
-
-        // Extract profile details
-        const profile = branchData?.profileDetails || {};
-        const branchAddr = branchData?.addressJson || {};
-        const profileAddr = profile?.addressJson || {};
-        const addr = { ...branchAddr, ...profileAddr };
-
-        const addressText =
-          addr?.text ||
-          addr?.fullPathText ||
-          profile?.addressText ||
-          branchData?.addressText ||
-          branchData?.address ||
-          "";
-
-        const formDataToSet = {
-          name: branchData?.name || "",
-          typeCodes: typeCodes.length > 0 ? typeCodes : [],
-          branchPhone: profile?.branchPhone || branchData?.branchPhone || branchData?.phone || "",
-          branchEmail: profile?.branchEmail || branchData?.branchEmail || branchData?.email || "",
-          addressText: addressText,
-          googleMapLink: profile?.googleMapLink || branchData?.googleMapLink || branchData?.googleMapUrl || "",
-          managerName: profile?.managerName || branchData?.managerName || branchData?.manager?.name || "",
-          managerPhone: profile?.managerPhone || branchData?.managerPhone || branchData?.manager?.phone || "",
-          location: normalizeLoc({
-            ...addr,
-            kind:
-              addr?.kind ||
-              (addr?.dhakaAreaId
-                ? "DHAKA_AREA"
-                : addr?.bdAreaId
-                ? "BD_AREA"
-                : addr?.latitude
-                ? "COORDINATES"
-                : "BD_AREA"),
-            text: addressText,
-            fullPathText: addr?.fullPathText || addressText,
-            latitude: profile?.latitude || addr?.latitude || null,
-            longitude: profile?.longitude || addr?.longitude || null,
-          }),
-        };
-
-        console.log("Setting form data:", formDataToSet);
-        const branchKey = String(branchIdProp);
         const alreadyHydrated = String(hydratedBranchIdRef.current) === branchKey;
         if (!alreadyHydrated) {
+          const fd = extractFormData(branchData);
           setFormData((prev) =>
             userEditedStep1Ref.current
-              ? { ...formDataToSet, name: prev.name, typeCodes: prev.typeCodes }
-              : formDataToSet
+              ? { ...fd, name: prev.name, typeCodes: prev.typeCodes }
+              : fd
           );
+          setDocuments(extractDocuments(branchData));
           hydratedBranchIdRef.current = branchKey;
         }
-
-        // Load documents
-        const profileDocuments = profile?.documents || branchData?.documents || [];
-        const documentsByType = {};
-        profileDocuments.forEach((doc) => {
-          const docType = doc.type || doc.documentType;
-          if (docType) {
-            documentsByType[docType] = {
-              id: doc.id,
-              mediaId: doc.mediaId || doc.media?.id,
-              url: doc.url || doc.media?.url || doc.media?.fileUrl,
-              fileName: doc.fileName || doc.media?.fileName || "Document",
-            };
-          }
-        });
-
-        setDocuments({
-          STORE_FRONT_PHOTO: documentsByType.STORE_FRONT_PHOTO || null,
-          SIGNBOARD_PHOTO: documentsByType.SIGNBOARD_PHOTO || null,
-          BRANCH_LOGO: documentsByType.BRANCH_LOGO || documentsByType.OTHER || null,
-          TRADE_LICENSE: documentsByType.TRADE_LICENSE || null,
-          STORE_INSIDE_PHOTO: documentsByType.STORE_INSIDE_PHOTO || null,
-          OTHER: documentsByType.OTHER || null,
-        });
       } catch (e) {
         if (!alive) return;
-        console.error("Error loading branch:", e);
         const errorMessage = e.message || "Failed to load branch";
-        
-        // Check if error is about missing documents - show notice but don't block
         if (errorMessage.includes("Storefront photo") || errorMessage.includes("Signboard photo")) {
           setNotice("Note: Some required documents may be missing. You can add them in Step 3.");
-          setError(""); // Don't block the form - allow user to edit and add documents
+          setError("");
         } else {
           setError(errorMessage);
         }
@@ -251,7 +239,7 @@ export default function BranchForm({
     return () => {
       alive = false;
     };
-  }, [mode, branchIdProp]);
+  }, [mode, branchIdProp, initialBranch]);
 
   // Update form field
   const updateField = (field, value) => {
@@ -371,7 +359,10 @@ export default function BranchForm({
             name: String(formData.name || "").trim(),
             typeCodes: Array.isArray(formData.typeCodes) ? formData.typeCodes : [],
           };
-          await ownerPut(`/api/v1/owner/branches/${id}`, payload);
+          const updateResp = await ownerPut(`/api/v1/owner/branches/${id}`, payload);
+          if (updateResp?.verification?.locked) {
+            setNotice(updateResp.verification.message || "Branch is under verification. Changes saved as a draft and will apply after re-verification.");
+          }
         }
       }
 
@@ -548,34 +539,20 @@ export default function BranchForm({
                 <label className="form-label fw-semibold mb-8">
                   Branch Name <span className="text-danger">*</span>
                 </label>
-                {mode === "edit" ? (
-                  <input
-                    key={`step1-name-edit-${branchIdProp}-${loading}`}
-                    type="text"
-                    className="form-control radius-12"
-                    defaultValue={formData.name ?? ""}
-                    onChange={(e) => {
-                      userEditedStep1Ref.current = true;
-                      setFormData((p) => ({ ...p, name: e.target.value }));
-                    }}
-                    onBlur={(e) => setFormData((p) => ({ ...p, name: e.target.value.trim() }))}
-                    placeholder="e.g., Rampura Clinic Branch"
-                    disabled={busy}
-                    autoComplete="off"
-                    aria-label="Branch Name"
-                  />
-                ) : (
-                  <input
-                    type="text"
-                    className="form-control radius-12"
-                    value={formData.name ?? ""}
-                    onChange={(e) => setFormData((p) => ({ ...p, name: e.target.value }))}
-                    placeholder="e.g., Rampura Clinic Branch"
-                    disabled={busy}
-                    autoComplete="off"
-                    aria-label="Branch Name"
-                  />
-                )}
+                <input
+                  type="text"
+                  className="form-control radius-12"
+                  value={formData.name ?? ""}
+                  onChange={(e) => {
+                    if (mode === "edit") userEditedStep1Ref.current = true;
+                    setFormData((p) => ({ ...p, name: e.target.value }));
+                  }}
+                  onBlur={(e) => setFormData((p) => ({ ...p, name: e.target.value.trim() }))}
+                  placeholder="e.g., Rampura Clinic Branch"
+                  disabled={busy}
+                  autoComplete="off"
+                  aria-label="Branch Name"
+                />
               </div>
 
               <div className="col-md-12" key={`step1-types-${branchIdProp}-${loading}`}>

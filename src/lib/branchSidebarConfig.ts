@@ -19,6 +19,12 @@ import {
   performance as doctorOpsPerformance,
   auditLogs as doctorOpsAuditLogs,
 } from "@/src/lib/doctorOperationsRoutes";
+import { staffClinicPatientsPath } from "@/lib/staffClinicPatientRoutes";
+import {
+  staffServicePricingAgreementsPath,
+  staffServicePricingCatalogPath,
+  staffServicePricingMatrixPath,
+} from "@/src/lib/staffServicePricingRoutes";
 
 export type BranchSidebarItem = {
   key: string;
@@ -54,8 +60,41 @@ export const BRANCH_SIDEBAR: BranchSidebarGroup[] = [
       { key: "receive", label: "Receive Stock", icon: "ri:download-cloud-2-line", href: (id) => "/staff/branch/" + id + "/inventory/receive", requiredPerm: "inventory.receive" },
       { key: "adjustments", label: "Adjustments", icon: "ri:scales-3-line", href: (id) => "/staff/branch/" + id + "/inventory/adjustments", requiredPerm: "inventory.adjust" },
       { key: "transfers", label: "Transfers", icon: "ri:swap-line", href: (id) => "/staff/branch/" + id + "/inventory/transfers", requiredPerm: "inventory.transfer" },
+      {
+        key: "ai-replenishment",
+        label: "AI replenishment",
+        icon: "ri:sparkling-line",
+        href: (id) => "/staff/branch/" + id + "/inventory/replenishment-suggestions",
+        requiredPerm: "inventory.read",
+      },
+      {
+        key: "reverse-logistics",
+        label: "Reverse logistics",
+        icon: "ri:arrow-go-back-line",
+        href: (id) => "/staff/branch/" + id + "/inventory/reverse-logistics",
+        requiredPerm: "inventory.read",
+      },
       { key: "pos", label: "POS / Sales", icon: "ri:shopping-cart-2-line", href: (id) => "/staff/branch/" + id + "/pos", requiredPerm: "pos.view" },
       { key: "customers", label: "Customers", icon: "ri:user-3-line", href: (id) => "/staff/branch/" + id + "/customers", requiredPerm: "customers.view" },
+    ],
+  },
+  {
+    group: "Pharmacy",
+    items: [
+      { key: "pharmacy-dashboard", label: "Dashboard", icon: "ri:dashboard-line", href: (id) => "/staff/branch/" + id + "/pharmacy", requiredPerm: "inventory.read", anyPerms: ["pharmacy.requisition.create", "pharmacy.requisition.read"] },
+      { key: "pharmacy-requisitions", label: "Requisitions", icon: "ri:medicine-bottle-line", href: (id) => "/staff/branch/" + id + "/pharmacy/requisitions", requiredPerm: "inventory.read", anyPerms: ["pharmacy.requisition.create", "pharmacy.requisition.read"] },
+    ],
+  },
+  {
+    group: "Warehouse",
+    items: [
+      { key: "warehouse-dashboard", label: "Dashboard", icon: "ri:dashboard-line", href: (id) => "/staff/branch/" + id + "/warehouse", requiredPerm: "warehouse.view", anyPerms: ["warehouse.dashboard.view"] },
+      { key: "warehouse-operations", label: "Operations hub", icon: "ri:stack-line", href: (id) => "/staff/branch/" + id + "/warehouse/operations", requiredPerm: "warehouse.operations", anyPerms: ["warehouse.dashboard.view", "inbound.read", "warehouse.manage"] },
+      { key: "warehouse-pick-lists", label: "Pick lists", icon: "ri:list-check-2", href: (id) => "/staff/branch/" + id + "/warehouse/pick-lists", requiredPerm: "warehouse.pick", anyPerms: ["warehouse.pick.execute", "outbound.read"] },
+      { key: "warehouse-qc", label: "QC queue", icon: "ri:shield-check-line", href: (id) => "/staff/branch/" + id + "/warehouse/qc", requiredPerm: "warehouse.qc", anyPerms: ["qc.view", "qc.inspect"] },
+      { key: "warehouse-putaway", label: "Putaway", icon: "ri:archive-line", href: (id) => "/staff/branch/" + id + "/warehouse/putaway", requiredPerm: "warehouse.operations", anyPerms: ["warehouse.dashboard.view", "inbound.read", "inbound.grn"] },
+      { key: "warehouse-deliveries", label: "My Deliveries", icon: "ri:truck-line", href: (id) => "/staff/branch/" + id + "/warehouse?tab=deliveries", requiredPerm: "delivery.view", anyPerms: ["delivery.read", "delivery.manage"] },
+      { key: "warehouse-receive", label: "Receive stock", icon: "ri:download-cloud-2-line", href: (id) => "/staff/branch/" + id + "/inventory/receive", requiredPerm: "inventory.receive", anyPerms: ["inbound.receive"] },
     ],
   },
   {
@@ -68,8 +107,9 @@ export const BRANCH_SIDEBAR: BranchSidebarGroup[] = [
       { key: "clinic-queue", label: "Queue", icon: "ri:list-check-2", href: (id) => "/staff/branch/" + id + "/clinic/queue", requiredPerm: "clinic.queue.read", anyPerms: ["clinic.queue.manage"], badgeKey: "clinicQueue" },
       { key: "clinic-rooms", label: "Rooms", icon: "ri:door-open-line", href: (id) => "/staff/branch/" + id + "/clinic/rooms", requiredPerm: "clinic.rooms.view", anyPerms: ["clinic.rooms.manage"] },
       { key: "clinic-schedule-board", label: "Schedule board", icon: "ri:calendar-line", href: (id) => "/staff/branch/" + id + "/clinic/schedule-board", requiredPerm: "clinic.rooms.view_schedule", anyPerms: ["clinic.rooms.view", "clinic.rooms.manage"] },
-      { key: "clinic-patients", label: "Patients", icon: "ri:user-heart-line", href: (id) => "/staff/branch/" + id + "/clinic/patients", requiredPerm: "clinic.patients.read", anyPerms: ["clinic.patients.manage"] },
+      { key: "clinic-patients", label: "Patients", icon: "ri:user-heart-line", href: (id) => staffClinicPatientsPath(String(id)), requiredPerm: "clinic.patients.read", anyPerms: ["clinic.patients.manage"] },
       { key: "clinic-visits", label: "Visits", icon: "ri:file-list-3-line", href: (id) => "/staff/branch/" + id + "/clinic/visits", requiredPerm: "clinic.visits.read", anyPerms: ["clinic.visits.manage"] },
+      { key: "clinic-surgeries", label: "Surgeries", icon: "ri:scissors-cut-line", href: (id) => "/staff/branch/" + id + "/clinic/surgeries", requiredPerm: "clinic.surgery.read", anyPerms: ["clinic.surgery.create", "clinic.surgery.manage"] },
       { key: "clinic-cases", label: "Cases", icon: "ri:folder-open-line", href: (id) => "/staff/branch/" + id + "/clinic/cases", requiredPerm: "clinic.cases.read", anyPerms: ["clinic.cases.write"] },
       { key: "clinic-items", label: "Clinic items", icon: "ri:box-3-line", href: (id) => "/staff/branch/" + id + "/clinic/items", requiredPerm: "clinic.items.read", anyPerms: ["clinic.stock.read"] },
       { key: "clinic-supply-requests", label: "Supply requests", icon: "ri:file-list-3-line", href: (id) => "/staff/branch/" + id + "/clinic/supply-requests", requiredPerm: "clinic.supply.read", anyPerms: ["clinic.supply.manage", "clinic.cases.read", "clinic.cases.write"] },
@@ -104,6 +144,50 @@ export const BRANCH_SIDEBAR: BranchSidebarGroup[] = [
     ],
   },
   {
+    group: "Services & Pricing",
+    featureFlag: (branch) => branch?.clinicEnabled === true,
+    items: [
+      {
+        key: "clinic-services-pricing-catalog",
+        label: "Services catalog",
+        icon: "ri:price-tag-3-line",
+        href: (id) => staffServicePricingCatalogPath(id),
+        requiredPerm: "clinic.services.manage",
+        anyPerms: ["clinic.appointments.manage", "clinic.appointments.read", "manager.pricing.view"],
+      },
+      {
+        key: "clinic-services-pricing-matrix",
+        label: "Pricing matrix",
+        icon: "ri:grid-line",
+        href: (id) => staffServicePricingMatrixPath(id),
+        requiredPerm: "manager.pricing.view",
+        anyPerms: ["clinic.services.manage", "clinic.appointments.manage", "clinic.appointments.read"],
+      },
+      {
+        key: "clinic-services-pricing-agreements",
+        label: "Doctor agreements",
+        icon: "ri:handshake-line",
+        href: (id) => staffServicePricingAgreementsPath(id),
+        requiredPerm: "clinic.doctors.manage_services",
+        anyPerms: [
+          "clinic.doctors.view",
+          "manager.pricing.view",
+          "clinic.services.manage",
+          "clinic.appointments.read",
+          "clinic.appointments.manage",
+        ],
+      },
+      {
+        key: "clinic-services-pricing-packages",
+        label: "Packages",
+        icon: "ri:gift-line",
+        href: (id) => "/staff/branch/" + id + "/clinic/catalog?tab=packages",
+        requiredPerm: "clinic.catalog.view",
+        anyPerms: ["clinic.services.manage"],
+      },
+    ],
+  },
+  {
     group: "Billing & Finance",
     featureFlag: (branch) => branch?.clinicEnabled === true,
     items: [
@@ -126,6 +210,8 @@ export const BRANCH_SIDEBAR: BranchSidebarGroup[] = [
       { key: "medicine-audit-bins", label: "Audit Bins", icon: "ri:archive-2-line", href: (id) => "/staff/branch/" + id + "/clinic/medicine-control/audit-bins", requiredPerm: "medicine.audit.bin.view", anyPerms: ["medicine.audit.bin.manage"] },
       { key: "medicine-injection-monitor", label: "Injection Monitor", icon: "ri:pulse-line", href: (id) => "/staff/branch/" + id + "/clinic/medicine-control/injection-monitor", requiredPerm: "medicine.reconciliation.read", anyPerms: ["medicine.dose.read"] },
       { key: "medicine-reconciliation", label: "Reconciliation", icon: "ri:shield-check-line", href: (id) => "/staff/branch/" + id + "/clinic/medicine-control/reconciliation", requiredPerm: "medicine.reconciliation.read", anyPerms: ["medicine.reconciliation.run", "medicine.reconciliation.acknowledge"] },
+      { key: "medicine-handover-summary", label: "Handover Summary", icon: "ri:exchange-line", href: (id) => "/staff/branch/" + id + "/clinic/medicine-control/handover-summary", requiredPerm: "medicine.reconciliation.read", anyPerms: ["medicine.vial.use"] },
+      { key: "medicine-eod-close", label: "EOD Close", icon: "ri:lock-line", href: (id) => "/staff/branch/" + id + "/clinic/medicine-control/eod-close", requiredPerm: "medicine.reconciliation.read", anyPerms: ["medicine.reconciliation.run", "medicine.reconciliation.acknowledge"] },
       { key: "medicine-policies", label: "Policies", icon: "ri:settings-3-line", href: (id) => "/staff/branch/" + id + "/clinic/medicine-control/policies", requiredPerm: "medicine.policy.read", anyPerms: ["medicine.policy.manage"] },
     ],
   },
@@ -168,9 +254,8 @@ export function getFilteredBranchSidebar(
   const perms = Array.isArray(permissions) ? permissions : [];
   const result: { group: string; items: { key: string; label: string; icon: string; href: string; badge?: number }[] }[] = [];
 
-  for (const g of BRANCH_SIDEBAR) {
-    if (g.featureFlag && !g.featureFlag(branch ?? {})) continue;
-    const items = g.items
+  const mapItems = (g: (typeof BRANCH_SIDEBAR)[number]) =>
+    g.items
       .filter((it) => {
         if (perms.includes(it.requiredPerm)) return true;
         if (it.anyPerms && it.anyPerms.some((p) => perms.includes(p))) return true;
@@ -191,6 +276,30 @@ export function getFilteredBranchSidebar(
           badge: badge !== undefined && badge !== null && Number(badge) > 0 ? Number(badge) : undefined,
         };
       });
+
+  for (const g of BRANCH_SIDEBAR) {
+    if (g.group === "Warehouse") {
+      const items = mapItems(g);
+      if (items.length > 0) {
+        result.push({ group: g.group, items });
+      } else {
+        result.push({
+          group: g.group,
+          items: [
+            {
+              key: "warehouse-request-access",
+              label: "Request Access",
+              icon: "ri:lock-line",
+              href: `/staff/branch/${branchId}/warehouse`,
+            },
+          ],
+        });
+      }
+      continue;
+    }
+
+    if (g.featureFlag && !g.featureFlag(branch ?? {})) continue;
+    const items = mapItems(g);
     if (items.length > 0) result.push({ group: g.group, items });
   }
   return result;

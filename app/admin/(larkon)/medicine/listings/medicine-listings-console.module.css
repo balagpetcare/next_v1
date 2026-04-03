@@ -1,0 +1,26 @@
+.scrollWrap {
+  max-height: min(70vh, 760px);
+  overflow: auto;
+}
+
+.theadSticky th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background-color: var(--bs-body-bg, #fff);
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.08);
+}
+
+.rowElevated:hover {
+  background-color: rgba(var(--bs-primary-rgb, 13, 110, 253), 0.04);
+}
+
+.statCard {
+  border: 1px solid rgba(0, 0, 0, 0.06);
+  transition: box-shadow 0.15s ease, border-color 0.15s ease;
+}
+
+.statCard:hover {
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.06);
+  border-color: rgba(var(--bs-primary-rgb, 13, 110, 253), 0.25);
+}

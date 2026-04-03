@@ -7,6 +7,7 @@ import { useBranchContext } from "@/lib/useBranchContext";
 import { apiGet } from "@/lib/api";
 import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
+import { PageWorkspace } from "@/src/components/dashboard";
 
 const MEDICINE_PERMS = ["medicine.policy.read", "medicine.dispense.request", "medicine.dispense.approve", "medicine.vial.open"];
 
@@ -34,7 +35,7 @@ export default function MedicineControlDashboardPage() {
 
   if (ctxLoading) {
     return (
-      <div className="container py-40 text-center">
+      <div className="py-40 px-3 text-center">
         <div className="spinner-border text-primary" role="status" />
         <p className="mt-16 text-secondary-light">Loading...</p>
       </div>
@@ -52,7 +53,7 @@ export default function MedicineControlDashboardPage() {
 
   const base = `/staff/branch/${branchId}/clinic/medicine-control`;
   return (
-    <div className="container py-24">
+    <PageWorkspace>
       <BranchHeader branch={branch} myAccess={myAccess} branchId={branchId} />
       <div className="d-flex align-items-center gap-12 mb-24">
         <Link href={`/staff/branch/${branchId}/clinic`} className="btn btn-outline-secondary btn-sm">
@@ -114,6 +115,40 @@ export default function MedicineControlDashboardPage() {
           </div>
         </div>
       )}
+      {!loading && dashboard && (
+        <div className="row g-3 mb-24">
+          <div className="col-md-4">
+            <div className="card radius-12 h-100">
+              <div className="card-body">
+                <h6 className="text-muted text-uppercase small mb-1">Total medicines (stock lines)</h6>
+                <p className="mb-0 fs-4 fw-semibold">{dashboard.totalMedicines ?? 0}</p>
+              </div>
+            </div>
+          </div>
+          <div className="col-md-4">
+            <div className="card radius-12 h-100">
+              <div className="card-body">
+                <h6 className="text-muted text-uppercase small mb-1">Low stock</h6>
+                <p className="mb-0 fs-4 fw-semibold">{dashboard.lowStockCount ?? 0}</p>
+                {dashboard.lowStockCount > 0 && (
+                  <Link href={`/staff/branch/${branchId}/clinic/items`} className="small text-primary">View items</Link>
+                )}
+              </div>
+            </div>
+          </div>
+          <div className="col-md-4">
+            <div className="card radius-12 h-100">
+              <div className="card-body">
+                <h6 className="text-muted text-uppercase small mb-1">Near expiry (30d)</h6>
+                <p className="mb-0 fs-4 fw-semibold">{dashboard.nearExpiryCount ?? 0}</p>
+                {dashboard.nearExpiryCount > 0 && (
+                  <Link href={`/staff/branch/${branchId}/clinic/items`} className="small text-primary">View batches</Link>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <div className="card radius-12">
         <div className="card-body">
@@ -131,6 +166,6 @@ export default function MedicineControlDashboardPage() {
           </div>
         </div>
       </div>
-    </div>
+    </PageWorkspace>
   );
 }

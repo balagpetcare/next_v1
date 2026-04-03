@@ -93,7 +93,7 @@ export default function OwnerStaffDetailsPage() {
       if (newStatus === "SUSPENDED") {
         await ownerPatch(`/api/v1/owner/staffs/${id}/disable`, {});
       } else {
-        await ownerPatch(`/api/v1/owner/staffs/${id}`, { status: "ACTIVE" });
+        await ownerPatch(`/api/v1/owner/staffs/${id}/enable`, {});
       }
       await load();
     } catch (e) {

@@ -5,6 +5,12 @@ import { DoctorPaymentBadge } from "./DoctorPaymentBadge";
 export interface AppointmentDetailForSnapshot {
   id?: number;
   scheduledStartAt?: string | null;
+  /** Present on doctor appointment detail API alongside nested `pet`. */
+  petId?: number | null;
+  status?: string | null;
+  priority?: string | null;
+  visit?: { id?: number; status?: string | null } | null;
+  previousVisits?: unknown[];
   patient?: { profile?: { displayName?: string }; auth?: { phone?: string; email?: string } };
   ownerNameSnapshot?: string | null;
   mobileSnapshot?: string | null;
@@ -16,6 +22,8 @@ export interface AppointmentDetailForSnapshot {
     animalType?: { name?: string };
     breed?: { name?: string };
     weights?: { weightKg?: number; recordedAt?: string }[];
+    allergies?: unknown[] | null;
+    healthDisorders?: unknown[] | null;
   };
   petNameSnapshot?: string | null;
   branch?: { name?: string };

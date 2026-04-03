@@ -53,13 +53,21 @@ export default function EditClinicServicePage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (!branchId || !serviceId) return;
+    if (
+      typeof branchId !== "string" ||
+      branchId === "" ||
+      typeof serviceId !== "string" ||
+      serviceId === ""
+    )
+      return;
+    const bid = branchId;
+    const sid = serviceId;
     async function load() {
       try {
         setLoading(true);
-        const res = await ownerClinicServices(branchId);
+        const res = await ownerClinicServices(bid);
         const data = res as { items?: unknown[] };
-        const s = findService(data?.items ?? [], serviceId);
+        const s = findService(data?.items ?? [], sid);
         setService(s ?? null);
         if (s) {
           setName(s.name ?? "");

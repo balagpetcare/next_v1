@@ -48,9 +48,26 @@ export default function StaffLayout({ children }) {
           j?.panels?.admin === true;
 
         if (!cancelled && !hasStaffAccess) {
+          // Only use fallback if user truly has no staff access
+          // This prevents redirecting to owner when user has dual roles
           const fallback = getFallbackUrlForPanels(j?.panels);
           if (fallback && fallback !== window.location.origin + pathname) {
-            window.location.href = fallback;
+            // Check if fallback would send us to a different panel
+            // If we're on a staff path and fallback is owner, prefer staying in staff context
+            const isStaffPath = pathname?.startsWith("/staff");
+            const fallbackIsStaff = fallback.includes(":3100") || fallback.includes("/staff");
+            const fallbackIsOwner = fallback.includes(":3104") || fallback.includes("/owner");
+            
+            if (isStaffPath && fallbackIsOwner && !fallbackIsStaff && j?.panels?.staff) {
+              // User has staff panel but fallback would send to owner
+              // Stay in staff context instead
+              if (process.env.NODE_ENV === "development") {
+                console.info("[staff] preserving staff context, not redirecting to owner");
+              }
+              // Do nothing - stay on current staff path
+            } else {
+              window.location.href = fallback;
+            }
           } else {
             router.replace("/staff/login");
           }

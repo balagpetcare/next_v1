@@ -47,7 +47,23 @@ async function cropToBlob(imageSrc, cropAreaPx, opts) {
   ctx.drawImage(img, sx, sy, sw, sh, 0, 0, dw, dh);
 
   return new Promise((resolve) => {
-    canvas.toBlob((blob) => resolve(blob), mime, quality);
+    canvas.toBlob((blob) => {
+      if (!blob) {
+        console.error('Canvas.toBlob returned null, trying fallback...');
+        // Fallback: try with different quality or format
+        canvas.toBlob((fallbackBlob) => {
+          if (!fallbackBlob) {
+            console.error('Fallback also failed');
+            resolve(null);
+          } else {
+            console.log('Fallback succeeded');
+            resolve(fallbackBlob);
+          }
+        }, mime, Math.max(0.5, quality - 0.2));
+      } else {
+        resolve(blob);
+      }
+    }, mime, quality);
   });
 }
 

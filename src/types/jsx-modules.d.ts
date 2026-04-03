@@ -63,6 +63,19 @@ declare module "@/src/lib/apiErrorToMessage" {
   export function getMessageFromApiError(error: unknown): string;
 }
 
+/** JS implementation: `src/components/branch/StaffBranchLayout.jsx` */
+declare module "@/src/components/branch/StaffBranchLayout" {
+  import type { ReactNode } from "react";
+  export interface StaffBranchLayoutProps {
+    children: ReactNode;
+    branchId: string;
+    requiredPermission?: string | null;
+    showSidebar?: boolean;
+  }
+  function StaffBranchLayout(props: StaffBranchLayoutProps): JSX.Element;
+  export default StaffBranchLayout;
+}
+
 declare module "@/src/utils/authHelpers" {
   export function getStoredToken(): string | null;
   export function clearStoredToken(): void;
@@ -134,6 +147,7 @@ declare module "@/src/bpa/admin/components/FilterPanel" {
 declare module "@/src/bpa/admin/components/StatusChip" {
   export interface StatusChipProps {
     status?: string;
+    variant?: "primary" | "secondary" | "success" | "info" | "warning" | "danger";
   }
   export default function StatusChip(props: StatusChipProps): JSX.Element;
 }
@@ -170,6 +184,7 @@ declare module "@/src/bpa/admin/components/DecisionPanel" {
     basePath?: string;
     onDone?: () => void | Promise<void>;
     loading?: boolean;
+    allowedActions?: string[];
   }
   export default function DecisionPanel(props: DecisionPanelProps): JSX.Element;
 }
@@ -184,6 +199,7 @@ declare module "@/src/bpa/admin/components/DocGrid" {
 declare module "@/src/bpa/admin/components/TimelineView" {
   export interface TimelineViewProps {
     logs?: unknown[];
+    emptyMessage?: string;
   }
   export default function TimelineView(props: TimelineViewProps): JSX.Element;
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useBranchContext } from "@/lib/useBranchContext";
@@ -12,7 +12,10 @@ import {
   staffClinicVisitOrders,
   staffClinicVisitPaymentStatus,
   staffClinicVisitsList,
+  staffClinicCreateInvoice,
+  staffClinicPrescriptionOrderLines,
 } from "@/lib/api";
+import { toast } from "react-toastify";
 
 const BILLING_PERMS = ["clinic.billing.view", "manager.billing.create_invoice", "manager.billing.collect_payment"];
 
@@ -30,9 +33,16 @@ export default function StaffClinicBillingPage() {
   const [error, setError] = useState("");
   const [recentUnpaid, setRecentUnpaid] = useState<{ id: number; treatmentCode?: string; pet?: { name?: string }; patient?: { profile?: { displayName?: string } }; status?: string }[]>([]);
   const [recentLoading, setRecentLoading] = useState(false);
+  // Create invoice form
+  const [invoiceItems, setInvoiceItems] = useState<Array<{ productId?: number; variantId?: number; serviceId?: number; quantity: number; price: number; label?: string }>>([]);
+  const [invoiceCustomerId, setInvoiceCustomerId] = useState<string>("");
+  const [invoicePaymentMethod, setInvoicePaymentMethod] = useState<string>("");
+  const [invoiceNotes, setInvoiceNotes] = useState<string>("");
+  const [invoiceSubmitting, setInvoiceSubmitting] = useState(false);
 
   const permissions = Array.isArray(myAccess?.permissions) ? myAccess.permissions : [];
   const hasAccess = BILLING_PERMS.some((p) => permissions.includes(p));
+  const canCreateInvoice = permissions.some((p) => ["clinic.emr.write", "manager.billing.create_invoice"].includes(p));
 
   const loadVisitBilling = useCallback(() => {
     const vid = visitIdInput ? Number(visitIdInput) : null;
@@ -76,6 +86,92 @@ export default function StaffClinicBillingPage() {
       .catch(() => setRecentUnpaid([]))
       .finally(() => setRecentLoading(false));
   }, [branchId]);
+
+  // Build suggested invoice line items from billing summary (prescriptions + consultation)
+  const buildSuggestedInvoiceItems = useCallback(async (summary: any) => {
+    const items: Array<{ productId?: number; variantId?: number; serviceId?: number; quantity: number; price: number; label?: string }> = [];
+    if (summary?.appointment?.service) {
+      const svc = summary.appointment.service;
+      items.push({
+        serviceId: svc.id,
+        quantity: 1,
+        price: Number(svc.price) || 0,
+        label: `Consultation: ${svc.name || "Service"}`,
+      });
+    }
+    const prescriptions = summary?.prescriptions ?? [];
+    for (const prx of prescriptions) {
+      if (!prx?.id || !branchId) continue;
+      try {
+        const lines = await staffClinicPrescriptionOrderLines(branchId, prx.id);
+        for (const line of lines || []) {
+          const productId = line.productId != null ? Number(line.productId) : null;
+          const variantId = line.productVariantId != null ? Number(line.productVariantId) : undefined;
+          if (productId != null) {
+            items.push({
+              productId,
+              variantId,
+              quantity: Number(line.quantity) || 1,
+              price: Number(line.price) || 0,
+              label: line.medicineName || `Product #${productId}`,
+            });
+          }
+        }
+      } catch {
+        // skip prescription if order lines fail
+      }
+    }
+    setInvoiceItems(items);
+    if (summary?.patientId != null) setInvoiceCustomerId(String(summary.patientId));
+  }, [branchId]);
+
+  // When billing summary loads, build suggested invoice items and set customer
+  useEffect(() => {
+    if (billingSummary && lookupVisitId != null && canCreateInvoice) {
+      buildSuggestedInvoiceItems(billingSummary);
+    } else {
+      setInvoiceItems([]);
+      setInvoiceCustomerId("");
+    }
+  }, [billingSummary, lookupVisitId, canCreateInvoice, buildSuggestedInvoiceItems]);
+
+  const handleCreateInvoice = useCallback(() => {
+    if (!branchId || lookupVisitId == null) return;
+    const customerId = Number(invoiceCustomerId);
+    if (!Number.isFinite(customerId)) {
+      toast.error("Customer ID is required");
+      return;
+    }
+    if (invoiceItems.length === 0) {
+      toast.error("Add at least one line item");
+      return;
+    }
+    const items = invoiceItems.map((it) => {
+      if (it.serviceId != null) {
+        return { serviceId: it.serviceId, quantity: it.quantity, price: it.price };
+      }
+      return {
+        productId: it.productId!,
+        variantId: it.variantId,
+        quantity: it.quantity,
+        price: it.price,
+      };
+    });
+    setInvoiceSubmitting(true);
+    staffClinicCreateInvoice(branchId, lookupVisitId, {
+      customerId,
+      items,
+      paymentMethod: invoicePaymentMethod || undefined,
+      notes: invoiceNotes || undefined,
+    })
+      .then((order) => {
+        toast.success(order?.id ? "Invoice created" : "Done");
+        setPaymentStatus([]);
+        loadVisitBilling();
+      })
+      .catch((e) => toast.error(e?.message ?? "Failed to create invoice"))
+      .finally(() => setInvoiceSubmitting(false));
+  }, [branchId, lookupVisitId, invoiceCustomerId, invoiceItems, invoicePaymentMethod, invoiceNotes, loadVisitBilling]);
 
   if (ctxLoading) {
     return (
@@ -214,7 +310,109 @@ export default function StaffClinicBillingPage() {
                   </div>
                 )}
                 {orders.length > 0 && (
-                  <p className="small text-muted mb-0">Orders: {orders.length} order(s). Create invoice from visit page or API.</p>
+                  <p className="small text-muted mb-0">Orders: {orders.length} order(s).</p>
+                )}
+
+                {canCreateInvoice && lookupVisitId != null && billingSummary != null && (
+                  <div className="card radius-12 border border-primary mt-3">
+                    <div className="card-body">
+                      <h6 className="mb-2">Create invoice</h6>
+                      <div className="mb-2">
+                        <label className="form-label small">Customer ID (owner)</label>
+                        <input
+                          type="number"
+                          className="form-control form-control-sm"
+                          style={{ width: 120 }}
+                          value={invoiceCustomerId}
+                          onChange={(e) => setInvoiceCustomerId(e.target.value)}
+                          placeholder="patientId"
+                        />
+                      </div>
+                      {invoiceItems.length > 0 && (
+                        <div className="table-responsive mb-2">
+                          <table className="table table-sm">
+                            <thead>
+                              <tr>
+                                <th>Item</th>
+                                <th>Qty</th>
+                                <th>Price</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {invoiceItems.map((it, idx) => (
+                                <tr key={idx}>
+                                  <td>{it.label ?? (it.serviceId != null ? `Service #${it.serviceId}` : `Product #${it.productId}`)}</td>
+                                  <td>
+                                    <input
+                                      type="number"
+                                      className="form-control form-control-sm"
+                                      style={{ width: 60 }}
+                                      min={1}
+                                      value={it.quantity}
+                                      onChange={(e) => {
+                                        const v = Number(e.target.value);
+                                        if (!Number.isFinite(v)) return;
+                                        setInvoiceItems((prev) => prev.map((p, i) => (i === idx ? { ...p, quantity: v } : p)));
+                                      }}
+                                    />
+                                  </td>
+                                  <td>
+                                    <input
+                                      type="number"
+                                      className="form-control form-control-sm"
+                                      style={{ width: 80 }}
+                                      min={0}
+                                      step={0.01}
+                                      value={it.price}
+                                      onChange={(e) => {
+                                        const v = Number(e.target.value);
+                                        if (!Number.isFinite(v)) return;
+                                        setInvoiceItems((prev) => prev.map((p, i) => (i === idx ? { ...p, price: v } : p)));
+                                      }}
+                                    />
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      )}
+                      <div className="row g-2 mb-2">
+                        <div className="col-md-6">
+                          <label className="form-label small">Payment method</label>
+                          <select
+                            className="form-select form-select-sm"
+                            value={invoicePaymentMethod}
+                            onChange={(e) => setInvoicePaymentMethod(e.target.value)}
+                          >
+                            <option value="">—</option>
+                            <option value="CASH">Cash</option>
+                            <option value="CARD">Card</option>
+                            <option value="BANK">Bank</option>
+                            <option value="MOBILE">Mobile</option>
+                          </select>
+                        </div>
+                      </div>
+                      <div className="mb-2">
+                        <label className="form-label small">Notes</label>
+                        <input
+                          type="text"
+                          className="form-control form-control-sm"
+                          value={invoiceNotes}
+                          onChange={(e) => setInvoiceNotes(e.target.value)}
+                          placeholder="Optional"
+                        />
+                      </div>
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        onClick={handleCreateInvoice}
+                        disabled={invoiceSubmitting || invoiceItems.length === 0}
+                      >
+                        {invoiceSubmitting ? "Creating…" : "Create invoice"}
+                      </button>
+                    </div>
+                  </div>
                 )}
               </div>
             )}

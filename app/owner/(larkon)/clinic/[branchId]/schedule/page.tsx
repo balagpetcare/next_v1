@@ -15,6 +15,7 @@ import {
   type BranchHolidayRow,
   type EmergencyPolicy,
   type DoctorScheduleTemplateRow,
+  type RoomScheduleTemplateRow,
 } from "@/app/owner/_lib/ownerApi";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 
@@ -23,7 +24,10 @@ const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 export default function ClinicSchedulePage() {
   const params = useParams();
   const branchId = params?.branchId as string | undefined;
-  const [templates, setTemplates] = useState<{ doctorTemplates: unknown[]; roomTemplates: unknown[] } | null>(null);
+  const [templates, setTemplates] = useState<{
+    doctorTemplates: DoctorScheduleTemplateRow[];
+    roomTemplates: RoomScheduleTemplateRow[];
+  } | null>(null);
   const [holidays, setHolidays] = useState<BranchHolidayRow[]>([]);
   const [emergency, setEmergency] = useState<EmergencyPolicy | null>(null);
   const [loading, setLoading] = useState(true);
@@ -35,7 +39,7 @@ export default function ClinicSchedulePage() {
   const [emergencyForm, setEmergencyForm] = useState({ enabled: false, reservedSlotsPerDay: "0", allowedHours: "" });
   const [savingEmergency, setSavingEmergency] = useState(false);
   const [staff, setStaff] = useState<{ id: number; displayName?: string; staffType?: string }[]>([]);
-  const [doctorRows, setDoctorRows] = useState<{ branchMemberId: number; dayOfWeek: number; startTime: string; endTime: string; slotMinutes: number }[]>([]);
+  const [doctorRows, setDoctorRows] = useState<DoctorScheduleTemplateRow[]>([]);
   const [savingSchedule, setSavingSchedule] = useState(false);
   const [newRow, setNewRow] = useState({ branchMemberId: "", dayOfWeek: 0, startTime: "09:00", endTime: "17:00", slotMinutes: 15 });
 
@@ -66,14 +70,14 @@ export default function ClinicSchedulePage() {
           staffType: m.profileSummary?.staffType,
         }))
       );
-      const dt = (t?.doctorTemplates ?? []) as DoctorScheduleTemplateRow[];
+      const dt = t?.doctorTemplates ?? [];
       setDoctorRows(
         dt.map((x) => ({
-          branchMemberId: x.branchMemberId,
-          dayOfWeek: x.dayOfWeek,
+          ...x,
           startTime: x.startTime ?? "09:00",
           endTime: x.endTime ?? "17:00",
           slotMinutes: x.slotMinutes ?? 15,
+          status: x.status ?? "ACTIVE",
         }))
       );
     } catch (err) {
@@ -140,7 +144,18 @@ export default function ClinicSchedulePage() {
   const addDoctorRow = () => {
     const id = parseInt(newRow.branchMemberId, 10);
     if (!Number.isFinite(id)) return;
-    setDoctorRows((r) => [...r, { ...newRow, branchMemberId: id }]);
+    setDoctorRows((r) => [
+      ...r,
+      {
+        id: 0,
+        branchMemberId: id,
+        dayOfWeek: newRow.dayOfWeek,
+        startTime: newRow.startTime,
+        endTime: newRow.endTime,
+        slotMinutes: newRow.slotMinutes,
+        status: "ACTIVE",
+      },
+    ]);
     setNewRow({ ...newRow, branchMemberId: "" });
   };
 
@@ -155,11 +170,8 @@ export default function ClinicSchedulePage() {
       setError("");
       await ownerClinicScheduleTemplatesPut(branchId, {
         doctorTemplates: doctorRows.map((r) => ({
-          branchMemberId: r.branchMemberId,
-          dayOfWeek: r.dayOfWeek,
-          startTime: r.startTime,
-          endTime: r.endTime,
-          slotMinutes: r.slotMinutes,
+          ...r,
+          slotMinutes: r.slotMinutes ?? 15,
         })),
         roomTemplates: templates.roomTemplates ?? [],
       });
@@ -309,13 +321,13 @@ export default function ClinicSchedulePage() {
               <button type="button" className="btn btn-primary radius-12" onClick={saveDoctorSchedule} disabled={savingSchedule}>
                 {savingSchedule ? "Saving..." : "Save doctor schedule"}
               </button>
-              {templates && (templates.roomTemplates as any[])?.length > 0 && (
+              {templates && templates.roomTemplates.length > 0 && (
                 <div className="mt-4 pt-3 border-top">
                   <strong>Room templates</strong>
                   <ul className="list-unstyled small mt-1">
-                    {(templates?.roomTemplates as any[])?.map((t: any) => (
-                      <li key={t.id}>
-                        {t.branchRoom?.name ?? `Room #${t.branchRoomId}`} — {DAY_NAMES[t.dayOfWeek]} {t.startTime}-{t.endTime}
+                    {templates.roomTemplates.map((rt) => (
+                      <li key={rt.id}>
+                        {rt.branchRoom?.name ?? `Room #${rt.branchRoomId}`} — {DAY_NAMES[rt.dayOfWeek]} {rt.startTime}-{rt.endTime}
                       </li>
                     ))}
                   </ul>

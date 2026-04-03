@@ -201,13 +201,27 @@ export default function DoctorAppointmentsPage() {
     setActioningId(id);
     setError("");
     try {
-      await doctorStartConsult(id);
+      const apt = appointments.find((a: any) => a.id === id);
+      const statusUpper = (apt?.status ?? "").toString().toUpperCase();
+      if (statusUpper === "IN_QUEUE") {
+        await doctorCallAppointment(id);
+      }
+      const data = await doctorStartConsult(id);
+      const vid = data?.visit != null && typeof data.visit === "object" && "id" in data.visit ? (data.visit as { id?: number }).id : undefined;
+      if (vid != null && Number.isFinite(vid)) {
+        router.push(`/doctor/visits/${vid}`);
+        return;
+      }
       await refresh();
     } catch (e) {
       setError((e as Error)?.message || "Failed to start consultation");
     } finally {
       setActioningId(null);
     }
+  };
+
+  const handleOpenVisit = (visitId: number) => {
+    router.push(`/doctor/visits/${visitId}`);
   };
 
   const handleComplete = async (id: number) => {
@@ -365,6 +379,7 @@ export default function DoctorAppointmentsPage() {
                   onComplete={handleComplete}
                   onReschedule={handleReschedule}
                   onCancel={handleCancel}
+                  onOpenVisit={handleOpenVisit}
                   actioningId={actioningId}
                   date={currentDateForTable}
                   total={total}
@@ -382,6 +397,7 @@ export default function DoctorAppointmentsPage() {
                     onCall={() => handleCall(apt.id)}
                     onStartConsult={() => handleStartConsult(apt.id)}
                     onComplete={() => handleComplete(apt.id)}
+                    onOpenVisit={handleOpenVisit}
                     actioning={actioningId === apt.id}
                   />
                 ))}

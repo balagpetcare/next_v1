@@ -8,13 +8,64 @@
 import { NextResponse } from "next/server";
 import { cookies } from "next/headers";
 
-const API_TARGET = process.env.API_BASE_URL || "http://localhost:3000";
+/**
+ * Backend base URL for server-side proxy fetch only (not the browser origin).
+ * - Prefer API_BASE_URL, then NEXT_PUBLIC_API_BASE_URL (many repos only define the latter).
+ * - If env mistakenly points at a Next panel port (3100–3107), force canonical API :3000
+ *   so we never proxy to another Next instance (stale routes / Route not found from wrong target).
+ */
+function resolveApiTarget() {
+  let raw =
+    process.env.API_BASE_URL ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    "http://localhost:3000";
+  raw = String(raw).replace(/\/+$/, "");
+  if (!raw) raw = "http://localhost:3000";
+  try {
+    const withScheme = /^https?:\/\//i.test(raw) ? raw : `http://${raw}`;
+    const u = new URL(withScheme);
+    const port = u.port ? parseInt(u.port, 10) : u.protocol === "https:" ? 443 : 80;
+    if (
+      (u.hostname === "localhost" || u.hostname === "127.0.0.1") &&
+      port >= 3100 &&
+      port <= 3107
+    ) {
+      return "http://localhost:3000";
+    }
+  } catch {
+    /* keep raw */
+  }
+  return raw;
+}
+
+const API_TARGET = resolveApiTarget();
 
 function getBackendUrl(pathSegments, search) {
   const path =
     Array.isArray(pathSegments) && pathSegments.length > 0 ? pathSegments.join("/") : "";
   const base = `${API_TARGET}/api/v1${path ? `/${path}` : ""}`;
   return search ? `${base}${search}` : base;
+}
+
+/** Path segments after /api/v1 — params.path can be empty in some Next/Turbopack cases; fall back to URL. */
+async function resolvePathSegments(request, context) {
+  const raw = context?.params;
+  const params = raw && typeof raw.then === "function" ? await raw : raw ?? {};
+  const fromParams = params.path;
+  if (Array.isArray(fromParams) && fromParams.length > 0) {
+    return fromParams;
+  }
+  try {
+    const u = new URL(request.url);
+    const prefix = "/api/v1/";
+    if (u.pathname.startsWith(prefix)) {
+      const rest = u.pathname.slice(prefix.length);
+      return rest ? rest.split("/").filter(Boolean) : [];
+    }
+  } catch {
+    /* ignore */
+  }
+  return [];
 }
 
 function forwardHeaders(request) {
@@ -136,8 +187,7 @@ function applySetCookiesToResponse(response, backendRes) {
 }
 
 async function proxyRequest(request, context, method) {
-  const params = await (context.params ?? Promise.resolve({}));
-  const pathSegments = params.path ?? [];
+  const pathSegments = await resolvePathSegments(request, context);
   const url = new URL(request.url);
   const backendUrl = getBackendUrl(pathSegments, url.search);
   if (process.env.NODE_ENV === "development" && pathSegments[0] === "auth" && (method === "POST" || method === "GET")) {

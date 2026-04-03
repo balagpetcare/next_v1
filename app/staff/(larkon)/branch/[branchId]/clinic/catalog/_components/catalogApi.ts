@@ -366,10 +366,15 @@ export async function listApprovalRequests(
   const q = new URLSearchParams();
   if (params?.status) q.set("status", params.status);
   if (params?.limit) q.set("limit", String(params.limit ?? 50));
-  const res = await apiGet<{ success?: boolean; data?: ClinicApprovalRequest[] }>(
+  const res = await apiGet<{ success?: boolean; data?: ClinicApprovalRequest[] | { items?: ClinicApprovalRequest[] } }>(
     `${base(branchId)}/approval-requests${q.toString() ? `?${q.toString()}` : ""}`
   );
-  return (res as { data?: ClinicApprovalRequest[] })?.data ?? [];
+  const d = (res as { data?: unknown })?.data;
+  if (Array.isArray(d)) return d;
+  if (d && typeof d === "object" && Array.isArray((d as { items?: ClinicApprovalRequest[] }).items)) {
+    return (d as { items: ClinicApprovalRequest[] }).items;
+  }
+  return [];
 }
 
 export async function decideApprovalRequest(

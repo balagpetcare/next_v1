@@ -4,16 +4,17 @@ import { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useBranchContext } from "@/lib/useBranchContext";
-import {
-  staffClinicPatientsList,
-  staffClinicOwnerLookup,
-  staffClinicPatientRegister,
-  getAnimalTypes,
-  getBreedsByAnimalType,
-} from "@/lib/api";
+import { staffClinicPatientsList, getAnimalTypes } from "@/lib/api";
 import Card from "@/src/bpa/components/ui/Card";
 import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
+import { PageWorkspace } from "@/src/components/dashboard";
+import {
+  staffClinicPatientRegisterPath,
+  staffClinicPatientDetailPath,
+  staffClinicPatientEditPath,
+} from "@/lib/staffClinicPatientRoutes";
+import { PaginationBar } from "@/src/components/common/PaginationBar";
 
 const PATIENTS_PERMS = ["clinic.patients.read", "clinic.patients.manage"];
 const PAGE_SIZE = 25;
@@ -30,15 +31,20 @@ export default function StaffBranchClinicPatientsPage() {
   const [search, setSearch] = useState("");
   const [searchInput, setSearchInput] = useState("");
   const [page, setPage] = useState(1);
-  const [showRegisterModal, setShowRegisterModal] = useState(false);
+  const [animalTypeId, setAnimalTypeId] = useState("");
+  const [animalTypes, setAnimalTypes] = useState([]);
 
   const permissions = Array.isArray(myAccess?.permissions) ? myAccess.permissions : [];
   const hasAccess = PATIENTS_PERMS.some((p) => permissions.includes(p));
   const hasManage = permissions.includes("clinic.patients.manage");
 
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
-  const from = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const to = Math.min(page * PAGE_SIZE, total);
+
+  useEffect(() => {
+    getAnimalTypes()
+      .then(setAnimalTypes)
+      .catch(() => setAnimalTypes([]));
+  }, []);
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -51,10 +57,16 @@ export default function StaffBranchClinicPatientsPage() {
   useEffect(() => {
     if (!branchId) return;
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- list fetch lifecycle
     setLoading(true);
     setError("");
     const offset = (page - 1) * PAGE_SIZE;
-    staffClinicPatientsList(branchId, { search: search || undefined, limit: PAGE_SIZE, offset })
+    staffClinicPatientsList(branchId, {
+      search: search || undefined,
+      limit: PAGE_SIZE,
+      offset,
+      animalTypeId: animalTypeId ? Number(animalTypeId) : undefined,
+    })
       .then((data) => {
         if (!cancelled) {
           setPatients(data?.patients ?? []);
@@ -69,13 +81,17 @@ export default function StaffBranchClinicPatientsPage() {
           setError(e?.message || "Failed to load patients.");
         }
       })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [branchId, search, page]);
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [branchId, search, page, animalTypeId]);
 
   if (ctxLoading) {
     return (
-      <div className="container py-40 text-center">
+      <div className="py-40 px-3 text-center">
         <div className="spinner-border text-primary" role="status" />
         <p className="mt-16 text-secondary-light">Loading...</p>
       </div>
@@ -92,79 +108,145 @@ export default function StaffBranchClinicPatientsPage() {
   }
 
   return (
-    <div className="container py-24">
+    <PageWorkspace>
       <BranchHeader branch={branch} myAccess={myAccess} branchId={branchId} />
-      <div className="d-flex align-items-center gap-12 mb-24">
-        <Link href={`/staff/branch/${branchId}/clinic`} className="btn btn-outline-secondary btn-sm">
-          ← Clinic
-        </Link>
-        <h5 className="mb-0">Patients</h5>
+
+      <div className="d-flex align-items-center justify-content-between flex-wrap gap-12 mb-24">
+        <div>
+          <div className="d-flex align-items-center gap-12 flex-wrap">
+            <Link href={`/staff/branch/${branchId}/clinic`} className="btn btn-outline-secondary btn-sm">
+              ← Clinic
+            </Link>
+            <h4 className="mb-0">Patients</h4>
+          </div>
+          <p className="text-muted small mb-0 mt-8">
+            Clinical patients are <strong>pets</strong> linked to an <strong>owner (User)</strong>. Records are scoped to this branch when registered here or seen via appointment/visit.
+          </p>
+        </div>
+        {hasManage && (
+          <Link href={staffClinicPatientRegisterPath(branchId)} className="btn btn-sm btn-primary">
+            Add patient
+          </Link>
+        )}
       </div>
 
-      <Card title="Patients" subtitle="Clinic patients (pets) for this branch.">
-        <div className="mb-16 d-flex align-items-center gap-2 flex-wrap">
-          {hasManage && (
-            <button
-              type="button"
-              className="btn btn-sm btn-primary"
-              onClick={() => setShowRegisterModal(true)}
+      <Card title="Patient directory" subtitle="Search, filter by species, open workspace">
+        <div className="mb-16 row g-2 align-items-end">
+          <div className="col-md-4 col-lg-3">
+            <label className="form-label small text-muted mb-4">Species</label>
+            <select
+              className="form-select form-select-sm"
+              value={animalTypeId}
+              onChange={(e) => {
+                setAnimalTypeId(e.target.value);
+                setPage(1);
+              }}
             >
-              Add patient
-            </button>
-          )}
-          <input
-            type="text"
-            className="form-control form-control-sm"
-            style={{ maxWidth: 240 }}
-            placeholder="Search name, Pet ID, owner..."
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-          />
-          {total > 0 && (
-            <span className="text-muted small">
-              Showing {from}–{to} of {total}
-            </span>
-          )}
+              <option value="">All species</option>
+              {animalTypes.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="col-md-8 col-lg-9">
+            <label className="form-label small text-muted mb-4">Search</label>
+            <input
+              type="text"
+              className="form-control form-control-sm"
+              placeholder="Name, Pet ID, owner phone/email…"
+              value={searchInput}
+              onChange={(e) => setSearchInput(e.target.value)}
+            />
+          </div>
         </div>
+
         {error && (
           <div className="alert alert-danger py-2 mb-16" role="alert">
             {error}
           </div>
         )}
+
         {loading ? (
-          <div className="py-24 text-center text-secondary-light">Loading...</div>
+          <div className="py-40 text-center text-secondary-light">
+            <div className="spinner-border text-primary" role="status" aria-label="Loading patients" />
+            <p className="mt-16 mb-0">Loading patients…</p>
+          </div>
         ) : patients.length === 0 ? (
-          <div className="py-24 text-center text-secondary-light">
-            No patients found. Register a patient or they will appear here after an appointment at this branch.
+          <div className="py-40 text-center border rounded radius-12 bg-light bg-opacity-50">
+            <p className="fw-semibold mb-8">No patients match your filters</p>
+            <p className="text-muted small mb-16 px-3">
+              Register a patient, or they will appear after an appointment or visit at this branch. Clear filters or adjust search.
+            </p>
+            <div className="d-flex flex-wrap gap-2 justify-content-center">
+              {hasManage && (
+                <Link href={staffClinicPatientRegisterPath(branchId)} className="btn btn-sm btn-primary">
+                  Register patient
+                </Link>
+              )}
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-secondary"
+                onClick={() => {
+                  setSearchInput("");
+                  setAnimalTypeId("");
+                  setPage(1);
+                }}
+              >
+                Clear filters
+              </button>
+            </div>
           </div>
         ) : (
           <div className="table-responsive">
-            <table className="table table-sm">
-              <thead>
+            <table className="table table-hover table-sm align-middle mb-0">
+              <thead className="table-light">
                 <tr>
                   <th>Pet ID</th>
-                  <th>Name</th>
+                  <th>Patient (pet)</th>
                   <th>Owner</th>
-                  <th>Type</th>
-                  <th>Breed</th>
+                  <th>Species / breed</th>
+                  <th>Updated</th>
                   <th className="text-end">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {patients.map((p) => (
-                  <tr key={p.id ?? p.petId ?? Math.random()}>
-                    <td><code className="small">{p.uniquePetId ?? "—"}</code></td>
-                    <td>{p.name ?? p.petName ?? "—"}</td>
-                    <td>{p.owner?.displayName ?? p.owner?.phone ?? p.owner?.email ?? "—"}</td>
-                    <td>{p.animalType?.name ?? "—"}</td>
-                    <td>{p.breed?.name ?? "—"}</td>
-                    <td className="text-end">
+                  <tr key={p.id}>
+                    <td>
+                      <code className="small">{p.uniquePetId ?? "—"}</code>
+                    </td>
+                    <td>
+                      <span className="fw-medium">{p.name ?? "—"}</span>
+                      <div className="small text-muted">Record #{p.id}</div>
+                    </td>
+                    <td>
+                      <div>{p.owner?.displayName ?? "—"}</div>
+                      <div className="small text-muted">{p.owner?.phone || p.owner?.email || "—"}</div>
+                    </td>
+                    <td>
+                      <div>{p.animalType?.name ?? "—"}</div>
+                      <div className="small text-muted">{p.breed?.name ?? "—"}</div>
+                    </td>
+                    <td className="text-muted small">
+                      {p.updatedAt ? new Date(p.updatedAt).toLocaleDateString() : "—"}
+                    </td>
+                    <td className="text-end text-nowrap">
                       <Link
-                        href={`/staff/branch/${branchId}/clinic/patients/${p.id}`}
-                        className="btn btn-sm btn-outline-primary"
+                        href={staffClinicPatientDetailPath(branchId, p.id)}
+                        className="btn btn-sm btn-outline-primary me-4"
                       >
-                        View
+                        Open
                       </Link>
+                      {hasManage && (
+                        <Link
+                          href={staffClinicPatientEditPath(branchId, p.id)}
+                          className="btn btn-sm btn-outline-secondary"
+                        >
+                          Edit
+                        </Link>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -172,299 +254,20 @@ export default function StaffBranchClinicPatientsPage() {
             </table>
           </div>
         )}
-        {!loading && total > PAGE_SIZE && (
-          <div className="d-flex align-items-center justify-content-between mt-16 flex-wrap gap-2">
-            <span className="text-muted small">
-              Page {page} of {totalPages}
-            </span>
-            <div className="d-flex gap-2">
-              <button
-                type="button"
-                className="btn btn-sm btn-outline-secondary"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => Math.max(1, p - 1))}
-              >
-                Previous
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm btn-outline-secondary"
-                disabled={page >= totalPages}
-                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-              >
-                Next
-              </button>
-            </div>
-          </div>
+
+        {!loading && total > 0 && (
+          <PaginationBar
+            page={page}
+            pageSize={PAGE_SIZE}
+            total={total}
+            totalPages={totalPages}
+            disabled={loading}
+            onPageChange={setPage}
+            className="mt-24 pt-16 border-top"
+            ariaLabel="Patients list pages"
+          />
         )}
       </Card>
-
-      {showRegisterModal && (
-        <RegisterPatientModal
-          branchId={branchId}
-          onClose={() => setShowRegisterModal(false)}
-          onSuccess={(patient) => {
-            setShowRegisterModal(false);
-            router.push(`/staff/branch/${branchId}/clinic/patients/${patient?.id}`);
-          }}
-        />
-      )}
-    </div>
-  );
-}
-
-function RegisterPatientModal({ branchId, onClose, onSuccess }) {
-  const [ownerQuery, setOwnerQuery] = useState("");
-  const [owner, setOwner] = useState(null);
-  const [ownerSearching, setOwnerSearching] = useState(false);
-  const [animalTypes, setAnimalTypes] = useState([]);
-  const [breeds, setBreeds] = useState([]);
-  const [breedsLoading, setBreedsLoading] = useState(false);
-  const [form, setForm] = useState({
-    name: "",
-    animalTypeId: "",
-    breedId: "",
-    sex: "",
-    dateOfBirth: "",
-    microchipNumber: "",
-    allergies: "",
-    bloodType: "",
-    notes: "",
-  });
-  const [submitting, setSubmitting] = useState(false);
-  const [formError, setFormError] = useState("");
-  const [typesLoading, setTypesLoading] = useState(true);
-
-  useEffect(() => {
-    getAnimalTypes()
-      .then((t) => setAnimalTypes(Array.isArray(t) ? t : []))
-      .catch(() => setAnimalTypes([]))
-      .finally(() => setTypesLoading(false));
-  }, []);
-
-  useEffect(() => {
-    const id = form.animalTypeId ? Number(form.animalTypeId) : null;
-    if (!id) {
-      setBreeds([]);
-      setForm((f) => ({ ...f, breedId: "" }));
-      return;
-    }
-    setBreedsLoading(true);
-    getBreedsByAnimalType(id)
-      .then((b) => setBreeds(Array.isArray(b) ? b : []))
-      .catch(() => setBreeds([]))
-      .finally(() => {
-        setBreedsLoading(false);
-        setForm((f) => ({ ...f, breedId: "" }));
-      });
-  }, [form.animalTypeId]);
-
-  async function searchOwner() {
-    if (!ownerQuery.trim()) return;
-    setOwnerSearching(true);
-    setFormError("");
-    try {
-      const o = await staffClinicOwnerLookup(branchId, ownerQuery.trim());
-      setOwner(o || null);
-    } catch {
-      setOwner(null);
-      setFormError("Owner not found. Try phone or email.");
-    } finally {
-      setOwnerSearching(false);
-    }
-  }
-
-  function handleSubmit(e) {
-    e.preventDefault();
-    setFormError("");
-    if (!owner?.id) {
-      setFormError("Find and select owner first (phone or email).");
-      return;
-    }
-    if (!form.name?.trim()) {
-      setFormError("Pet name is required.");
-      return;
-    }
-    const animalTypeId = Number(form.animalTypeId);
-    if (!animalTypeId) {
-      setFormError("Species (animal type) is required.");
-      return;
-    }
-    setSubmitting(true);
-    const payload = {
-      userId: owner.id,
-      name: form.name.trim(),
-      animalTypeId,
-      breedId: form.breedId ? Number(form.breedId) : undefined,
-      sex: form.sex || undefined,
-      dateOfBirth: form.dateOfBirth || undefined,
-      microchipNumber: form.microchipNumber?.trim() || undefined,
-      bloodType: form.bloodType?.trim() || undefined,
-      notes: form.notes?.trim() || undefined,
-    };
-    if (form.allergies?.trim()) {
-      payload.allergies = form.allergies.split(",").map((s) => s.trim()).filter(Boolean);
-    }
-    staffClinicPatientRegister(branchId, payload)
-      .then((patient) => onSuccess(patient))
-      .catch((err) => {
-        setFormError(err?.message || "Registration failed.");
-        setSubmitting(false);
-      });
-  }
-
-  const ownerDisplay = owner
-    ? `${owner.profile?.displayName ?? "Owner"} ${owner.auth?.phone ?? ""} ${owner.auth?.email ?? ""}`.trim()
-    : "";
-
-  return (
-    <div className="modal d-block bg-dark bg-opacity-50" tabIndex={-1}>
-      <div className="modal-dialog modal-dialog-scrollable">
-        <div className="modal-content">
-          <div className="modal-header">
-            <h5 className="modal-title">Register patient</h5>
-            <button type="button" className="btn-close" onClick={onClose} aria-label="Close" />
-          </div>
-          <form onSubmit={handleSubmit}>
-            <div className="modal-body">
-              {formError && <div className="alert alert-danger py-2">{formError}</div>}
-              <div className="mb-3">
-                <label className="form-label">Owner (phone or email) *</label>
-                <div className="d-flex gap-2">
-                  <input
-                    type="text"
-                    className="form-control"
-                    placeholder="Phone or email"
-                    value={ownerQuery}
-                    onChange={(e) => {
-                      setOwnerQuery(e.target.value);
-                      setOwner(null);
-                    }}
-                  />
-                  <button type="button" className="btn btn-outline-primary" onClick={searchOwner} disabled={ownerSearching}>
-                    {ownerSearching ? "…" : "Find"}
-                  </button>
-                </div>
-                {ownerDisplay && <small className="text-success d-block mt-1">{ownerDisplay}</small>}
-              </div>
-              <div className="mb-3">
-                <label className="form-label">Pet name *</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Pet name"
-                  value={form.name}
-                  onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
-                  required
-                />
-              </div>
-              <div className="mb-3">
-                <label className="form-label">Species *</label>
-                <select
-                  className="form-select"
-                  value={form.animalTypeId}
-                  onChange={(e) => setForm((f) => ({ ...f, animalTypeId: e.target.value }))}
-                  required
-                  disabled={typesLoading}
-                >
-                  <option value="">{typesLoading ? "Loading…" : "Select species"}</option>
-                  {animalTypes.map((t) => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="mb-3">
-                <label className="form-label">Breed</label>
-                <select
-                  className="form-select"
-                  value={form.breedId}
-                  onChange={(e) => setForm((f) => ({ ...f, breedId: e.target.value }))}
-                  disabled={breedsLoading || !form.animalTypeId}
-                >
-                  <option value="">—</option>
-                  {breeds.map((b) => (
-                    <option key={b.id} value={b.id}>
-                      {b.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div className="mb-3">
-                <label className="form-label">Sex</label>
-                <select
-                  className="form-select"
-                  value={form.sex}
-                  onChange={(e) => setForm((f) => ({ ...f, sex: e.target.value }))}
-                >
-                  <option value="">—</option>
-                  <option value="MALE">Male</option>
-                  <option value="FEMALE">Female</option>
-                  <option value="UNKNOWN">Unknown</option>
-                </select>
-              </div>
-              <div className="mb-3">
-                <label className="form-label">Date of birth</label>
-                <input
-                  type="date"
-                  className="form-control"
-                  value={form.dateOfBirth}
-                  onChange={(e) => setForm((f) => ({ ...f, dateOfBirth: e.target.value }))}
-                />
-              </div>
-              <div className="mb-3">
-                <label className="form-label">Microchip number</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Microchip"
-                  value={form.microchipNumber}
-                  onChange={(e) => setForm((f) => ({ ...f, microchipNumber: e.target.value }))}
-                />
-              </div>
-              <div className="mb-3">
-                <label className="form-label">Allergies (comma-separated)</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="e.g. Chicken, Pollen"
-                  value={form.allergies}
-                  onChange={(e) => setForm((f) => ({ ...f, allergies: e.target.value }))}
-                />
-              </div>
-              <div className="mb-3">
-                <label className="form-label">Blood type</label>
-                <input
-                  type="text"
-                  className="form-control"
-                  placeholder="Blood type"
-                  value={form.bloodType}
-                  onChange={(e) => setForm((f) => ({ ...f, bloodType: e.target.value }))}
-                />
-              </div>
-              <div className="mb-3">
-                <label className="form-label">Notes</label>
-                <textarea
-                  className="form-control"
-                  rows={2}
-                  placeholder="Notes"
-                  value={form.notes}
-                  onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
-                />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button type="button" className="btn btn-outline-secondary" onClick={onClose}>
-                Cancel
-              </button>
-              <button type="submit" className="btn btn-primary" disabled={submitting || !owner?.id}>
-                {submitting ? "Registering…" : "Register patient"}
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
+    </PageWorkspace>
   );
 }

@@ -52,7 +52,7 @@ export default function StaffApprovalsPage() {
     setLoading(true);
     setError("");
     staffClinicApprovalRequestsList(branchId, { status: statusFilter || undefined })
-      .then((list) => setRequests(Array.isArray(list) ? list : []))
+      .then((res) => setRequests(Array.isArray(res?.items) ? res.items : []))
       .catch((e) => {
         setError(e?.message ?? "Failed to load approvals");
         setRequests([]);
@@ -181,8 +181,13 @@ export default function StaffApprovalsPage() {
                                 type="button"
                                 className="btn btn-outline-danger"
                                 onClick={() => {
-                                  const reason = window.prompt("Reject reason (optional):");
-                                  handleDecide(r.id, "REJECTED", reason ?? undefined);
+                                  const reason = window.prompt("Reject reason (required):");
+                                  if (reason == null) return;
+                                  if (!String(reason).trim()) {
+                                    window.alert("A rejection reason is required.");
+                                    return;
+                                  }
+                                  handleDecide(r.id, "REJECTED", String(reason).trim());
                                 }}
                                 disabled={acting}
                               >

@@ -5,6 +5,7 @@ import { useParams, useSearchParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { ownerGet } from "@/app/owner/_lib/ownerApi";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
+import StatusBadge from "@/app/owner/_components/StatusBadge";
 
 function pickArray(resp) {
   if (!resp) return [];
@@ -13,6 +14,17 @@ function pickArray(resp) {
   if (Array.isArray(resp.items)) return resp.items;
   if (Array.isArray(resp.data?.items)) return resp.data.items;
   return [];
+}
+
+/** Business-visible status: use API displayStatus when present, else derive (aligned with admin verification). */
+function branchDisplayStatus(branch) {
+  if (branch?.displayStatus != null && branch.displayStatus !== "") return branch.displayStatus;
+  const status = branch?.status || "DRAFT";
+  const verificationStatus = branch?.verificationStatus || "";
+  if (verificationStatus === "VERIFIED" && status !== "BLOCKED" && status !== "INACTIVE") {
+    return "ACTIVE";
+  }
+  return status;
 }
 
 export default function OrganizationBranchesPage() {
@@ -161,9 +173,7 @@ export default function OrganizationBranchesPage() {
                         </div>
                       </td>
                       <td>
-                        <span className="badge bg-success radius-8">
-                          {branch.status || "ACTIVE"}
-                        </span>
+                        <StatusBadge status={branchDisplayStatus(branch)} />
                       </td>
                       <td>
                         <div className="d-flex gap-2">

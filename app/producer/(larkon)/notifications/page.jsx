@@ -5,7 +5,9 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { apiGet } from "@/lib/api";
 import { useNotifications } from "@/lib/useNotifications";
-import { formatDistanceToNow, format, startOfDay } from "date-fns";
+import { formatDistanceToNow } from "date-fns/formatDistanceToNow";
+import { format } from "date-fns/format";
+import { startOfDay } from "date-fns/startOfDay";
 import ProducerPageShell from "../../_components/ProducerPageShell";
 import { getProducerViewHref, getProducerNotificationPriority, getPriorityBadgeClass } from "../../_lib/producerNotificationHelpers";
 

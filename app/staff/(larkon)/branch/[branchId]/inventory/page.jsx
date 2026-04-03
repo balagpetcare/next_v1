@@ -15,7 +15,7 @@ import {
 import Card from "@/src/bpa/components/ui/Card";
 import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
-import { Pagination } from "@/src/components/common/Pagination";
+import { PaginationBar } from "@/src/components/common/PaginationBar";
 
 const REQUIRED_PERM = "inventory.read";
 const STATUS_OPTIONS = [
@@ -207,6 +207,26 @@ export default function StaffBranchInventorySummaryPage() {
         </Link>
       </div>
 
+      {/* Expiry Alert Banner */}
+      {dashboard?.expiringCount > 0 && (
+        <div className="alert alert-warning radius-12 d-flex align-items-center justify-content-between mb-3">
+          <div className="d-flex align-items-center gap-2">
+            <i className="ri-time-line fs-5" aria-hidden />
+            <div>
+              <strong>{dashboard.expiringCount} items expiring soon</strong>
+              <div className="small">Review items expiring in the next 7 days and take action</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-warning"
+            onClick={() => setStatusFilter("expiring")}
+          >
+            View Items
+          </button>
+        </div>
+      )}
+
       {error && (
         <div className="alert alert-danger radius-12 d-flex align-items-center justify-content-between">
           <span>{error}</span>
@@ -342,7 +362,7 @@ export default function StaffBranchInventorySummaryPage() {
                 <h6 className="fw-semibold mb-2">No stock movements yet for this branch.</h6>
                 <p className="text-muted small mb-4">Inventory is calculated from ledger entries.</p>
                 <div className="d-flex flex-wrap justify-content-center gap-2">
-                  <Link href={`/staff/branch/${branchId}/inventory/stock-requests/new`} className="btn btn-primary btn-sm radius-12">
+                  <Link href={`/staff/branch/${branchId}/inventory/stock-request-create`} className="btn btn-primary btn-sm radius-12">
                     <i className="ri-add-line me-1" aria-hidden /> Create Stock Request
                   </Link>
                   <Link href={`/staff/branch/${branchId}/inventory/stock-requests`} className="btn btn-outline-secondary btn-sm radius-12">
@@ -406,7 +426,7 @@ export default function StaffBranchInventorySummaryPage() {
                                     <i className="ri-history-line me-2" aria-hidden /> View Ledger
                                   </Dropdown.Item>
                                   <Dropdown.Divider />
-                                  <Dropdown.Item as={Link} href={`/staff/branch/${branchId}/inventory/stock-requests/new`}>
+                                  <Dropdown.Item as={Link} href={`/staff/branch/${branchId}/inventory/stock-request-create`}>
                                     <i className="ri-file-add-line me-2" aria-hidden /> Create Stock Request
                                   </Dropdown.Item>
                                   {canTransfer && (
@@ -433,13 +453,16 @@ export default function StaffBranchInventorySummaryPage() {
                     </tbody>
                   </table>
                 </div>
-                {pagination.totalPages > 1 && (
-                  <div className="d-flex justify-content-end p-3 border-top">
-                    <Pagination
-                      currentPage={pagination.page}
+                {pagination.total > 0 && (
+                  <div className="p-3 border-top">
+                    <PaginationBar
+                      page={pagination.page}
+                      pageSize={pagination.limit}
+                      total={pagination.total}
                       totalPages={pagination.totalPages}
-                      onPageChange={(page) => setPagination((p) => ({ ...p, page }))}
-                      align="end"
+                      disabled={loading}
+                      onPageChange={(p) => setPagination((prev) => ({ ...prev, page: p }))}
+                      className="mt-0 pt-0 border-0"
                       ariaLabel="Inventory pagination"
                     />
                   </div>
@@ -508,7 +531,7 @@ export default function StaffBranchInventorySummaryPage() {
               )}
             </div>
             <div className="d-flex flex-wrap gap-2">
-              <Link href={`/staff/branch/${branchId}/inventory/stock-requests/new`} className="btn btn-primary btn-sm radius-12">Create Stock Request</Link>
+              <Link href={`/staff/branch/${branchId}/inventory/stock-request-create`} className="btn btn-primary btn-sm radius-12">Create Stock Request</Link>
               {canTransfer && <Link href={`/staff/branch/${branchId}/inventory/transfers`} className="btn btn-outline-primary btn-sm radius-12">Transfers</Link>}
               {canAdjust && <Link href={`/staff/branch/${branchId}/inventory/adjustments`} className="btn btn-outline-secondary btn-sm radius-12">Adjustments</Link>}
             </div>

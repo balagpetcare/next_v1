@@ -18,14 +18,26 @@ import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
 import { PageHeader, DetailDrawer, LoadingState, StatusBadge } from "@/src/components/dashboard";
 import type { InjectionToken, TokenContext, VialSessionListItem, MedicineSource } from "@/src/types/clinicMedicineControl";
+import { humanizeEnum } from "@/src/lib/displayFormatters";
 
 const PERMS = ["medicine.dose.record", "injection.token.validate", "injection.token.emergency_bypass"];
 
-const MEDICINE_SOURCE_OPTIONS: { value: MedicineSource; label: string }[] = [
-  { value: "INTERNAL", label: "Internal" },
-  { value: "OUTSIDE", label: "Outside" },
-  { value: "EXTERNAL", label: "External" },
-];
+function coerceMedicineSource(raw: string | null | undefined): MedicineSource {
+  const legacy: Record<string, MedicineSource> = {
+    INTERNAL: "INTERNAL_CLINIC",
+    EXTERNAL: "CLINIC_PROVIDED_MEDICINE",
+    OUTSIDE: "OUTSIDE_PRESCRIPTION_PATIENT_BROUGHT",
+  };
+  const v = String(raw ?? "").trim().toUpperCase();
+  if (v === "INTERNAL_CLINIC" || v === "CLINIC_PROVIDED_MEDICINE" || v === "OUTSIDE_PRESCRIPTION_PATIENT_BROUGHT") {
+    return v as MedicineSource;
+  }
+  return legacy[v] ?? "INTERNAL_CLINIC";
+}
+
+function isPatientBroughtOutside(src: MedicineSource): boolean {
+  return src === "OUTSIDE_PRESCRIPTION_PATIENT_BROUGHT";
+}
 
 function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -65,7 +77,6 @@ export default function InjectionRoomPage() {
   const [prescribedDose, setPrescribedDose] = useState("");
   const [unit, setUnit] = useState("ml");
   const [route, setRoute] = useState("INJECTION");
-  const [medicineSource, setMedicineSource] = useState<MedicineSource>("INTERNAL");
   const [saving, setSaving] = useState(false);
 
   const [emergencyBypassModal, setEmergencyBypassModal] = useState(false);
@@ -113,7 +124,6 @@ export default function InjectionRoomPage() {
       setPrescribedDose(String(token.expectedDose ?? ""));
       setAdministeredDose(String(token.expectedDose ?? ""));
       setUnit(String(token.unit ?? "ml"));
-      setMedicineSource((token.medicineSource ?? "INTERNAL") as MedicineSource);
       if (token.selectedVialSessionId) setVialSessionId(String(token.selectedVialSessionId));
       else setVialSessionId("");
       if (token.id) {
@@ -135,12 +145,19 @@ export default function InjectionRoomPage() {
 
   useEffect(() => {
     if (!branchId || !tokenPayload?.variantId || step < 3) return;
+    const src = coerceMedicineSource(tokenPayload.medicineSource);
+    if (isPatientBroughtOutside(src)) {
+      setVialSessions([]);
+      setVialSessionId("");
+      setVialLoading(false);
+      return;
+    }
     setVialLoading(true);
     staffClinicVialSessionsList(branchId, { status: "ACTIVE", variantId: tokenPayload.variantId, take: 20 })
       .then((r) => setVialSessions(r.list ?? []))
       .catch(() => setVialSessions([]))
       .finally(() => setVialLoading(false));
-  }, [branchId, tokenPayload?.variantId, step]);
+  }, [branchId, tokenPayload?.variantId, tokenPayload?.medicineSource, step]);
 
   const loadBoard = useCallback(() => {
     if (!branchId) return;
@@ -191,13 +208,14 @@ export default function InjectionRoomPage() {
       }
       try {
         setSaving(true);
+        const resolvedMed = tokenPayload ? coerceMedicineSource(tokenPayload.medicineSource) : "INTERNAL_CLINIC";
         await staffClinicRecordDose(branchId, {
           patientId: Number(tokenPayload.patientId),
           visitId: tokenPayload.visitId ? Number(tokenPayload.visitId) : undefined,
           variantId: Number(tokenPayload.variantId),
           vialSessionId: vialSessionId ? Number(vialSessionId) : undefined,
           injectionTokenId: isBypass ? undefined : tokenPayload.id,
-          medicineSource,
+          medicineSource: resolvedMed,
           prescribedDose: prescribedDose ? Number(prescribedDose) : undefined,
           administeredDose: doseNum,
           unit,
@@ -225,7 +243,7 @@ export default function InjectionRoomPage() {
         setSaving(false);
       }
     },
-    [branchId, tokenPayload, vialSessionId, medicineSource, prescribedDose, administeredDose, unit, route, canBypass, bypassReason, loadBoard]
+    [branchId, tokenPayload, vialSessionId, prescribedDose, administeredDose, unit, route, canBypass, bypassReason, loadBoard]
   );
 
   const handleEmergencyBypassSubmit = useCallback(
@@ -252,7 +270,7 @@ export default function InjectionRoomPage() {
           administeredDose: doseNum,
           unit: bypassUnit || "ml",
           route: "INJECTION",
-          medicineSource: "INTERNAL",
+          medicineSource: "INTERNAL_CLINIC",
           emergencyBypass: true,
           emergencyBypassReason: bypassReason.trim() || undefined,
         });
@@ -586,6 +604,8 @@ export default function InjectionRoomPage() {
 
       {/* Step 3: Source / vial */}
       {tokenPayload && step >= 3 && (() => {
+        const tokenMed = coerceMedicineSource(tokenPayload.medicineSource);
+        const patientBrought = isPatientBroughtOutside(tokenMed);
         const tokenRoomId = (tokenContext?.selectedVialSession as any)?.room?.id ?? null;
         const selectedVial = vialSessionId ? vialSessions.find((v: any) => String(v.id) === vialSessionId) : null;
         const selectedVialRoomId = selectedVial?.room?.id ?? null;
@@ -594,7 +614,17 @@ export default function InjectionRoomPage() {
         <div className="card radius-12 mb-4">
           <div className="card-body">
             <h6 className="mb-3">Step 3: Source / vial session</h6>
-            <p className="text-muted small mb-3">Select the vial session to deduct from, or leave empty if using outside medicine.</p>
+            <p className="small mb-2">
+              <span className="text-muted">Token medicine source:</span>{" "}
+              <span className="fw-semibold">{humanizeEnum(tokenMed)}</span>
+            </p>
+            {patientBrought ? (
+              <div className="alert alert-info py-2 mb-3 radius-8 small" role="alert">
+                Patient-brought medicine — no clinic vial session. Ensure pharmacy has verified this batch (outside receive) before recording the dose.
+              </div>
+            ) : (
+              <p className="text-muted small mb-3">Select the vial session to deduct from (clinic stock). Emergency bypass without vial is only available from the bypass flow.</p>
+            )}
             {tokenContext?.selectedVialSession && (
               <div className="mb-3 p-2 bg-success-subtle radius-8 small">
                 Pre-selected vial: #{tokenContext.selectedVialSession.id} — {tokenContext.selectedVialSession.remainingQty} ml remaining
@@ -607,7 +637,7 @@ export default function InjectionRoomPage() {
                 Room mismatch: the token was assigned to a vial in another room. Recording with this vial will be rejected. Use the pre-selected vial or switch to the correct room.
               </div>
             )}
-            {vialLoading ? (
+            {!patientBrought && (vialLoading ? (
               <p className="text-muted small">Loading active vials…</p>
             ) : (
               <div className="row g-2 align-items-center">
@@ -627,7 +657,7 @@ export default function InjectionRoomPage() {
                   </select>
                 </div>
               </div>
-            )}
+            ))}
             <div className="mt-3">
               <button type="button" className="btn btn-sm btn-outline-secondary radius-8 me-2" onClick={() => setStep(2)}>Back</button>
               <button type="button" className="btn btn-sm btn-primary radius-8" onClick={() => setStep(4)}>Next: Record dose</button>
@@ -682,13 +712,11 @@ export default function InjectionRoomPage() {
                 <label className="form-label small">Route</label>
                 <input className="form-control form-control-sm radius-8" value={route} onChange={(e) => setRoute(e.target.value)} />
               </div>
-              <div className="col-md-3">
-                <label className="form-label small">Medicine source</label>
-                <select className="form-select form-select-sm radius-8" value={medicineSource} onChange={(e) => setMedicineSource(e.target.value as MedicineSource)}>
-                  {MEDICINE_SOURCE_OPTIONS.map((o) => (
-                    <option key={o.value} value={o.value}>{o.label}</option>
-                  ))}
-                </select>
+              <div className="col-md-6">
+                <label className="form-label small">Medicine source (from token)</label>
+                <div className="form-control form-control-sm radius-8 bg-light">
+                  {tokenPayload ? humanizeEnum(coerceMedicineSource(tokenPayload.medicineSource)) : "—"}
+                </div>
               </div>
               <div className="col-12 d-flex gap-2 align-items-center">
                 <button type="button" className="btn btn-sm btn-outline-secondary radius-8" onClick={() => setStep(3)}>Back</button>

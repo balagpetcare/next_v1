@@ -17,6 +17,10 @@ type StatusHistoryEntry = {
   createdAt: string;
 };
 
+function statusDisplayLabel(status: string): string {
+  return status.replace(/_/g, " ");
+}
+
 type RequestDetail = {
   id: number;
   requestNo: string;

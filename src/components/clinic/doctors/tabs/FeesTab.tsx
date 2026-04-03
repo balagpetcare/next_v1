@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { staffDoctorProposeFee } from "@/lib/api";
+import { useState, useEffect } from "react";
+import { staffDoctorProposeFee, staffClinicGetDoctorFeeHistory } from "@/lib/api";
 import { useToast } from "@/src/hooks/useToast";
 
 type Props = {
@@ -23,6 +23,13 @@ function hasPerm(permissions: string[], perm: string): boolean {
   return permissions.includes(perm);
 }
 
+function canViewFeeHistory(permissions: string[]): boolean {
+  return (
+    hasPerm(permissions, "clinic.doctors.view") &&
+    (hasPerm(permissions, "clinic.services.manage") || hasPerm(permissions, "manager.pricing.view"))
+  );
+}
+
 export default function FeesTab({
   branchId,
   memberId,
@@ -37,9 +44,33 @@ export default function FeesTab({
   const [proposeReason, setProposeReason] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [feeHistory, setFeeHistory] = useState<any[]>([]);
+  const [feeHistoryLoading, setFeeHistoryLoading] = useState(false);
+  const [feeHistoryError, setFeeHistoryError] = useState<string | null>(null);
   const toast = useToast();
 
   const canPropose = hasPerm(permissions, "clinic.doctors.propose_fee");
+  const showFeeHistory = canViewFeeHistory(permissions);
+
+  useEffect(() => {
+    if (!showFeeHistory || !branchId || !memberId || loading) return;
+    let cancelled = false;
+    setFeeHistoryLoading(true);
+    setFeeHistoryError(null);
+    staffClinicGetDoctorFeeHistory(branchId, memberId, { limit: 30 })
+      .then((items) => {
+        if (!cancelled) setFeeHistory(items);
+      })
+      .catch((e: any) => {
+        if (!cancelled) setFeeHistoryError(e?.message ?? "Failed to load fee history");
+      })
+      .finally(() => {
+        if (!cancelled) setFeeHistoryLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [branchId, memberId, showFeeHistory, loading]);
   const current = fees?.current ?? {};
   const proposed = fees?.proposed;
   const serviceFees = fees?.serviceFees ?? [];
@@ -114,6 +145,45 @@ export default function FeesTab({
           </ul>
         </div>
       </div>
+
+      {showFeeHistory && (
+        <div className="card radius-12 mb-3">
+          <div className="card-body">
+            <h6 className="mb-3">Service fee change history</h6>
+            {feeHistoryLoading && <p className="text-muted small mb-0">Loading…</p>}
+            {feeHistoryError && (
+              <div className="alert alert-warning radius-12 small mb-0">{feeHistoryError}</div>
+            )}
+            {!feeHistoryLoading && !feeHistoryError && feeHistory.length === 0 && (
+              <p className="text-muted small mb-0">No fee change records.</p>
+            )}
+            {!feeHistoryLoading && feeHistory.length > 0 && (
+              <div className="table-responsive">
+                <table className="table table-sm mb-0">
+                  <thead className="table-light">
+                    <tr>
+                      <th>When</th>
+                      <th>Actor</th>
+                      <th>Note</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {feeHistory.map((h: any) => (
+                      <tr key={h.id}>
+                        <td className="small text-nowrap">
+                          {h.createdAt ? new Date(h.createdAt).toLocaleString() : "—"}
+                        </td>
+                        <td className="small">{h.actorUserId ?? "—"}</td>
+                        <td className="small">{h.changeReason ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {serviceFees.length > 0 && (
         <div className="card radius-12">

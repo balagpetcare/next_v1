@@ -11,6 +11,7 @@ import {
   adminTicketReply,
   adminTicketAddNote,
   adminTicketEscalate,
+  type AdminSupportTicketDetail,
 } from '@/src/bpa/admin/lib/adminSupportApi'
 
 function formatDateTime(d: string | undefined) {
@@ -23,7 +24,7 @@ function formatDateTime(d: string | undefined) {
 export default function AdminSupportTicketDetailPage() {
   const params = useParams()
   const id = params?.id as string
-  const [ticket, setTicket] = useState<any>(null)
+  const [ticket, setTicket] = useState<AdminSupportTicketDetail | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [replyText, setReplyText] = useState('')

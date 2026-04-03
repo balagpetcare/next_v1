@@ -78,6 +78,18 @@ export function useEntityList(config, filters = {}) {
                 String(item.status || "").toUpperCase() === "INACTIVE" ||
                 String(item.status || "").toUpperCase() === "DISABLED"
             ).length;
+          } else if (statKey === "invited") {
+            calculatedStats.invited = items.filter(
+              (item) =>
+                String(item.status || "").toUpperCase() === "INVITED" ||
+                String(item.rawStatus || "").toUpperCase() === "PENDING"
+            ).length;
+          } else if (statKey === "expired") {
+            calculatedStats.expired = items.filter(
+              (item) =>
+                String(item.status || "").toUpperCase() === "EXPIRED" ||
+                String(item.rawStatus || "").toUpperCase() === "EXPIRED"
+            ).length;
           }
         });
         setStats(calculatedStats);

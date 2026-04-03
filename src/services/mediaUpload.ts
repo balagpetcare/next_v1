@@ -17,15 +17,20 @@ export interface MediaUploadResult {
  * Upload a File or Blob to the media API.
  * @param file - File or Blob (e.g. cropped image)
  * @param fileName - Optional name for the blob (e.g. "image.webp")
+ * @param folder - Optional storage folder (passed as multipart field `folder`)
  */
 export async function uploadMedia(
   file: File | Blob,
-  fileName?: string
+  fileName?: string,
+  folder?: string
 ): Promise<MediaUploadResult> {
   const blob = file instanceof Blob ? file : file;
   const name = fileName ?? (file instanceof File ? file.name : "image.webp");
   const fd = new FormData();
   fd.append("file", blob, name);
+  if (folder && String(folder).trim()) {
+    fd.append("folder", String(folder).trim());
+  }
 
   const res = await fetch(`${getBase()}/api/v1/media/upload`, {
     method: "POST",

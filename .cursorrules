@@ -4,3 +4,5 @@ Do not redesign UI; follow WowDash patterns.
 Never overwrite existing code without merging; avoid deletions.
 Prefer update-only patches and include exact apply steps.
 Confirm affected files (touch points) before implementing changes.
+
+Backend Prisma/migrations: follow backend-api docs/PRISMA_MIGRATION_NON_DESTRUCTIVE_POLICY.md (no reset, no db push on that DB, new migrations + migrate deploy, integrity check).

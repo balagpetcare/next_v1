@@ -83,6 +83,7 @@ export function SelectedReceiveGrid({
             <th>Lot code</th>
             <th>Mfg date</th>
             <th>Expiry date</th>
+            <th>Supplier barcode</th>
             <th style={{ width: 70 }}></th>
           </tr>
         </thead>
@@ -167,22 +168,35 @@ export function SelectedReceiveGrid({
                   )}
                 </td>
                 <td>
+                  <input
+                    type="text"
+                    className="form-control form-control-sm"
+                    value={row.supplierBarcode ?? ""}
+                    onChange={(e) => updateRow(row.id, { supplierBarcode: e.target.value })}
+                    placeholder="Optional"
+                    disabled={disabled}
+                  />
+                </td>
+                <td>
                   <button
                     type="button"
-                    className="btn btn-outline-secondary btn-sm me-1"
+                    className="btn btn-outline-secondary btn-sm p-1 me-1"
                     title="Duplicate row (Ctrl+D)"
+                    aria-label="Duplicate row"
                     onClick={() => onDuplicateRow(row.id)}
                     disabled={disabled}
                   >
-                    Copy
+                    <i className="ri-file-copy-line" aria-hidden />
                   </button>
                   <button
                     type="button"
-                    className="btn btn-outline-danger btn-sm"
+                    className="btn btn-outline-danger btn-sm p-1"
+                    title="Remove row"
+                    aria-label="Remove row"
                     onClick={() => onRemoveRow(row.id)}
                     disabled={disabled || rows.length <= 1}
                   >
-                    ×
+                    <i className="ri-delete-bin-line" aria-hidden />
                   </button>
                 </td>
               </tr>

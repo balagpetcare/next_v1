@@ -39,6 +39,7 @@ const STATUS_VARIANT: Record<string, string> = {
   PAID: "success",
   RECEIVED: "success",
   CLOSED: "success",
+  USED: "success",
   ORDERED: "primary",
   DISPATCHED: "primary",
   // Rejected / cancelled / danger
@@ -59,6 +60,9 @@ const STATUS_VARIANT: Record<string, string> = {
   NORMAL: "secondary",
   WALK_IN: "primary",
   SCHEDULED: "info",
+  CREATED: "secondary",
+  VALIDATED_IN_QUEUE: "info",
+  ADMINISTERED: "success",
 };
 
 function getVariant(status: string | null | undefined): string {

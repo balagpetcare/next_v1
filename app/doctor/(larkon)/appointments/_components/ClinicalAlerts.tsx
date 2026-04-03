@@ -2,7 +2,7 @@
 
 export interface ClinicalAlertsProps {
   allergies?: string[] | unknown;
-  healthDisorders?: string | null;
+  healthDisorders?: string | unknown[] | null;
   isEmergency?: boolean;
   isRepeatVisit?: boolean;
 }
@@ -20,7 +20,15 @@ export function ClinicalAlerts({
 }: ClinicalAlertsProps) {
   const allergyList = ensureStringArray(allergies ?? []);
   const hasAllergies = allergyList.length > 0;
-  const hasChronic = !!healthDisorders?.toString().trim();
+  const chronicLabel =
+    healthDisorders == null
+      ? ""
+      : typeof healthDisorders === "string"
+        ? healthDisorders
+        : Array.isArray(healthDisorders)
+          ? healthDisorders.map((x) => String(x)).join(", ")
+          : String(healthDisorders);
+  const hasChronic = chronicLabel.trim().length > 0;
   const hasAny = hasAllergies || hasChronic || isEmergency || isRepeatVisit;
 
   if (!hasAny) return null;
@@ -46,8 +54,8 @@ export function ClinicalAlerts({
           <span className="badge bg-info">Repeat visit</span>
         )}
       </div>
-      {hasChronic && healthDisorders && (
-        <p className="small text-muted mt-1 mb-0">{String(healthDisorders).slice(0, 200)}</p>
+      {hasChronic && (
+        <p className="small text-muted mt-1 mb-0">{chronicLabel.slice(0, 200)}</p>
       )}
     </div>
   );

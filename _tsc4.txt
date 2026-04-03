@@ -1,0 +1,63 @@
+﻿app/owner/(larkon)/clinic/[branchId]/appointments/page.tsx(396,29): error TS2345: Argument of type 'unknown[]' is not assignable to parameter of type 'SetStateAction<{ start: string; end: string; doctorId?: number | undefined; }[]>'.
+  Type 'unknown[]' is not assignable to type '{ start: string; end: string; doctorId?: number | undefined; }[]'.
+    Type 'unknown' is not assignable to type '{ start: string; end: string; doctorId?: number | undefined; }'.
+app/owner/(larkon)/clinic/[branchId]/doctors/[memberId]/page.tsx(883,68): error TS2322: Type 'string | null' is not assignable to type 'string | undefined'.
+  Type 'null' is not assignable to type 'string | undefined'.
+app/owner/(larkon)/clinic/[branchId]/inventory/page.tsx(392,29): error TS2322: Type 'unknown' is not assignable to type 'ReactNode'.
+app/owner/(larkon)/clinic/[branchId]/inventory/page.tsx(393,29): error TS2322: Type 'unknown' is not assignable to type 'ReactNode'.
+app/owner/(larkon)/clinic/[branchId]/inventory/page.tsx(558,27): error TS2322: Type 'unknown' is not assignable to type 'ReactNode'.
+app/owner/(larkon)/clinic/[branchId]/inventory/page.tsx(559,27): error TS2322: Type 'unknown' is not assignable to type 'ReactNode'.
+app/owner/(larkon)/clinic/[branchId]/packages/[packageId]/edit/page.tsx(207,44): error TS2345: Argument of type '(r: { items?: Array<{ id: number; name: string; category?: string; }>; }) => { id: number; name: string; category?: string; }[]' is not assignable to parameter of type '(value: { success?: boolean | undefined; items?: unknown[] | undefined; pagination?: { page: number; limit: number; total: number; totalPages: number; } | undefined; }) => { id: number; name: string; category?: string | undefined; }[] | PromiseLike<...>'.
+  Types of parameters 'r' and 'value' are incompatible.
+    Type '{ success?: boolean | undefined; items?: unknown[] | undefined; pagination?: { page: number; limit: number; total: number; totalPages: number; } | undefined; }' is not assignable to type '{ items?: { id: number; name: string; category?: string | undefined; }[] | undefined; }'.
+      Types of property 'items' are incompatible.
+        Type 'unknown[] | undefined' is not assignable to type '{ id: number; name: string; category?: string | undefined; }[] | undefined'.
+          Type 'unknown[]' is not assignable to type '{ id: number; name: string; category?: string | undefined; }[]'.
+            Type 'unknown' is not assignable to type '{ id: number; name: string; category?: string | undefined; }'.
+app/owner/(larkon)/clinic/[branchId]/page.tsx(44,41): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string | number'.
+  Type 'undefined' is not assignable to type 'string | number'.
+app/owner/(larkon)/clinic/[branchId]/schedule/exceptions/page.tsx(45,21): error TS2345: Argument of type 'unknown[]' is not assignable to parameter of type 'SetStateAction<ExceptionItem[]>'.
+  Type 'unknown[]' is not assignable to type 'ExceptionItem[]'.
+    Type 'unknown' is not assignable to type 'ExceptionItem'.
+app/owner/(larkon)/clinic/[branchId]/schedule/page.tsx(157,9): error TS2322: Type '{ branchMemberId: number; dayOfWeek: number; startTime: string; endTime: string; slotMinutes: number; }[]' is not assignable to type 'DoctorScheduleTemplateRow[]'.
+  Type '{ branchMemberId: number; dayOfWeek: number; startTime: string; endTime: string; slotMinutes: number; }' is missing the following properties from type 'DoctorScheduleTemplateRow': id, status
+app/owner/(larkon)/clinic/[branchId]/schedule/page.tsx(164,9): error TS2322: Type 'unknown[]' is not assignable to type 'RoomScheduleTemplateRow[]'.
+  Type 'unknown' is not assignable to type 'RoomScheduleTemplateRow'.
+app/owner/(larkon)/clinic/[branchId]/services/[serviceId]/edit/page.tsx(60,47): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string | number'.
+  Type 'undefined' is not assignable to type 'string | number'.
+app/owner/(larkon)/clinic/[branchId]/services/[serviceId]/edit/page.tsx(62,50): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+app/owner/(larkon)/clinic/[branchId]/settings/page.tsx(66,31): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string | number'.
+  Type 'undefined' is not assignable to type 'string | number'.
+app/owner/(larkon)/clinic/[branchId]/settings/page.tsx(67,32): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string | number'.
+  Type 'undefined' is not assignable to type 'string | number'.
+app/owner/(larkon)/clinic/[branchId]/settings/page.tsx(68,28): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string | number'.
+  Type 'undefined' is not assignable to type 'string | number'.
+app/owner/(larkon)/clinic/[branchId]/settings/page.tsx(130,49): error TS7006: Parameter 's' implicitly has an 'any' type.
+app/owner/(larkon)/clinic/[branchId]/settlement-batches/[batchId]/page.tsx(130,52): error TS2322: Type '{}' is not assignable to type 'ReactNode'.
+app/owner/(larkon)/clinic/[branchId]/staff/[memberId]/page.tsx(43,55): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string | number'.
+  Type 'undefined' is not assignable to type 'string | number'.
+app/owner/(larkon)/clinic/[branchId]/staff/page.tsx(43,45): error TS2345: Argument of type 'string | undefined' is not assignable to parameter of type 'string | number'.
+  Type 'undefined' is not assignable to type 'string | number'.
+app/owner/(larkon)/pets/[id]/page.tsx(72,12): error TS5076: '||' and '??' operations cannot be mixed without parentheses.
+app/owner/_components/clinic/catalog/CatalogItemsTable.tsx(105,53): error TS7006: Parameter '_e' implicitly has an 'any' type.
+app/owner/_components/clinic/catalog/CatalogItemsTable.tsx(105,57): error TS7006: Parameter 'it' implicitly has an 'any' type.
+app/owner/_components/clinic/catalog/CatalogItemsTable.tsx(107,58): error TS7006: Parameter '_e' implicitly has an 'any' type.
+app/owner/_components/clinic/catalog/CatalogItemsTable.tsx(107,62): error TS7006: Parameter 'it' implicitly has an 'any' type.
+app/owner/_components/clinic/catalog/CatalogItemsTable.tsx(108,56): error TS7006: Parameter '_e' implicitly has an 'any' type.
+app/owner/_components/clinic/catalog/CatalogItemsTable.tsx(108,60): error TS7006: Parameter 'it' implicitly has an 'any' type.
+app/owner/_components/clinic/catalog/CatalogItemsTable.tsx(109,51): error TS7006: Parameter '_e' implicitly has an 'any' type.
+app/owner/_components/clinic/catalog/CatalogItemsTable.tsx(109,55): error TS7006: Parameter 'it' implicitly has an 'any' type.
+app/owner/_components/clinic/ClinicAllDoctors.tsx(49,3): error TS2322: Type '({ id: number; name: string; orgId: number | undefined; orgName: string; } | null)[]' is not assignable to type 'ClinicBranch[]'.
+  Type '{ id: number; name: string; orgId: number | undefined; orgName: string; } | null' is not assignable to type 'ClinicBranch'.
+    Type 'null' is not assignable to type 'ClinicBranch'.
+app/owner/_components/clinic/ClinicAllDoctors.tsx(67,27): error TS2677: A type predicate's type must be assignable to its parameter's type.
+  Type 'ClinicBranch' is not assignable to type '{ id: number; name: string; orgId: number | undefined; orgName: string; }'.
+    Property 'orgId' is optional in type 'ClinicBranch' but required in type '{ id: number; name: string; orgId: number | undefined; orgName: string; }'.
+app/post-auth-landing/page.tsx(211,88): error TS2339: Property 'message' does not exist on type '{}'.
+app/staff/(larkon)/branch/[branchId]/clinic/appointments/new/page.tsx(616,52): error TS2339: Property 'name' does not exist on type 'PackageItem & { serviceId?: number | undefined; }'.
+app/staff/(larkon)/branch/[branchId]/clinic/catalog/page.tsx(122,30): error TS2339: Property 'name' does not exist on type '{}'.
+app/staff/(larkon)/branch/[branchId]/clinic/items/page.tsx(338,29): error TS2322: Type 'unknown' is not assignable to type 'ReactNode'.
+app/staff/(larkon)/branch/[branchId]/clinic/items/page.tsx(339,29): error TS2322: Type 'unknown' is not assignable to type 'ReactNode'.
+app/staff/(larkon)/branch/[branchId]/clinic/items/page.tsx(463,27): error TS2322: Type 'unknown' is not assignable to type 'ReactNode'.
+app/staff/(larkon)/branch/[branchId]/clinic/items/page.tsx(464,27): error TS2322: Type 'unknown' is not assignable to type 'ReactNode'.

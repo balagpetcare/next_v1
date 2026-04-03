@@ -12,6 +12,8 @@ export default function EntityStats({ stats = {}, className = "" }) {
     { key: "pending", label: "Pending", icon: "ri-time-line", color: "warning" },
     { key: "active", label: "Active", icon: "ri-check-line", color: "success" },
     { key: "inactive", label: "Inactive", icon: "ri-close-line", color: "danger" },
+    { key: "invited", label: "Invited", icon: "ri-mail-send-line", color: "warning" },
+    { key: "expired", label: "Expired", icon: "ri-time-line", color: "secondary" },
   ];
 
   const visibleStats = statItems.filter((item) => stats[item.key] !== undefined);

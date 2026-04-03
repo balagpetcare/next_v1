@@ -4,9 +4,15 @@
  *
  * Actual Next.js routes under app/staff/(larkon)/branch/[branchId]/clinic/doctors/:
  * - page.tsx (index) → doctors(branchId)
- * - overview, schedule-board, availability, service-assignment, package-assignment,
+ * - overview, schedule-board, availability, package-assignment,
  * - approvals, credentials, certifications, licenses, performance, audit-logs,
  * - invite, assign-existing, profile/[doctorId]
+ *
+ * Service Assignment: URL is .../clinic/doctors/service-assignment; page file lives at
+ * clinic/doctors-service-assignment/ (rewrite in next.config.js — same pattern as patient-* / services-pricing-*).
+ *
+ * Doctor approvals: public URL .../clinic/doctors/approvals (list via rewrite → doctors-approvals) and
+ * .../clinic/doctors/approvals/[approvalId] (detail page file). Legacy /doctor-approvals-detail/:id redirects in next.config.js.
  *
  * Legacy URLs like .../doctors/profile/schedule-board are redirected to .../doctors/schedule-board (see proxy.ts).
  */
@@ -59,6 +65,11 @@ export function approvals(branchId: string): string {
   return `${base(branchId)}/approvals`;
 }
 
+/** Single approval request (public URL; page at clinic/doctors/approvals/[approvalId]). */
+export function approvalsRequest(branchId: string, requestId: number | string): string {
+  return `${base(branchId)}/approvals/${requestId}`;
+}
+
 export function credentials(branchId: string, memberId?: number): string {
   const path = `${base(branchId)}/credentials`;
   return memberId != null ? `${path}?memberId=${memberId}` : path;
@@ -101,6 +112,7 @@ export const doctorOpsRoutes = {
   serviceAssignment,
   packageAssignment,
   approvals,
+  approvalsRequest,
   credentials,
   certifications,
   licenses,

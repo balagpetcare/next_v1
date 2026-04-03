@@ -1,7 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { Modal, Button, Offcanvas } from "react-bootstrap";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 import { ownerGet, ownerPost } from "@/app/owner/_lib/ownerApi";
@@ -15,7 +16,20 @@ import { SpreadsheetGrid } from "./SpreadsheetGrid";
 
 type Vendor = { id: number; name: string };
 
+type PoOpt = { id: number; poNumber: string; status: string; vendor?: { id: number; name: string } };
+
+function resolvePurchaseOrderLineId(
+  variantId: number,
+  poLines: Array<{ id: number; variantId: number }> | undefined
+): number | undefined {
+  if (!poLines?.length) return undefined;
+  const matches = poLines.filter((l) => l.variantId === variantId);
+  if (matches.length === 1) return matches[0].id;
+  return undefined;
+}
+
 export default function BulkReceivePage() {
+  const searchParams = useSearchParams();
   const toast = useToast();
   const [locations, setLocations] = useState<Location[]>([]);
   const [locationId, setLocationId] = useState<string>("");
@@ -25,6 +39,11 @@ export default function BulkReceivePage() {
   const [invoiceNo, setInvoiceNo] = useState("");
   const [invoiceDate, setInvoiceDate] = useState("");
   const [notes, setNotes] = useState("");
+  const [purchaseOrderId, setPurchaseOrderId] = useState("");
+  const [poOptions, setPoOptions] = useState<PoOpt[]>([]);
+  const [poLoading, setPoLoading] = useState(false);
+  /** Loaded when purchaseOrderId is set — used to auto-fill purchaseOrderLineId per variant */
+  const [poDetailLines, setPoDetailLines] = useState<Array<{ id: number; variantId: number }> | null>(null);
   const [rows, setRows] = useState<SelectedRow[]>([emptyRow()]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
@@ -36,6 +55,9 @@ export default function BulkReceivePage() {
   const [showBranchDispatchModal, setShowBranchDispatchModal] = useState(false);
   const [dispatchSourceWarehouseId, setDispatchSourceWarehouseId] = useState<string>("");
   const [creatingDispatch, setCreatingDispatch] = useState(false);
+  /** FEFO-eligible available qty at selected dispatch source, per variant (matches direct-dispatch allocation). */
+  const [dispatchAvailability, setDispatchAvailability] = useState<Record<number, number>>({});
+  const [dispatchAvailLoading, setDispatchAvailLoading] = useState(false);
   const flashTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const vendorSearchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const prevLocationIdRef = useRef<string>("");
@@ -43,7 +65,97 @@ export default function BulkReceivePage() {
   const selectedLocation = locations.find((l) => String(l.id) === locationId);
   const orgId = selectedLocation?.branch?.orgId;
 
-  const warehouseLocations = locations.filter((l) => l.type === "CENTRAL_WAREHOUSE");
+  /** Only warehouses in the same org as the selected receive location — avoids defaulting to another org's warehouse (zero stock / wrong allocation). */
+  const warehouseLocations = useMemo(
+    () =>
+      locations.filter(
+        (l) => l.type === "CENTRAL_WAREHOUSE" && (orgId == null ? false : Number(l.branch?.orgId) === Number(orgId))
+      ),
+    [locations, orgId]
+  );
+
+  const dispatchVariantIdsKey = useMemo(() => {
+    const s = new Set<number>();
+    for (const r of rows) {
+      if (r.variantId != null && r.variantId > 0) s.add(r.variantId);
+    }
+    return [...s].sort((a, b) => a - b).join(",");
+  }, [rows]);
+
+  const dispatchQtyByVariant = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const r of rows) {
+      if (r.variantId == null) continue;
+      const q = parseInt(String(r.quantity), 10);
+      if (!Number.isFinite(q) || q <= 0) continue;
+      m.set(r.variantId, (m.get(r.variantId) ?? 0) + q);
+    }
+    return m;
+  }, [rows]);
+
+  const dispatchCanSubmit = useMemo(() => {
+    if (warehouseLocations.length === 0 || !dispatchSourceWarehouseId || dispatchQtyByVariant.size === 0) return false;
+    if (dispatchAvailLoading) return false;
+    for (const [vid, need] of dispatchQtyByVariant) {
+      const av = dispatchAvailability[vid];
+      if (av === undefined || need > av) return false;
+    }
+    return true;
+  }, [
+    warehouseLocations.length,
+    dispatchSourceWarehouseId,
+    dispatchQtyByVariant,
+    dispatchAvailability,
+    dispatchAvailLoading,
+  ]);
+
+  /** Keep selected source valid when org-scoped warehouse list changes */
+  useEffect(() => {
+    if (!showBranchDispatchModal || warehouseLocations.length === 0) return;
+    const valid = warehouseLocations.some((l) => String(l.id) === dispatchSourceWarehouseId);
+    if (!valid) setDispatchSourceWarehouseId(String(warehouseLocations[0].id));
+  }, [showBranchDispatchModal, warehouseLocations, dispatchSourceWarehouseId]);
+
+  useEffect(() => {
+    if (!showBranchDispatchModal || !dispatchSourceWarehouseId || !orgId || !dispatchVariantIdsKey) {
+      setDispatchAvailability({});
+      setDispatchAvailLoading(false);
+      return;
+    }
+    const src = parseInt(dispatchSourceWarehouseId, 10);
+    if (!Number.isFinite(src) || src <= 0) {
+      setDispatchAvailLoading(false);
+      return;
+    }
+    const variantIds = dispatchVariantIdsKey.split(",").map((x) => parseInt(x, 10)).filter((n) => Number.isFinite(n) && n > 0);
+    let cancelled = false;
+    setDispatchAvailLoading(true);
+    (async () => {
+      const next: Record<number, number> = {};
+      try {
+        await Promise.all(
+          variantIds.map(async (vid) => {
+            try {
+              const res = await ownerGet<{ data?: Array<{ availableQty?: number }> }>(
+                `/api/v1/inventory/fefo?locationId=${src}&variantId=${vid}`
+              );
+              const lots = Array.isArray(res?.data) ? res.data : [];
+              if (!cancelled) next[vid] = lots.reduce((s, l) => s + (Number(l.availableQty) || 0), 0);
+            } catch {
+              if (!cancelled) next[vid] = 0;
+            }
+          })
+        );
+        if (!cancelled) setDispatchAvailability(next);
+      } finally {
+        if (!cancelled) setDispatchAvailLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      setDispatchAvailLoading(false);
+    };
+  }, [showBranchDispatchModal, dispatchSourceWarehouseId, orgId, dispatchVariantIdsKey]);
 
   const loadLocations = useCallback(async () => {
     setLoading(true);
@@ -61,6 +173,59 @@ export default function BulkReceivePage() {
   useEffect(() => {
     loadLocations();
   }, [loadLocations]);
+
+  useEffect(() => {
+    const po = searchParams.get("purchaseOrderId");
+    const v = searchParams.get("vendorId");
+    if (po) setPurchaseOrderId(po);
+    if (v) setVendorId(v);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!orgId) {
+      setPoOptions([]);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      setPoLoading(true);
+      try {
+        const res = await ownerGet<{ data?: PoOpt[] }>(`/api/v1/purchase-orders?orgId=${orgId}&limit=100`);
+        const rows = Array.isArray(res?.data) ? res.data : [];
+        const open = rows.filter((r) => ["APPROVED", "PARTIALLY_RECEIVED"].includes(String(r.status || "").toUpperCase()));
+        if (!cancelled) setPoOptions(open);
+      } catch {
+        if (!cancelled) setPoOptions([]);
+      } finally {
+        if (!cancelled) setPoLoading(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId]);
+
+  useEffect(() => {
+    if (!orgId || !purchaseOrderId?.trim()) {
+      setPoDetailLines(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await ownerGet<{ data?: { lines?: Array<{ id: number; variantId: number }> } }>(
+          `/api/v1/purchase-orders/${purchaseOrderId.trim()}?orgId=${orgId}`
+        );
+        const lines = res?.data?.lines;
+        if (!cancelled) setPoDetailLines(Array.isArray(lines) ? lines : null);
+      } catch {
+        if (!cancelled) setPoDetailLines(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId, purchaseOrderId]);
 
   useEffect(() => {
     if (!orgId || vendorSearch.length < 2) {
@@ -201,15 +366,26 @@ export default function BulkReceivePage() {
     }
     const locId = parseInt(locationId, 10);
     const lines = rows
-      .map((r) => ({
-        variantId: r.variantId,
-        quantity: parseInt(r.quantity, 10),
-        unitCost: r.unitCost ? parseFloat(r.unitCost) : undefined,
-        lotCode: r.lotCode.trim() || undefined,
-        mfgDate: r.mfgDate || undefined,
-        expDate: r.expDate || undefined,
-      }))
-      .filter((l) => l.variantId != null && Number.isInteger(l.quantity) && l.quantity > 0);
+      .map((r) => {
+        if (r.variantId == null) return null;
+        const q = parseInt(r.quantity, 10);
+        const polFromRow =
+          r.purchaseOrderLineId && /^\d+$/.test(String(r.purchaseOrderLineId).trim())
+            ? parseInt(String(r.purchaseOrderLineId).trim(), 10)
+            : undefined;
+        const polResolved = polFromRow ?? resolvePurchaseOrderLineId(r.variantId, poDetailLines ?? undefined);
+        return {
+          variantId: r.variantId,
+          quantity: q,
+          unitCost: r.unitCost ? parseFloat(r.unitCost) : undefined,
+          lotCode: r.lotCode.trim() || undefined,
+          mfgDate: r.mfgDate || undefined,
+          expDate: r.expDate || undefined,
+          purchaseOrderLineId: polResolved,
+          supplierBarcode: r.supplierBarcode?.trim() || undefined,
+        };
+      })
+      .filter((l): l is NonNullable<typeof l> => l != null && Number.isInteger(l.quantity) && l.quantity > 0);
     if (lines.length === 0) {
       toast.warning("Add at least one line with variant and quantity.");
       return;
@@ -228,6 +404,7 @@ export default function BulkReceivePage() {
       }>("/api/v1/inventory/receipts/bulk", {
         locationId: locId,
         vendorId: vendorId || undefined,
+        purchaseOrderId: purchaseOrderId ? parseInt(purchaseOrderId, 10) : undefined,
         invoiceNo: invoiceNo.trim() || undefined,
         invoiceDate: invoiceDate || undefined,
         notes: notes.trim() || undefined,
@@ -242,6 +419,7 @@ export default function BulkReceivePage() {
       setInvoiceNo("");
       setInvoiceDate("");
       setNotes("");
+      setPurchaseOrderId("");
     } catch (err: unknown) {
       const j = (err as { response?: { code?: string; errors?: { rowIndex: number; message: string }[] } })?.response;
       if (j?.code === "BRANCH_LOCATION_REQUIRES_DISPATCH") {
@@ -259,15 +437,28 @@ export default function BulkReceivePage() {
   };
 
   const handleCreateDispatch = async () => {
+    if (creatingDispatch) return;
     if (!locationId || !dispatchSourceWarehouseId) {
-      toast.warning(warehouseLocations.length === 0 ? "No warehouse locations found. Create a CENTRAL_WAREHOUSE location first." : "Select source warehouse.");
+      toast.warning(
+        warehouseLocations.length === 0
+          ? "No central warehouse found for this organization. Create a CENTRAL_WAREHOUSE under Inventory → Locations."
+          : "Select source warehouse."
+      );
       return;
     }
     const lines = rows
-      .map((r) => ({ variantId: r.variantId, quantity: parseInt(r.quantity, 10) || 0 }))
+      .map((r) => ({ variantId: r.variantId, quantity: parseInt(String(r.quantity), 10) || 0 }))
       .filter((l) => l.variantId != null && l.quantity > 0);
     if (lines.length === 0) {
       toast.warning("Add at least one line with variant and quantity.");
+      return;
+    }
+    if (!dispatchCanSubmit) {
+      toast.warning(
+        dispatchAvailLoading
+          ? "Still loading availability at the selected source…"
+          : "Requested quantity exceeds dispatchable stock at the selected warehouse (FEFO-eligible). Adjust quantities or choose another source."
+      );
       return;
     }
     setCreatingDispatch(true);
@@ -285,8 +476,29 @@ export default function BulkReceivePage() {
       setShowBranchDispatchModal(false);
       setRows([emptyRow()]);
       setNotes("");
+      setDispatchAvailability({});
       toast.success(`Dispatch created (#${dispatchId ?? "—"}). Waiting for branch confirmation.`);
     } catch (err: unknown) {
+      const resp = (err as { response?: Record<string, unknown> })?.response;
+      if (resp && typeof resp === "object" && resp.code === "INSUFFICIENT_STOCK_AT_SOURCE") {
+        const vid = typeof resp.variantId === "number" ? resp.variantId : Number(resp.variantId);
+        const row = rows.find((x) => x.variantId === vid);
+        const label = row?.productName || row?.sku || `Variant #${vid}`;
+        const reqQ = resp.requestedQty;
+        const avQ = resp.availableQty;
+        toast.error(
+          `Cannot dispatch ${label}: requested ${String(reqQ)}, available at source ${String(avQ)} (FEFO-eligible stock). Choose another warehouse or reduce quantity.`
+        );
+        return;
+      }
+      if (resp && typeof resp === "object" && resp.code === "DIRECT_DISPATCH_ORG_MISMATCH") {
+        toast.error(
+          typeof resp.message === "string"
+            ? resp.message
+            : "Source and destination must belong to the same organization."
+        );
+        return;
+      }
       toast.error(getMessageFromApiError(err as Error));
     } finally {
       setCreatingDispatch(false);
@@ -326,7 +538,11 @@ export default function BulkReceivePage() {
 
       {lastReceipt && (
         <div className="alert alert-success radius-12 mb-3">
-          Last receipt: GRN #{lastReceipt.grnId} — {lastReceipt.lineCount} line(s), {lastReceipt.totalQty} units.
+          Last receipt:{" "}
+          <Link href={`/owner/inventory/grn/${lastReceipt.grnId}`} className="fw-semibold">
+            GRN #{lastReceipt.grnId}
+          </Link>{" "}
+          — {lastReceipt.lineCount} line(s), {lastReceipt.totalQty} units.
         </div>
       )}
 
@@ -445,6 +661,33 @@ export default function BulkReceivePage() {
                 </button>
               )}
             </div>
+            <div className="col-12 col-md-3">
+              <label className="form-label small">Purchase order (optional)</label>
+              <select
+                className="form-select form-select-sm"
+                value={purchaseOrderId}
+                onChange={(e) => {
+                  const v = e.target.value;
+                  setPurchaseOrderId(v);
+                  if (v) {
+                    const p = poOptions.find((x) => String(x.id) === v);
+                    if (p?.vendor?.id) {
+                      setVendorId(String(p.vendor.id));
+                      setVendorSearch(p.vendor.name ?? "");
+                    }
+                  }
+                }}
+                disabled={!orgId || poLoading}
+              >
+                <option value="">{poLoading ? "Loading…" : "None"}</option>
+                {poOptions.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.poNumber} ({p.status})
+                  </option>
+                ))}
+              </select>
+              <p className="small text-muted mb-0 mt-1">Vendor is taken from the PO when linked.</p>
+            </div>
             <div className="col-12 col-md-2">
               <label className="form-label small">Invoice No</label>
               <input
@@ -488,6 +731,7 @@ export default function BulkReceivePage() {
                     onAddVariant={addVariant}
                     onRemoveVariant={removeVariantFromGrid}
                     disabled={hasNoLocations}
+                    orgId={orgId ?? null}
                   />
                 </div>
               </div>
@@ -559,7 +803,9 @@ export default function BulkReceivePage() {
       <Modal
         show={showBranchDispatchModal}
         onHide={() => setShowBranchDispatchModal(false)}
-        onEnter={() => warehouseLocations.length > 0 && setDispatchSourceWarehouseId(String(warehouseLocations[0].id))}
+        onEnter={() => {
+          if (warehouseLocations.length > 0) setDispatchSourceWarehouseId(String(warehouseLocations[0].id));
+        }}
         centered
         className="radius-12"
       >
@@ -572,24 +818,67 @@ export default function BulkReceivePage() {
           </p>
           {warehouseLocations.length === 0 ? (
             <div className="alert alert-warning mb-0">
-              No warehouse (CENTRAL_WAREHOUSE) locations found. Create one at Inventory → Locations.
+              No central warehouse for this organization’s branch. Add a CENTRAL_WAREHOUSE location in the same org as the selected receive location (Inventory → Locations).
             </div>
           ) : (
-            <div className="mb-2">
-              <label className="form-label small">Source warehouse</label>
-              <select
-                className="form-select form-select-sm"
-                value={dispatchSourceWarehouseId}
-                onChange={(e) => setDispatchSourceWarehouseId(e.target.value)}
-              >
-                <option value="">Select warehouse</option>
-                {warehouseLocations.map((loc) => (
-                  <option key={loc.id} value={loc.id}>
-                    {loc.name} {loc.branch ? `(${loc.branch.name})` : ""}
-                  </option>
-                ))}
-              </select>
-            </div>
+            <>
+              <div className="mb-2">
+                <label className="form-label small">Source warehouse</label>
+                <select
+                  className="form-select form-select-sm"
+                  value={dispatchSourceWarehouseId}
+                  onChange={(e) => setDispatchSourceWarehouseId(e.target.value)}
+                >
+                  <option value="">Select warehouse</option>
+                  {warehouseLocations.map((loc) => (
+                    <option key={loc.id} value={loc.id}>
+                      {loc.name} {loc.branch ? `(${loc.branch.name})` : ""}
+                    </option>
+                  ))}
+                </select>
+                <p className="small text-muted mb-0 mt-1">
+                  Only warehouses in the same organization as the branch you are receiving into are listed.
+                </p>
+              </div>
+              {dispatchAvailLoading && (
+                <p className="small text-muted mb-2">Loading availability at source…</p>
+              )}
+              {!dispatchAvailLoading && dispatchVariantIdsKey && (
+                <div className="table-responsive border rounded mb-0" style={{ maxHeight: 220 }}>
+                  <table className="table table-sm mb-0 small">
+                    <thead className="table-light position-sticky top-0">
+                      <tr>
+                        <th>Item</th>
+                        <th className="text-end">Requested</th>
+                        <th className="text-end">Available</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dispatchVariantIdsKey.split(",").map((idStr) => {
+                        const vid = parseInt(idStr, 10);
+                        const need = dispatchQtyByVariant.get(vid) ?? 0;
+                        const av = dispatchAvailability[vid];
+                        const row = rows.find((r) => r.variantId === vid);
+                        const label = row?.productName || row?.sku || `#${vid}`;
+                        const ok = av !== undefined && need <= av;
+                        return (
+                          <tr key={vid} className={ok ? undefined : "table-warning"}>
+                            <td className="text-break">{label}</td>
+                            <td className="text-end">{need}</td>
+                            <td className="text-end">{av === undefined ? "—" : av}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {!dispatchAvailLoading && dispatchVariantIdsKey && !dispatchCanSubmit && dispatchQtyByVariant.size > 0 && (
+                <p className="small text-danger mb-0 mt-2">
+                  Reduce quantities or pick a warehouse with enough dispatchable stock (non-expired, not fully reserved).
+                </p>
+              )}
+            </>
           )}
         </Modal.Body>
         <Modal.Footer className="border-top">
@@ -599,7 +888,12 @@ export default function BulkReceivePage() {
           <Button
             variant="primary"
             onClick={handleCreateDispatch}
-            disabled={creatingDispatch || warehouseLocations.length === 0 || !dispatchSourceWarehouseId}
+            disabled={
+              creatingDispatch ||
+              warehouseLocations.length === 0 ||
+              !dispatchSourceWarehouseId ||
+              !dispatchCanSubmit
+            }
           >
             {creatingDispatch ? "Creating…" : "Create dispatch"}
           </Button>
@@ -624,6 +918,7 @@ export default function BulkReceivePage() {
             onRemoveVariant={removeVariantFromGrid}
             onCloseDrawer={() => setShowBrowserDrawer(false)}
             disabled={hasNoLocations}
+            orgId={orgId ?? null}
           />
         </Offcanvas.Body>
       </Offcanvas>

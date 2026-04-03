@@ -3,7 +3,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { format, subDays } from 'date-fns'
+import { format } from "date-fns/format";
+import { subDays } from "date-fns/subDays";
 import AdminPageShell from '@/src/bpa/admin/components/AdminPageShell'
 import AdminFiltersBar from '@/src/bpa/admin/components/AdminFiltersBar'
 import DataTable from '@/src/bpa/admin/components/DataTable'

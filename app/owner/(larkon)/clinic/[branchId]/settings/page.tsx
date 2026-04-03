@@ -57,15 +57,16 @@ export default function ClinicSettingsPage() {
   const [success, setSuccess] = useState("");
 
   useEffect(() => {
-    if (!branchId) return;
+    if (typeof branchId !== "string" || branchId === "") return;
+    const id = branchId;
     async function load() {
       try {
         setLoading(true);
         setError("");
         const [settingsData, moduleData, staffData] = await Promise.all([
-          ownerClinicSettings(branchId),
-          ownerClinicModuleGet(branchId),
-          ownerClinicStaff(branchId),
+          ownerClinicSettings(id),
+          ownerClinicModuleGet(id),
+          ownerClinicStaff(id),
         ]);
         const s = (settingsData as ClinicSettings) ?? {};
         setSettings(s);
@@ -127,7 +128,7 @@ export default function ClinicSettingsPage() {
       const notes = (form.notes?.value ?? "").trim();
       const specializationsStr = (form.specializations?.value ?? "").trim();
       const specializations = specializationsStr
-        ? specializationsStr.split(/[,;]/).map((s) => s.trim()).filter(Boolean)
+        ? specializationsStr.split(/[,;]/).map((s: string) => s.trim()).filter(Boolean)
         : undefined;
 
       await ownerClinicSettingsUpdate(branchId, {

@@ -12,6 +12,7 @@ import {
   staffClinicSettlementBatchesGenerate,
   staffClinicSettlementBatchReview,
   staffClinicSettlementBatchApprove,
+  staffClinicSettlementBatchPay,
 } from "@/lib/api";
 
 const SETTLEMENT_PERMS = ["clinic.settlement.read", "clinic.settlement.review"];
@@ -43,6 +44,10 @@ export default function StaffClinicSettlementPage() {
   const hasAccess = SETTLEMENT_PERMS.some((p) => permissions.includes(p));
   const canReview = permissions.includes("clinic.settlement.review");
   const canApprove = permissions.includes("clinic.settlement.approve");
+  const canPay = permissions.includes("clinic.settlement.pay");
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [periodEnd, setPeriodEnd] = useState("");
+  const [doctorProfileIdsText, setDoctorProfileIdsText] = useState("");
 
   const loadBatches = useCallback(() => {
     if (!branchId) return;
@@ -70,7 +75,17 @@ export default function StaffClinicSettlementPage() {
     setGenerating(true);
     setError("");
     try {
-      await staffClinicSettlementBatchesGenerate(branchId, {});
+      const doctorProfileIds = doctorProfileIdsText
+        .split(",")
+        .map((v) => Number(v.trim()))
+        .filter((v) => Number.isFinite(v) && v > 0);
+      await staffClinicSettlementBatchesGenerate(branchId, {
+        periodEnd: periodEnd || undefined,
+        doctorProfileIds: doctorProfileIds.length ? doctorProfileIds : undefined,
+      });
+      setShowCreateModal(false);
+      setPeriodEnd("");
+      setDoctorProfileIdsText("");
       await loadBatches();
     } catch (e) {
       setError((e as Error)?.message ?? "Generate failed");
@@ -91,6 +106,38 @@ export default function StaffClinicSettlementPage() {
       setActioningId(null);
     }
   }
+
+  async function handlePay(batchId: number) {
+    const rawAmount = window.prompt("Payment amount (leave empty for net payable):", "");
+    const reference = window.prompt("Payment reference (optional):", "") ?? "";
+    const amount = rawAmount?.trim() ? Number(rawAmount) : undefined;
+    if (rawAmount?.trim() && (!Number.isFinite(amount) || Number(amount) <= 0)) {
+      setError("Payment amount must be a positive number.");
+      return;
+    }
+    setActioningId(batchId);
+    setError("");
+    try {
+      await staffClinicSettlementBatchPay(batchId, {
+        amount,
+        paymentMethod: "BANK_TRANSFER",
+        receiptRef: reference.trim() || undefined,
+      });
+      await loadBatches();
+    } catch (e) {
+      setError((e as Error)?.message ?? "Payment failed");
+    } finally {
+      setActioningId(null);
+    }
+  }
+
+  const summary = useMemo(() => {
+    const draft = batches.filter((b) => b.status === "DRAFT").length;
+    const approved = batches.filter((b) => b.status === "APPROVED").length;
+    const paid = batches.filter((b) => b.status === "PAID").length;
+    const netPayable = batches.reduce((sum, b) => sum + Number(b.netPayable ?? 0), 0);
+    return { draft, approved, paid, netPayable };
+  }, [batches]);
 
   async function handleApprove(batchId: number) {
     setActioningId(batchId);
@@ -139,9 +186,31 @@ export default function StaffClinicSettlementPage() {
             title="Settlement"
             subtitle="View and review doctor settlement batches"
             breadcrumbs={[{ label: "Clinic", href: `/staff/branch/${branchId}/clinic` }, { label: "Settlement" }]}
+            actions={[
+              canReview ? (
+                <button key="create" type="button" className="btn btn-primary btn-sm" onClick={() => setShowCreateModal(true)}>
+                  Create batch
+                </button>
+              ) : null,
+            ]}
           />
 
           {error && <div className="alert alert-danger py-2 mb-3">{error}</div>}
+
+          <div className="row g-3 mb-3">
+            <div className="col-12 col-md-3">
+              <div className="card radius-12"><div className="card-body"><p className="mb-1 text-muted small">Total batches</p><h6 className="mb-0">{total}</h6></div></div>
+            </div>
+            <div className="col-12 col-md-3">
+              <div className="card radius-12"><div className="card-body"><p className="mb-1 text-muted small">Draft</p><h6 className="mb-0">{summary.draft}</h6></div></div>
+            </div>
+            <div className="col-12 col-md-3">
+              <div className="card radius-12"><div className="card-body"><p className="mb-1 text-muted small">Approved</p><h6 className="mb-0">{summary.approved}</h6></div></div>
+            </div>
+            <div className="col-12 col-md-3">
+              <div className="card radius-12"><div className="card-body"><p className="mb-1 text-muted small">Net payable</p><h6 className="mb-0">৳ {summary.netPayable.toFixed(2)}</h6></div></div>
+            </div>
+          </div>
 
           <SectionCard title="Settlement batches" subtitle="Doctor settlement batches for this branch." noPadding>
             <div className="card-body border-bottom">
@@ -159,8 +228,8 @@ export default function StaffClinicSettlementPage() {
                   <option value="PAID">PAID</option>
                 </select>
                 {canReview && (
-                  <button type="button" className="btn btn-primary btn-sm" onClick={handleGenerate} disabled={generating}>
-                    {generating ? "Generating…" : "Generate batches"}
+                  <button type="button" className="btn btn-primary btn-sm" onClick={() => setShowCreateModal(true)} disabled={generating}>
+                    {generating ? "Creating…" : "Create batch"}
                   </button>
                 )}
               </div>
@@ -224,6 +293,9 @@ export default function StaffClinicSettlementPage() {
                           <td><StatusBadge status={b.status} /></td>
                           <td>{b.netPayable != null ? Number(b.netPayable).toFixed(2) : "—"}</td>
                           <td className="text-end">
+                            <Link href={`/staff/branch/${branchId}/clinic/settlement/${b.id}`} className="btn btn-sm btn-outline-secondary me-1">
+                              View
+                            </Link>
                             {b.status === "DRAFT" && canReview && (
                               <button
                                 type="button"
@@ -237,11 +309,21 @@ export default function StaffClinicSettlementPage() {
                             {(b.status === "DRAFT" || b.status === "UNDER_REVIEW") && canApprove && (
                               <button
                                 type="button"
-                                className="btn btn-sm btn-outline-success"
+                                className="btn btn-sm btn-outline-success me-1"
                                 onClick={() => handleApprove(b.id)}
                                 disabled={acting}
                               >
                                 {acting ? "…" : "Approve"}
+                              </button>
+                            )}
+                            {b.status === "APPROVED" && canPay && (
+                              <button
+                                type="button"
+                                className="btn btn-sm btn-success"
+                                onClick={() => handlePay(b.id)}
+                                disabled={acting}
+                              >
+                                {acting ? "…" : "Pay"}
                               </button>
                             )}
                           </td>
@@ -260,6 +342,42 @@ export default function StaffClinicSettlementPage() {
           </SectionCard>
         </div>
       </div>
+
+      {showCreateModal && (
+        <div className="modal fade show d-block" tabIndex={-1} role="dialog" aria-modal="true" style={{ background: "rgba(0,0,0,0.45)" }}>
+          <div className="modal-dialog modal-dialog-centered" role="document">
+            <div className="modal-content">
+              <div className="modal-header">
+                <h5 className="modal-title">Create settlement batch</h5>
+                <button type="button" className="btn-close" onClick={() => setShowCreateModal(false)} aria-label="Close" />
+              </div>
+              <div className="modal-body">
+                <div className="mb-3">
+                  <label className="form-label">Period end (optional)</label>
+                  <input type="date" className="form-control" value={periodEnd} onChange={(e) => setPeriodEnd(e.target.value)} />
+                </div>
+                <div>
+                  <label className="form-label">Doctor profile IDs (optional)</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    placeholder="e.g. 12,18,24"
+                    value={doctorProfileIdsText}
+                    onChange={(e) => setDoctorProfileIdsText(e.target.value)}
+                  />
+                  <div className="form-text">Leave empty to generate for all pending doctors in branch.</div>
+                </div>
+              </div>
+              <div className="modal-footer">
+                <button type="button" className="btn btn-light" onClick={() => setShowCreateModal(false)} disabled={generating}>Cancel</button>
+                <button type="button" className="btn btn-primary" onClick={handleGenerate} disabled={generating}>
+                  {generating ? "Creating…" : "Create batch"}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </PageWorkspace>
   );
 }

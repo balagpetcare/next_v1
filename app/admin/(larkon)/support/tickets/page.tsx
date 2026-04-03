@@ -15,6 +15,7 @@ import {
   type TicketListPayload,
   type TicketStats,
 } from '@/src/bpa/admin/lib/adminSupportApi'
+import { PaginationBar } from '@/src/components/common/PaginationBar'
 
 const STATUS_OPTIONS = [
   { value: '', label: 'All' },
@@ -278,28 +279,17 @@ export default function AdminSupportTicketsPage() {
         />
       )}
 
-      {total > pageSize && (
-        <div className="d-flex justify-content-between align-items-center mt-3">
-          <span className="small text-muted">Page {page} of {Math.ceil(total / pageSize)} ({total} total)</span>
-          <div className="d-flex gap-1">
-            <button
-              type="button"
-              className="btn btn-outline-secondary btn-sm"
-              disabled={page <= 1}
-              onClick={() => setPage((p) => p - 1)}
-            >
-              Previous
-            </button>
-            <button
-              type="button"
-              className="btn btn-outline-secondary btn-sm"
-              disabled={page >= Math.ceil(total / pageSize)}
-              onClick={() => setPage((p) => p + 1)}
-            >
-              Next
-            </button>
-          </div>
-        </div>
+      {total > 0 && (
+        <PaginationBar
+          page={page}
+          pageSize={pageSize}
+          total={total}
+          totalPages={Math.max(1, Math.ceil(total / pageSize))}
+          disabled={loading}
+          onPageChange={setPage}
+          className="mt-3 pt-3 border-top"
+          ariaLabel="Support tickets pages"
+        />
       )}
     </AdminPageShell>
   )

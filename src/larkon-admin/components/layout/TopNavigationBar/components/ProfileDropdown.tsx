@@ -43,10 +43,8 @@ const ProfileDropdown = () => {
         as={'a'}
         type="button"
         className="topbar-button content-none"
-        id="page-header-user-dropdown "
-        data-bs-toggle="dropdown"
-        aria-haspopup="true"
-        aria-expanded="false">
+        id="page-header-user-dropdown"
+        aria-haspopup="true">
         <span className="d-flex align-items-center">
           <Image className="rounded-circle" width={32} src={avatar1} alt="avatar-3" />
         </span>

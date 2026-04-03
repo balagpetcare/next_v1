@@ -26,6 +26,7 @@ import { DoctorPriorityBadge } from "../_components/DoctorPriorityBadge";
 import { DoctorPaymentBadge } from "../_components/DoctorPaymentBadge";
 import type { AppointmentDetailForSnapshot } from "../_components/PatientSnapshotCard";
 import type { VisitItem } from "../_components/ClinicalHistoryTimeline";
+import { PRIMARY_NOT_FOUND } from "@/lib/clinicNotFoundHelpers";
 
 export default function DoctorAppointmentDetailPage() {
   const params = useParams();
@@ -47,8 +48,8 @@ export default function DoctorAppointmentDetailPage() {
     try {
       const data = await doctorGetAppointmentDetail(id);
       setAppointment(data ?? null);
-    } catch (e) {
-      setError((e as Error)?.message ?? "Failed to load appointment");
+    } catch {
+      setError(PRIMARY_NOT_FOUND.appointment);
       setAppointment(null);
     } finally {
       setLoading(false);
@@ -103,11 +104,22 @@ export default function DoctorAppointmentDetailPage() {
     if (!Number.isFinite(id)) return;
     setActioning(true);
     try {
-      await doctorStartConsult(id);
+      const currentStatus = (appointment?.status ?? "").toUpperCase();
+      // Only auto-call if status is IN_QUEUE (state machine allows CALL from IN_QUEUE)
+      // For CHECKED_IN, clinic must call next in queue first to trigger ENQUEUE
+      if (currentStatus === "IN_QUEUE") {
+        await doctorCallAppointment(id);
+      }
+      const data = await doctorStartConsult(id);
       toast.success("Consultation started");
-      refresh();
+      await refresh();
+      const vid = data?.visit != null && typeof data.visit === "object" && "id" in data.visit ? (data.visit as { id?: number }).id : undefined;
+      if (vid != null && Number.isFinite(vid)) {
+        router.push(`/doctor/visits/${vid}`);
+      }
     } catch (e) {
-      toast.error((e as Error)?.message ?? "Failed to start");
+      const msg = (e as Error)?.message ?? "Failed to start";
+      toast.error(msg === "Invalid status transition" || msg.includes("transition") ? "Appointment must be called from queue first. Ask clinic staff to call next patient." : msg);
     } finally {
       setActioning(false);
     }
@@ -155,7 +167,7 @@ export default function DoctorAppointmentDetailPage() {
     }
   };
 
-  const handleReschedule = async (data: { scheduledStartAt: string; scheduledEndAt: string }) => {
+  const handleReschedule = async (_appointmentId: number, data: { scheduledStartAt: string; scheduledEndAt: string }) => {
     if (!Number.isFinite(id)) return;
     setActioning(true);
     try {
@@ -221,16 +233,26 @@ export default function DoctorAppointmentDetailPage() {
   if (error && !appointment) {
     return (
       <div className="dashboard-main-body">
-        <div className="alert alert-danger">{error}</div>
-        <Link href="/doctor/appointments" className="btn btn-outline-primary btn-sm">
-          Back to Appointments
-        </Link>
+        <div className="alert alert-danger">
+          {error || PRIMARY_NOT_FOUND.appointment}
+          <div className="mt-2 d-flex flex-wrap gap-2">
+            <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => loadAppointment()}>Retry</button>
+            <Link href="/doctor/appointments" className="btn btn-sm btn-outline-secondary">Back to Appointments</Link>
+          </div>
+        </div>
       </div>
     );
   }
 
   const a = appointment;
-  const status = a?.status ?? "";
+  const status = (a?.status ?? "") as string;
+  const statusUpper = status.toUpperCase();
+  const visitId = a?.visit != null && typeof a.visit === "object" && "id" in a.visit ? (a.visit as { id?: number }).id : undefined;
+  const hasVisit = visitId != null && Number.isFinite(visitId);
+  const canStartTreatment =
+    !hasVisit &&
+    !["COMPLETED", "CANCELLED", "NO_SHOW", "IN_CONSULT"].includes(statusUpper) &&
+    ["IN_QUEUE", "CALLED"].includes(statusUpper);
 
   return (
     <div className="dashboard-main-body">
@@ -262,6 +284,24 @@ export default function DoctorAppointmentDetailPage() {
           </p>
         </div>
         <div className="d-flex align-items-center gap-2 flex-wrap">
+          {hasVisit && (
+            <Link
+              href={`/doctor/visits/${visitId}`}
+              className="btn btn-primary btn-sm"
+            >
+              Open Visit
+            </Link>
+          )}
+          {canStartTreatment && (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              disabled={actioning}
+              onClick={handleStartConsult}
+            >
+              Start Treatment
+            </button>
+          )}
           <DoctorAppointmentStatusBadge status={status} />
           <DoctorPriorityBadge priority={a?.priority} />
           <DoctorPaymentBadge paymentStatus={a?.paymentStatus} />
@@ -294,7 +334,10 @@ export default function DoctorAppointmentDetailPage() {
                 isEmergency={a?.priority === "EMERGENCY"}
                 isRepeatVisit={Array.isArray(a?.previousVisits) && (a.previousVisits?.length ?? 0) > 0}
               />
-              {!a?.pet?.allergies?.length && !a?.pet?.healthDisorders && a?.priority !== "EMERGENCY" && (!a?.previousVisits?.length ?? true) && (
+              {!a?.pet?.allergies?.length &&
+                !a?.pet?.healthDisorders &&
+                a?.priority !== "EMERGENCY" &&
+                !(Array.isArray(a?.previousVisits) && a.previousVisits.length > 0) && (
                 <p className="small text-muted mb-0">No clinical alerts.</p>
               )}
             </div>
@@ -324,7 +367,7 @@ export default function DoctorAppointmentDetailPage() {
             </div>
             <div className="card-body">
               <QuickActionBar
-                status={status}
+                status={statusUpper}
                 appointmentId={id}
                 scheduledStartAt={a?.scheduledStartAt}
                 actioning={actioning}
@@ -335,6 +378,8 @@ export default function DoctorAppointmentDetailPage() {
                 onReschedule={handleReschedule}
                 onCancel={(_id, reason) => handleCancel(reason)}
                 onRefresh={refresh}
+                visitId={visitId ?? null}
+                onOpenVisit={(vid) => router.push(`/doctor/visits/${vid}`)}
               />
             </div>
           </div>

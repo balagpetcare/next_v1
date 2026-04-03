@@ -15,6 +15,7 @@ import BranchAlertsPanel from "@/src/components/branch/BranchAlertsPanel";
 import BranchActivityTimeline from "@/src/components/branch/BranchActivityTimeline";
 import { OperationalAlertStrip } from "@/src/components/dashboard";
 import { LAST_ACTIVE_BRANCH_KEY } from "@/lib/logoutState";
+import { staffClinicPatientsPath } from "@/lib/staffClinicPatientRoutes";
 
 const CLINIC_PERMISSIONS = [
   "clinic.overview.read",
@@ -228,7 +229,7 @@ export default function StaffBranchDashboardPage() {
                 Queue
               </Link>
               <Link
-                href={`/staff/branch/${branchId}/clinic/patients`}
+                href={staffClinicPatientsPath(branchId)}
                 className="btn btn-outline-primary radius-12"
               >
                 <i className="ri-user-heart-line me-1" />

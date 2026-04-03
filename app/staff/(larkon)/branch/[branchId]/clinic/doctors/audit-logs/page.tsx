@@ -17,6 +17,7 @@ import {
 } from "@/src/components/dashboard";
 import { DoctorOperationsFilterBar, Doctor360Drawer } from "@/src/components/clinic/doctors";
 import { doctors, auditLogs as auditLogsRoute } from "@/src/lib/doctorOperationsRoutes";
+import { PaginationBar } from "@/src/components/common/PaginationBar";
 
 const DOCTORS_PERMS = ["clinic.doctors.view", "clinic.doctors.assign"];
 const LIMIT = 25;
@@ -121,7 +122,7 @@ export default function StaffClinicDoctorsAuditLogsPage() {
     );
   }
 
-  const totalPages = Math.ceil(total / LIMIT);
+  const totalPages = Math.max(1, Math.ceil(total / LIMIT));
 
   return (
     <PageWorkspace>
@@ -283,30 +284,17 @@ export default function StaffClinicDoctorsAuditLogsPage() {
                   </tbody>
                 </table>
               </div>
-              {totalPages > 1 && (
-                <div className="d-flex justify-content-between align-items-center mt-3">
-                  <span className="text-muted small">
-                    Page {page + 1} of {totalPages}
-                  </span>
-                  <div className="d-flex gap-1">
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline-secondary"
-                      disabled={page === 0}
-                      onClick={() => setPage((p) => p - 1)}
-                    >
-                      Previous
-                    </button>
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-outline-secondary"
-                      disabled={page >= totalPages - 1}
-                      onClick={() => setPage((p) => p + 1)}
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
+              {total > 0 && (
+                <PaginationBar
+                  page={page + 1}
+                  pageSize={LIMIT}
+                  total={total}
+                  totalPages={totalPages}
+                  disabled={loading}
+                  onPageChange={(p) => setPage(p - 1)}
+                  className="mt-3 pt-3 border-top"
+                  ariaLabel="Doctor audit log pages"
+                />
               )}
             </>
           )}

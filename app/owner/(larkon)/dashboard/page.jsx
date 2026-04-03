@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/app/(public)/_lib/LanguageContext";
-import { ownerGet } from "@/app/owner/_lib/ownerApi";
+import { ownerGet, ownerMyPendingAppointments } from "@/app/owner/_lib/ownerApi";
 import MetricCard from "@/app/owner/_components/dashboard/MetricCard";
 import RevenueChart from "@/app/owner/_components/dashboard/RevenueChart";
 import SalesByBranchChart from "@/app/owner/_components/dashboard/SalesByBranchChart";
@@ -30,6 +30,7 @@ export default function OwnerDashboard() {
   const [alerts, setAlerts] = useState({});
   const [revenuePeriod, setRevenuePeriod] = useState("30d");
   const [pendingRequestsCount, setPendingRequestsCount] = useState(0);
+  const [pendingAppointmentsCount, setPendingAppointmentsCount] = useState(0);
 
   async function loadDashboard() {
     setLoading(true);
@@ -76,6 +77,9 @@ export default function OwnerDashboard() {
       const raw = pendingRes?.data ?? pendingRes;
       const pendingList = Array.isArray(raw) ? raw : [];
       setPendingRequestsCount(pendingList.length);
+
+      const pendingApts = await ownerMyPendingAppointments().catch(() => ({ appointments: [] }));
+      setPendingAppointmentsCount(pendingApts.appointments?.length ?? 0);
     } catch (e) {
       setError(e?.message || t("owner.failedToLoadDashboard"));
       console.error("Dashboard load error:", e);
@@ -112,6 +116,12 @@ export default function OwnerDashboard() {
       </header>
 
       {error && <div className="alert alert-danger" role="alert">{error}</div>}
+
+      {pendingAppointmentsCount > 0 && (
+        <div className="alert alert-info mb-3" role="alert">
+          You have <strong>{pendingAppointmentsCount}</strong> clinic visit{pendingAppointmentsCount !== 1 ? "s" : ""} to link to your account (booked with your phone number). Visit the branch or use Staff Panel to link owner & pet for those appointments.
+        </div>
+      )}
 
       <StaffInviteNotifications />
 
@@ -256,8 +266,22 @@ export default function OwnerDashboard() {
         </div>
       </section>
 
-      <section className="row g-3 mb-4" aria-label="Clinic">
-        <div className="col-12">
+      <section className="row g-3 mb-4" aria-label="Clinic and pets">
+        <div className="col-12 col-md-6">
+          <div className="card radius-12">
+            <div className="card-body p-24">
+              <h6 className="mb-2 fw-semibold">My Pets</h6>
+              <p className="text-secondary small mb-3">
+                Register and view pets linked to your account. Same list is used at the clinic.
+              </p>
+              <Link href="/owner/pets" className="btn btn-outline-primary radius-12">
+                <i className="solar:dog-outline me-1" />
+                My Pets
+              </Link>
+            </div>
+          </div>
+        </div>
+        <div className="col-12 col-md-6">
           <div className="card radius-12">
             <div className="card-body p-24">
               <h6 className="mb-2 fw-semibold">Clinic</h6>

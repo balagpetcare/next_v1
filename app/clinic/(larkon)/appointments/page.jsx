@@ -69,7 +69,9 @@ export default function ClinicAppointmentsPage() {
       await staffClinicAppointmentCheckIn(branchId, appointmentId);
       await loadAppointments();
     } catch (e) {
-      setError(e?.message || "Check-in failed");
+      const msg = e?.message || "Check-in failed";
+      const isSnapshotOnly = msg.includes("Link owner and pet") || msg.includes("Promote the appointment first");
+      setError(isSnapshotOnly ? `${msg} Use "Complete intake" to link owner & pet first, then try check-in again.` : msg);
     } finally {
       setActioning(null);
     }

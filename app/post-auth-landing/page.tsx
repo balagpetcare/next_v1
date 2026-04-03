@@ -44,7 +44,7 @@ const PANEL_PATHS: Record<string, string> = {
   owner: "/owner/dashboard",
   admin: "/admin",
   producer: "/producer",
-  staff: "/staff",
+  staff: "/staff/warehouse",
   country: "/country/dashboard",
   shop: "/shop",
   clinic: "/clinic",
@@ -208,7 +208,10 @@ function PostAuthLandingContent() {
       } catch (e) {
         if (cancelled) return;
         if (process.env.NODE_ENV === "development") {
-          console.warn("[post-auth-landing] auth/me failed, redirecting to /login", e?.message ?? e);
+          console.warn(
+            "[post-auth-landing] auth/me failed, redirecting to /login",
+            e instanceof Error ? e.message : String(e)
+          );
         }
         // Redirect to neutral login (no next param) to avoid cross-panel loop
         try {

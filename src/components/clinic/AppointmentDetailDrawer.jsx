@@ -4,9 +4,9 @@ import Link from "next/link";
 
 /**
  * Right-side detail drawer for a single appointment.
- * Sections: Basic Info, Patient/Pet, Clinical, Queue/Progress, Payment, Workflow (Visit → Case → Billing), Timeline (audit).
+ * Sections: Basic Info, Patient/Pet, Clinical, Payment, Workflow, (Complete details for snapshot-only), Timeline.
  */
-export default function AppointmentDetailDrawer({ show, onClose, appointment, loading, branchId }) {
+export default function AppointmentDetailDrawer({ show, onClose, appointment, loading, branchId, onCompleteDetails }) {
   if (!show) return null;
 
   const a = appointment;
@@ -16,6 +16,11 @@ export default function AppointmentDetailDrawer({ show, onClose, appointment, lo
   const serviceName = a?.service?.name ?? "—";
   const events = Array.isArray(a?.events) ? [...a.events].reverse() : [];
   const sourceLabel = (a?.channel ?? a?.source) === "PHONE" ? "Phone" : (a?.channel ?? a?.source) === "ONLINE" ? "Online" : "Counter";
+
+  const isSnapshotOnly =
+    a &&
+    !a.patientId &&
+    (a.ownerNameSnapshot != null || a.mobileSnapshot != null || a.appointmentMode === "QUICK_CALL");
 
   const Section = ({ title, children }) => (
     <div className="mb-3">
@@ -59,7 +64,7 @@ export default function AppointmentDetailDrawer({ show, onClose, appointment, lo
             <span className="placeholder col-10 d-block mt-2" />
           </div>
         ) : !a ? (
-          <p className="text-muted">No data</p>
+          <p className="text-muted">Appointment could not be loaded.</p>
         ) : (
           <>
             <Section title="Basic info">
@@ -72,6 +77,11 @@ export default function AppointmentDetailDrawer({ show, onClose, appointment, lo
             </Section>
 
             <Section title="Patient / Pet">
+              {isSnapshotOnly && (
+                <div className="alert alert-info py-2 px-2 small mb-2">
+                  <strong>Quick entry.</strong> Owner and pet are from snapshot only (not linked to a customer record). Link them below to enable check-in and visits.
+                </div>
+              )}
               {(a.noShowCount ?? 0) > 0 && (
                 <div className="alert alert-warning py-2 px-2 small mb-2">
                   Patient has {a.noShowCount} no-show(s) on record.
@@ -83,6 +93,21 @@ export default function AppointmentDetailDrawer({ show, onClose, appointment, lo
               <Row label="Mobile" value={a?.mobileSnapshot ?? (a?.patient?.auth ? "—" : "—")} />
               {a?.patient?.profile?.username && <Row label="Email" value={a.patient.profile.username} />}
             </Section>
+
+            {isSnapshotOnly && typeof onCompleteDetails === "function" && (
+              <Section title="Complete appointment details">
+                <p className="small text-muted mb-2">
+                  Link this appointment to an existing owner and pet so you can check in and run visits. Uses the same promote flow as Complete intake.
+                </p>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  onClick={() => onCompleteDetails(a)}
+                >
+                  Complete appointment details
+                </button>
+              </Section>
+            )}
 
             <Section title="Clinical">
               <Row label="Assigned doctor" value={doctorName} />

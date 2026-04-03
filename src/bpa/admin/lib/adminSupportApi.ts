@@ -83,6 +83,32 @@ export type TicketListPayload = {
   pageSize: number
 }
 
+/** Detail payload for GET /admin/support/tickets/:id (fields vary; extend as UI needs). */
+export type AdminSupportTicketDetail = TicketRow & {
+  subject?: string
+  description?: string | null
+  escalatedCaseId?: number | null
+  escalatedCase?: { id?: number; caseNo?: string; status?: string } | null
+  messages?: Array<{
+    id?: number
+    message?: string
+    text?: string
+    isInternal?: boolean
+    createdAt?: string
+    author?: { profile?: { displayName?: string } }
+  }>
+  relatedEntityType?: string
+  relatedEntityId?: number | null
+  producerOrg?: {
+    id: number
+    name: string
+    owner?: {
+      profile?: { displayName?: string }
+      auth?: { email?: string; phone?: string }
+    }
+  } | null
+}
+
 export async function adminTicketStats(): Promise<TicketStats> {
   return getSupport<TicketStats>('/admin/support/tickets/stats')
 }
@@ -116,8 +142,8 @@ export async function adminTicketsList(params: {
   return getSupport<TicketListPayload>(path)
 }
 
-export async function adminTicketGet(id: number | string) {
-  return getSupport(`/admin/support/tickets/${id}`)
+export async function adminTicketGet(id: number | string): Promise<AdminSupportTicketDetail> {
+  return getSupport<AdminSupportTicketDetail>(`/admin/support/tickets/${id}`)
 }
 
 export async function adminTicketUpdate(

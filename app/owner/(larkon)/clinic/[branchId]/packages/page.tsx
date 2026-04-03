@@ -8,6 +8,7 @@ import {
   ownerClinicPackageDelete,
 } from "@/app/owner/_lib/ownerApi";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
+import { PaginationBar } from "@/src/components/common/PaginationBar";
 
 type PackageItem = {
   id: number;
@@ -50,13 +51,14 @@ export default function ClinicPackagesPage() {
   const [search, setSearch] = useState("");
   const [filterType, setFilterType] = useState("");
   const [filterStatus, setFilterStatus] = useState("");
+  const [listPage, setListPage] = useState(1);
 
   const load = async () => {
     if (!branchId) return;
     try {
       setLoading(true);
       setError("");
-      const res = await ownerClinicPackagesList(branchId, { page: 1, limit: 50 });
+      const res = await ownerClinicPackagesList(branchId, { page: listPage, limit: 50 });
       setData({
         items: (res.items ?? []) as PackageItem[],
         pagination: res.pagination ?? { page: 1, limit: 20, total: 0, totalPages: 0 },
@@ -69,8 +71,12 @@ export default function ClinicPackagesPage() {
   };
 
   useEffect(() => {
+    setListPage(1);
+  }, [branchId, search, filterType, filterStatus]);
+
+  useEffect(() => {
     load();
-  }, [branchId]);
+  }, [branchId, listPage]);
 
   const filteredItems = useMemo(() => {
     let list = data.items;
@@ -300,10 +306,19 @@ export default function ClinicPackagesPage() {
                   </tbody>
                 </table>
               </div>
-              {data.pagination.totalPages > 1 && (
-                <p className="text-muted small mb-0 mt-3">
-                  Page {data.pagination.page} of {data.pagination.totalPages} ({data.pagination.total} total)
-                </p>
+              {data.pagination.total > 0 && (
+                <div className="card-footer bg-transparent border-0">
+                  <PaginationBar
+                    page={listPage}
+                    pageSize={data.pagination.limit || 50}
+                    total={data.pagination.total}
+                    totalPages={Math.max(1, data.pagination.totalPages || 1)}
+                    disabled={loading}
+                    onPageChange={setListPage}
+                    className="mt-0 pt-3 border-top"
+                    ariaLabel="Packages pages"
+                  />
+                </div>
               )}
             </div>
           </div>
