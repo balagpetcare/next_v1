@@ -25,6 +25,7 @@ export default function StaffBranchSidebar({ branchId, sidebarActive, mobileMenu
     approvals: todayBoard?.approvalsPending?.length ?? kpis?.approvalsPending ?? undefined,
     lowStock: kpis?.lowStockCount ?? undefined,
     clinicQueue: todayBoard?.appointmentsQueue?.length ?? undefined,
+    vendorReceipts: kpis?.vendorReceivePendingCount ?? undefined,
   };
 
   const filtered = getFilteredBranchSidebar(bid, branch, permissions, counts);

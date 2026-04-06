@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { getMeBranchAccess } from "@/lib/api";
 import { getAuthMeBase } from "@/lib/authRedirect";
 import { useToast } from "@/src/hooks/useToast";
@@ -54,6 +54,7 @@ async function fetchAuthMePermissions(): Promise<string[]> {
 
 export default function StaffWarehouseLandingPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const toast = useToast();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +84,13 @@ export default function StaffWarehouseLandingPage() {
 
         setCandidates(warehouseCandidates);
         if (warehouseCandidates.length === 1) {
-          router.replace(`/staff/branch/${warehouseCandidates[0].branchId}/warehouse`);
+          const bid = warehouseCandidates[0].branchId;
+          const q = searchParams.toString();
+          const dest =
+            searchParams.get("purchaseOrderId") != null && searchParams.get("purchaseOrderId") !== ""
+              ? `/staff/branch/${bid}/warehouse/receive-po${q ? `?${q}` : ""}`
+              : `/staff/branch/${bid}/warehouse${q ? `?${q}` : ""}`;
+          router.replace(dest);
           return;
         }
         if (warehouseCandidates.length === 0) {
@@ -102,7 +109,7 @@ export default function StaffWarehouseLandingPage() {
     return () => {
       cancelled = true;
     };
-  }, [router, toast]);
+  }, [router, toast, searchParams]);
 
   const sortedCandidates = useMemo(
     () => [...candidates].sort((a, b) => a.branchName.localeCompare(b.branchName)),
@@ -132,6 +139,10 @@ export default function StaffWarehouseLandingPage() {
 
   if (sortedCandidates.length === 0) return null;
 
+  const handoffQ = searchParams.toString();
+  const hasPoHandoff =
+    searchParams.get("purchaseOrderId") != null && String(searchParams.get("purchaseOrderId")).trim() !== "";
+
   return (
     <div className="container-fluid py-4">
       <div className="d-flex align-items-center justify-content-between mb-3">
@@ -149,8 +160,15 @@ export default function StaffWarehouseLandingPage() {
                 <div className="small text-muted mb-3">
                   {item.branchType || "WAREHOUSE"} • {item.role}
                 </div>
-                <Link href={`/staff/branch/${item.branchId}/warehouse`} className="btn btn-primary btn-sm">
-                  Open Dashboard
+                <Link
+                  href={
+                    hasPoHandoff
+                      ? `/staff/branch/${item.branchId}/warehouse/receive-po${handoffQ ? `?${handoffQ}` : ""}`
+                      : `/staff/branch/${item.branchId}/warehouse${handoffQ ? `?${handoffQ}` : ""}`
+                  }
+                  className="btn btn-primary btn-sm"
+                >
+                  {hasPoHandoff ? "Open receiving" : "Open Dashboard"}
                 </Link>
               </div>
             </div>

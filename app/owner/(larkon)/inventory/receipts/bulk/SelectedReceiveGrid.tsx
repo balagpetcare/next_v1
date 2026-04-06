@@ -16,6 +16,8 @@ type SelectedReceiveGridProps = {
   onRemoveRow: (rowId: string) => void;
   onPaste?: (e: React.ClipboardEvent, startRowId: string) => void;
   onSubmit: () => void;
+  /** When true, show ordered/received/pending columns from PO context */
+  isPOMode?: boolean;
 };
 
 /**
@@ -36,6 +38,7 @@ export function SelectedReceiveGrid({
   onRemoveRow,
   onPaste,
   onSubmit,
+  isPOMode = false,
 }: SelectedReceiveGridProps) {
   const updateRow = useCallback(
     (rowId: string, patch: Partial<SelectedRow>) => {
@@ -52,8 +55,12 @@ export function SelectedReceiveGrid({
     if (row.variantId != null && (Number.isNaN(qty) || qty <= 0)) {
       issues.push("Qty must be > 0");
     }
+    // PO mode: warn if receive qty exceeds pending
+    if (isPOMode && row.pendingQty != null && Number.isFinite(qty) && qty > row.pendingQty) {
+      issues.push(`Exceeds pending qty (${row.pendingQty})`);
+    }
     const cost = parseFloat(row.unitCost);
-    const costWarn = !Number.isNaN(cost) && cost === 0 && row.variantId != null;
+    const costWarn = !isPOMode && !Number.isNaN(cost) && cost === 0 && row.variantId != null;
     const expDate = row.expDate ? new Date(row.expDate) : null;
     const expWarn = expDate && expDate <= new Date();
     return { hasError: issues.length > 0, error: issues[0], costWarn, expWarn };
@@ -76,14 +83,19 @@ export function SelectedReceiveGrid({
       <table className="table table-sm table-bordered">
         <thead>
           <tr>
-            <th>Product</th>
-            <th>Variant</th>
-            <th style={{ width: 90 }}>Qty *</th>
+            <th>Product / SKU</th>
+            {isPOMode && <th className="text-end" style={{ width: 70 }}>Ordered</th>}
+            {isPOMode && <th className="text-end" style={{ width: 70 }}>Received</th>}
+            {isPOMode && <th className="text-end" style={{ width: 70 }}>Pending</th>}
+            <th style={{ width: 90 }}>Receive now *</th>
             <th style={{ width: 100 }}>Unit cost</th>
             <th>Lot code</th>
             <th>Mfg date</th>
             <th>Expiry date</th>
             <th>Supplier barcode</th>
+            <th style={{ width: 60 }}>Damaged</th>
+            <th style={{ width: 60 }}>Short</th>
+            <th>Remarks / Notes</th>
             <th style={{ width: 70 }}></th>
           </tr>
         </thead>
@@ -91,6 +103,8 @@ export function SelectedReceiveGrid({
           {rows.map((row) => {
             const { hasError, error, costWarn, expWarn } = getValidation(row);
             const isFlash = flashRowId === row.id;
+            const receiveQty = parseFloat(row.quantity);
+            const overReceipt = isPOMode && row.pendingQty != null && Number.isFinite(receiveQty) && receiveQty > row.pendingQty;
             return (
               <tr
                 key={row.id}
@@ -98,25 +112,38 @@ export function SelectedReceiveGrid({
                 onKeyDown={(e) => handleKeyDown(e, row.id)}
               >
                 <td onPaste={onPaste ? (e) => onPaste(e, row.id) : undefined}>
-                  <span className="small">
-                    {row.productName || "—"} {row.sku && `(${row.sku})`}
-                  </span>
+                  <div className="small fw-medium">{row.productName || row.sku || "—"}</div>
+                  {row.productName && row.sku && <div className="small text-muted">{row.sku}</div>}
                   {row.error && <div className="small text-danger">{row.error}</div>}
                   {error && <div className="small text-danger">{error}</div>}
                 </td>
-                <td>
-                  <span className="small">{row.sku || "—"}</span>
-                </td>
+                {isPOMode && (
+                  <td className="text-end small text-muted">{row.orderedQty ?? "—"}</td>
+                )}
+                {isPOMode && (
+                  <td className="text-end small text-muted">{row.receivedQty ?? "—"}</td>
+                )}
+                {isPOMode && (
+                  <td className="text-end small">
+                    <span className={row.pendingQty != null && row.pendingQty > 0 ? "fw-semibold text-primary" : "text-muted"}>
+                      {row.pendingQty ?? "—"}
+                    </span>
+                  </td>
+                )}
                 <td>
                   <input
                     type="number"
-                    className="form-control form-control-sm"
-                    min={1}
+                    className={`form-control form-control-sm ${overReceipt ? "border-danger" : ""}`}
+                    min={0}
+                    max={isPOMode && row.pendingQty != null ? row.pendingQty : undefined}
                     value={row.quantity}
                     onChange={(e) => updateRow(row.id, { quantity: e.target.value })}
                     placeholder="0"
                     disabled={disabled}
                   />
+                  {overReceipt && (
+                    <div className="small text-danger mt-1">Exceeds pending ({row.pendingQty})</div>
+                  )}
                 </td>
                 <td>
                   <input
@@ -132,6 +159,9 @@ export function SelectedReceiveGrid({
                     <span className="badge bg-warning text-dark ms-1" title="Unit cost is 0">
                       $0
                     </span>
+                  )}
+                  {isPOMode && row.poUnitCost != null && row.unitCost !== String(row.poUnitCost) && (
+                    <div className="small text-muted mt-1">PO cost: {row.poUnitCost}</div>
                   )}
                 </td>
                 <td>
@@ -176,6 +206,48 @@ export function SelectedReceiveGrid({
                     placeholder="Optional"
                     disabled={disabled}
                   />
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    className="form-control form-control-sm"
+                    min={0}
+                    value={row.quantityDamaged ?? ""}
+                    onChange={(e) => updateRow(row.id, { quantityDamaged: e.target.value })}
+                    placeholder="0"
+                    disabled={disabled}
+                  />
+                </td>
+                <td>
+                  <input
+                    type="number"
+                    className="form-control form-control-sm"
+                    min={0}
+                    value={row.quantityShort ?? ""}
+                    onChange={(e) => updateRow(row.id, { quantityShort: e.target.value })}
+                    placeholder="0"
+                    disabled={disabled}
+                  />
+                </td>
+                <td>
+                  <input
+                    type="text"
+                    className="form-control form-control-sm"
+                    value={row.lineRemarks ?? ""}
+                    onChange={(e) => updateRow(row.id, { lineRemarks: e.target.value })}
+                    placeholder="Optional"
+                    disabled={disabled}
+                  />
+                  {(parseInt(row.quantityDamaged ?? "0") > 0 || parseInt(row.quantityShort ?? "0") > 0) && (
+                    <input
+                      type="text"
+                      className="form-control form-control-sm mt-1"
+                      value={row.lineDiscrepancyNote ?? ""}
+                      onChange={(e) => updateRow(row.id, { lineDiscrepancyNote: e.target.value })}
+                      placeholder="Discrepancy reason"
+                      disabled={disabled}
+                    />
+                  )}
                 </td>
                 <td>
                   <button

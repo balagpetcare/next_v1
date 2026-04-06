@@ -1,30 +1,25 @@
-"use client";
-
-import { useParams, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { notFound } from "next/navigation";
+import StaffStockRequestDetailClient from "../../_components/StaffStockRequestDetailClient";
 
 /**
- * Legacy stock request detail route — redirects to canonical route.
- * Old URL: .../inventory/stock-request-detail/[requestId]
- * New URL: .../inventory/stock-requests/[requestId]
+ * Canonical staff stock request detail (flat segment — reliable under Next 16 / Turbopack).
+ * Public URL: /staff/branch/[branchId]/inventory/stock-request-detail/[requestId]
+ *
+ * Legacy nested URL .../inventory/stock-requests/[id] redirects here (next.config redirects + proxy.ts).
  */
-export default function LegacyStockRequestDetailPage() {
-  const params = useParams();
-  const router = useRouter();
-
-  useEffect(() => {
-    const branchId = params?.branchId;
-    const requestId = params?.requestId;
-    if (branchId && requestId) {
-      // Redirect to canonical route
-      router.replace(`/staff/branch/${branchId}/inventory/stock-requests/${requestId}`);
-    }
-  }, [params, router]);
-
-  return (
-    <div className="container py-40 text-center">
-      <div className="spinner-border text-primary" role="status" />
-      <p className="mt-16 text-secondary-light">Redirecting...</p>
-    </div>
-  );
+export default async function StaffStockRequestDetailPage({
+  params,
+}: {
+  params: Promise<{ branchId: string; requestId: string }>;
+}) {
+  const p = await params;
+  const raw = p?.requestId;
+  if (raw == null || !/^\d+$/.test(String(raw))) {
+    notFound();
+  }
+  const id = Number(raw);
+  if (!Number.isSafeInteger(id) || id < 1) {
+    notFound();
+  }
+  return <StaffStockRequestDetailClient />;
 }

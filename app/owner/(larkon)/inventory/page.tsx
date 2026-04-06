@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { Dropdown } from "react-bootstrap";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
-import { ownerGet, ownerPost } from "@/app/owner/_lib/ownerApi";
+import { ownerGet, ownerGetSafe, ownerPost } from "@/app/owner/_lib/ownerApi";
 import { PaginationBar } from "@/src/components/common/PaginationBar";
 import { useToast } from "@/src/hooks/useToast";
 import { getMessageFromApiError } from "@/src/lib/apiErrorToMessage";
@@ -51,6 +51,13 @@ type DashboardCards = {
   expiredLotsCount?: number;
 };
 
+type OpsExceptionSummary = {
+  pendingConfirmations?: { vendorReceiveSessions?: number; dispatchReceiveSessions?: number };
+  discrepancies?: { inboundOpen?: number; dispatchPending?: number };
+  queues?: { draftGrns?: number; inTransitDispatches?: number };
+  blockedSales?: { posOrdersPendingPayment?: number };
+};
+
 function pickArray(resp: unknown): unknown[] {
   if (!resp) return [];
   const r = resp as Record<string, unknown>;
@@ -95,6 +102,7 @@ export default function OwnerInventoryPage() {
     stockStatus: "" as "" | "in" | "low" | "out",
   });
   const [pagination, setPagination] = useState({ page: 1, limit: 20, total: 0, totalPages: 1 });
+  const [opsSummary, setOpsSummary] = useState<OpsExceptionSummary | null>(null);
   const [showAdjustModal, setShowAdjustModal] = useState(false);
   const [selectedItem, setSelectedItem] = useState<InventoryItem | null>(null);
   const [adjustData, setAdjustData] = useState({ quantityDelta: 0, reason: "" });
@@ -202,6 +210,19 @@ export default function OwnerInventoryPage() {
   }, [loadBranches, loadLocations]);
 
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const res = await ownerGetSafe<{ data?: OpsExceptionSummary }>("/api/v1/inventory/operations/exception-summary");
+      if (cancelled) return;
+      const data = res && typeof res === "object" ? (res as { data?: OpsExceptionSummary }).data : undefined;
+      setOpsSummary(data ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
 
@@ -274,6 +295,23 @@ export default function OwnerInventoryPage() {
     (dashboard?.totalStockQty ?? 0) > 0 ||
     (dashboard?.skusTracked ?? 0) > 0;
 
+  const opsAttentionTotal = useMemo(() => {
+    if (!opsSummary) return 0;
+    const p = opsSummary.pendingConfirmations;
+    const d = opsSummary.discrepancies;
+    const q = opsSummary.queues;
+    const b = opsSummary.blockedSales;
+    return (
+      (p?.vendorReceiveSessions ?? 0) +
+      (p?.dispatchReceiveSessions ?? 0) +
+      (d?.inboundOpen ?? 0) +
+      (d?.dispatchPending ?? 0) +
+      (q?.draftGrns ?? 0) +
+      (q?.inTransitDispatches ?? 0) +
+      (b?.posOrdersPendingPayment ?? 0)
+    );
+  }, [opsSummary]);
+
   return (
     <div className="dashboard-main-body">
       <PageHeader
@@ -291,6 +329,48 @@ export default function OwnerInventoryPage() {
           Supply planning
         </Link>
       </div>
+
+      <div className="alert alert-secondary radius-12 py-2 small mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <span>Central MRP/base/floor, branch override bounds, retail discount rules, and pricing audit.</span>
+        <Link href="/owner/inventory/pricing-governance" className="btn btn-sm btn-outline-dark">
+          Pricing governance
+        </Link>
+      </div>
+
+      {opsSummary && opsAttentionTotal > 0 && (
+        <div
+          className="alert alert-warning radius-12 py-2 small mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2"
+          role="status"
+        >
+          <div className="flex-grow-1">
+            <strong className="me-1">Operations attention:</strong>
+            {(opsSummary.pendingConfirmations?.vendorReceiveSessions ?? 0) +
+              (opsSummary.pendingConfirmations?.dispatchReceiveSessions ?? 0) >
+              0 && (
+              <span className="me-2">
+                Pending confirmations (vendor{" "}
+                {opsSummary.pendingConfirmations?.vendorReceiveSessions ?? 0}, dispatch{" "}
+                {opsSummary.pendingConfirmations?.dispatchReceiveSessions ?? 0})
+              </span>
+            )}
+            {(opsSummary.discrepancies?.inboundOpen ?? 0) + (opsSummary.discrepancies?.dispatchPending ?? 0) > 0 && (
+              <span className="me-2">
+                Open discrepancies (inbound {opsSummary.discrepancies?.inboundOpen ?? 0}, dispatch{" "}
+                {opsSummary.discrepancies?.dispatchPending ?? 0})
+              </span>
+            )}
+            <span className="me-2">
+              Draft GRNs {opsSummary.queues?.draftGrns ?? 0}, in-transit dispatches {opsSummary.queues?.inTransitDispatches ?? 0}
+            </span>
+            {(opsSummary.blockedSales?.posOrdersPendingPayment ?? 0) > 0 && (
+              <span className="me-2">POS orders pending payment: {opsSummary.blockedSales?.posOrdersPendingPayment}</span>
+            )}
+          </div>
+          <Link href="/owner/inventory/receipts" className="btn btn-sm btn-outline-dark shrink-0">
+            Receipts &amp; queues
+          </Link>
+        </div>
+      )}
 
       {dashboardError && (
         <div className="alert alert-warning radius-12 py-2 small mb-3" role="status">

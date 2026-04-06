@@ -13,6 +13,7 @@ import { getMessageFromApiError } from "@/src/lib/apiErrorToMessage";
 import Card from "@/src/bpa/components/ui/Card";
 import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
+import { getUniqueVariants, getUniqueVariantsFromStaffInventoryItems } from "@/src/lib/getUniqueVariants";
 
 const REQUIRED_PERM = "inventory.receive";
 
@@ -51,17 +52,15 @@ export default function StaffBranchInventoryReceiveOpeningPage() {
         const branchLocs = (locs || []).filter((l) => l.branch && String(l.branch.id) === String(branchId));
         setLocations(branchLocs);
         const items = listRes.items ?? [];
-        const seen = new Set();
-        const list = items
-          .filter((i) => i.variant && !seen.has(i.variant.id))
-          .map((i) => { seen.add(i.variant.id); return { id: i.variant.id, sku: i.variant.sku, title: i.variant.title, product: i.variant.product }; });
-        setVariants(list);
+        setVariants(getUniqueVariantsFromStaffInventoryItems(items));
         if (branchLocs.length && !form.locationId) setForm((f) => ({ ...f, locationId: String(branchLocs[0].id) }));
       })
       .catch((e) => !cancelled && toast.error(getMessageFromApiError(e)))
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
   }, [branchId, canReceive]);
+
+  const variantOptions = useMemo(() => getUniqueVariants(variants), [variants]);
 
   const addLine = () => setForm((f) => ({ ...f, items: [...f.items, { variantId: "", quantity: "" }] }));
   const setLine = (idx, field, value) => setForm((f) => ({
@@ -192,8 +191,8 @@ export default function StaffBranchInventoryReceiveOpeningPage() {
                         onChange={(e) => setLine(idx, "variantId", e.target.value)}
                       >
                         <option value="">Select</option>
-                        {variants.map((v) => (
-                          <option key={v.id} value={v.id}>{v.sku ?? v.title ?? v.id}</option>
+                        {variantOptions.map((v) => (
+                          <option key={`variant-${v.id}`} value={v.id}>{v.sku ?? v.title ?? v.id}</option>
                         ))}
                       </LkSelect>
                     </LkFormGroup>

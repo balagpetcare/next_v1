@@ -86,15 +86,33 @@ export default function TransfersPage() {
 
   return (
     <div className="container py-3">
+      {/* Deprecation Notice */}
+      <div className="alert alert-warning mb-4">
+        <div className="d-flex align-items-center gap-2">
+          <i className="ri-error-warning-line fs-4" />
+          <div>
+            <strong>Legacy Stock Transfer</strong>
+            <p className="mb-0 small">
+              This module is deprecated. For new transfers, use{" "}
+              <Link href="/owner/inventory/stock-requests" className="fw-semibold">
+                Stock Requests → Allocation → Dispatch
+              </Link>{" "}
+              flow which includes controlled receiving and manager confirmation.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-4">
         <div>
-          <h2 className="mb-1">Stock Transfers</h2>
-          <div className="text-secondary">Manage stock transfers between branches</div>
+          <h2 className="mb-1">Stock Transfers (Legacy)</h2>
+          <div className="text-secondary">View existing stock transfers — use Stock Requests for new transfers</div>
         </div>
-        <button className="btn btn-primary" onClick={() => (window.location.href = "/owner/transfers/new")}>
-          <i className="solar:add-circle-outline me-1" />
-          Create Transfer
-        </button>
+        {/* Create button hidden - redirect to canonical flow */}
+        <Link href="/owner/inventory/stock-requests" className="btn btn-primary">
+          <i className="ri-add-circle-line me-1" />
+          New Stock Request
+        </Link>
       </div>
 
       {error && <div className="alert alert-danger">{error}</div>}

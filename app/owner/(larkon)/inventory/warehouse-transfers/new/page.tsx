@@ -11,10 +11,14 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, AlertTriangle } from "lucide-react";
 import { useAuthStore } from "@/lib/auth";
 import { API_BASE_URL } from "@/lib/constants";
 
+/**
+ * @deprecated This page creates legacy WarehouseTransferOrders.
+ * Users should use Stock Requests → Allocation → Dispatch flow instead.
+ */
 export default function NewWarehouseTransferPage() {
   const router = useRouter();
   const { user } = useAuthStore();
@@ -24,6 +28,7 @@ export default function NewWarehouseTransferPage() {
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState({ fromLocationId: "", toLocationId: "", note: "" });
   const [lines, setLines] = useState([{ variantId: "", lotId: "", requestedQty: 1, note: "" }]);
+  const [showDeprecatedForm, setShowDeprecatedForm] = useState(false);
 
   useEffect(() => {
     if (!orgId) return;
@@ -86,14 +91,67 @@ export default function NewWarehouseTransferPage() {
     finally { setSaving(false); }
   }
 
+  // Show deprecation notice by default, with option to proceed
+  if (!showDeprecatedForm) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <Link href="/owner/inventory/warehouse-transfers">
+            <Button variant="ghost" size="sm"><ArrowLeft className="mr-2 h-4 w-4" />Back</Button>
+          </Link>
+          <h1 className="text-3xl font-bold mt-2">New Warehouse Transfer</h1>
+          <p className="text-muted-foreground">Move stock between warehouse locations</p>
+        </div>
+
+        <Card className="border-yellow-200 bg-yellow-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-yellow-800">
+              <AlertTriangle className="h-5 w-5" />
+              Legacy Feature - Use Stock Requests Instead
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-yellow-700">
+              Warehouse Transfer Orders are <strong>deprecated</strong>. For new transfers, please use the
+              modern Stock Request → Allocation → Dispatch workflow which provides:
+            </p>
+            <ul className="list-disc list-inside text-yellow-700 space-y-1">
+              <li>Manager confirmation before stock posts</li>
+              <li>Controlled receiving with discrepancy tracking</li>
+              <li>Full audit trail with transport/challan details</li>
+              <li>Integration with allocation plans and pick lists</li>
+            </ul>
+            <div className="flex gap-2 pt-4">
+              <Link href="/owner/inventory/stock-requests">
+                <Button>Create Stock Request (Recommended)</Button>
+              </Link>
+              <Button variant="outline" onClick={() => setShowDeprecatedForm(true)}>
+                Continue with Legacy Transfer
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
         <Link href="/owner/inventory/warehouse-transfers">
           <Button variant="ghost" size="sm"><ArrowLeft className="mr-2 h-4 w-4" />Back</Button>
         </Link>
-        <h1 className="text-3xl font-bold mt-2">New Warehouse Transfer</h1>
+        <div className="flex items-center gap-2 mt-2">
+          <h1 className="text-3xl font-bold">New Warehouse Transfer</h1>
+          <span className="bg-yellow-100 text-yellow-800 text-xs font-medium px-2.5 py-0.5 rounded">Legacy</span>
+        </div>
         <p className="text-muted-foreground">Move stock between warehouse locations</p>
+      </div>
+
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 text-sm text-yellow-800">
+        <strong>Note:</strong> This is a legacy feature. Consider using{" "}
+        <Link href="/owner/inventory/stock-requests" className="underline font-semibold">Stock Requests</Link>{" "}
+        for better control and audit trail.
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">

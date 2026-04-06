@@ -11,6 +11,7 @@ type StockRequestRow = {
   branch?: { id?: number; name?: string };
   createdAt?: string | null;
   status?: string;
+  requestIntent?: string;
   items?: Array<{ id: number }>;
 };
 
@@ -65,6 +66,7 @@ export default function OwnerStockRequestsPage() {
   const [error, setError] = useState("");
   const [orgId, setOrgId] = useState<number | null>(null);
   const [orgLoaded, setOrgLoaded] = useState(false);
+  const [intentTab, setIntentTab] = useState<"" | "INTERNAL_TRANSFER" | "PROCUREMENT">("");
   const [filters, setFilters] = useState({ branchId: "", status: "", dateFrom: "", dateTo: "" });
 
   useEffect(() => {
@@ -108,6 +110,7 @@ export default function OwnerStockRequestsPage() {
       try {
         setError("");
         const params = new URLSearchParams({ orgId: String(orgId), limit: "100" });
+        if (intentTab) params.set("requestIntent", intentTab);
         if (filters.status) params.set("status", filters.status);
         if (filters.branchId) params.set("branchId", filters.branchId);
         if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
@@ -127,7 +130,7 @@ export default function OwnerStockRequestsPage() {
     return () => {
       cancelled = true;
     };
-  }, [orgLoaded, orgId, filters]);
+  }, [orgLoaded, orgId, filters, intentTab]);
 
   const branchOptions = useMemo(() => {
     return (branches || []).map((b) => ({
@@ -140,13 +143,45 @@ export default function OwnerStockRequestsPage() {
     <div className="dashboard-main-body">
       <PageHeader
         title="Stock Requests"
-        subtitle="Review branch requests and dispatch stock"
+        subtitle="Review branch transfer requests and warehouse procurement requests"
         breadcrumbs={[
           { label: "Home", href: "/owner" },
           { label: "Inventory", href: "/owner/inventory" },
           { label: "Stock Requests", href: "/owner/inventory/stock-requests" },
         ]}
       />
+
+      {/* Intent Tabs */}
+      <div className="card radius-12 mb-3">
+        <div className="card-body py-2">
+          <ul className="nav nav-pills gap-2">
+            <li className="nav-item">
+              <button
+                className={`nav-link ${intentTab === "" ? "active" : ""}`}
+                onClick={() => setIntentTab("")}
+              >
+                All Requests
+              </button>
+            </li>
+            <li className="nav-item">
+              <button
+                className={`nav-link ${intentTab === "INTERNAL_TRANSFER" ? "active" : ""}`}
+                onClick={() => setIntentTab("INTERNAL_TRANSFER")}
+              >
+                Branch Transfers
+              </button>
+            </li>
+            <li className="nav-item">
+              <button
+                className={`nav-link ${intentTab === "PROCUREMENT" ? "active" : ""}`}
+                onClick={() => setIntentTab("PROCUREMENT")}
+              >
+                Procurement / Replenishment
+              </button>
+            </li>
+          </ul>
+        </div>
+      </div>
 
       <div className="card radius-12 mb-3">
         <div className="card-body">
@@ -236,7 +271,11 @@ export default function OwnerStockRequestsPage() {
       ) : items.length === 0 ? (
         <div className="card radius-12">
           <div className="card-body text-center py-4 text-secondary">
-            No stock requests. Branches create requests from their inventory → Stock Requests.
+            {intentTab === "PROCUREMENT"
+              ? "No procurement requests. Warehouse staff create requests from their inventory dashboard."
+              : intentTab === "INTERNAL_TRANSFER"
+              ? "No branch transfer requests. Branch staff create requests from their inventory → Stock Requests."
+              : "No stock requests. Branches and warehouses create requests from their inventory."}
           </div>
         </div>
       ) : (
@@ -249,6 +288,7 @@ export default function OwnerStockRequestsPage() {
                     <th>ID</th>
                     <th>Date</th>
                     <th>Branch</th>
+                    <th>Type</th>
                     <th>Status</th>
                     <th>Items</th>
                     <th style={{ width: 140 }}></th>
@@ -260,6 +300,13 @@ export default function OwnerStockRequestsPage() {
                       <td className="fw-semibold">#{r.id}</td>
                       <td className="text-muted small">{formatDate(r.createdAt)}</td>
                       <td>{r.branch?.name ?? r.branchId ?? "—"}</td>
+                      <td>
+                        {r.requestIntent === "PROCUREMENT" ? (
+                          <span className="badge bg-warning text-dark">Procurement</span>
+                        ) : (
+                          <span className="badge bg-light text-dark">Transfer</span>
+                        )}
+                      </td>
                       <td>
                         <span className={`badge ${statusClass(r.status || "")}`}>{r.status ?? "—"}</span>
                       </td>

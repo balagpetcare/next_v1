@@ -104,6 +104,9 @@ const statusColors: Record<string, string> = {
   POSTED: "bg-blue-100 text-blue-800",
 };
 
+/** Radix Select forbids `value=""` on items (empty string clears selection). */
+const STATUS_FILTER_ALL = "__all__";
+
 export default function WriteOffsPage() {
   const { user } = useAuthStore();
   const searchParams = useSearchParams();
@@ -111,7 +114,7 @@ export default function WriteOffsPage() {
 
   const [requests, setRequests] = useState<WriteOffRequest[]>([]);
   const [loading, setLoading] = useState(true);
-  const [statusFilter, setStatusFilter] = useState<string>("");
+  const [statusFilter, setStatusFilter] = useState<string>(STATUS_FILTER_ALL);
   const [searchQuery, setSearchQuery] = useState("");
   const [pagination, setPagination] = useState({
     page: 1,
@@ -131,7 +134,9 @@ export default function WriteOffsPage() {
     try {
       const params = new URLSearchParams();
       params.append("orgId", orgId);
-      if (statusFilter) params.append("status", statusFilter);
+      if (statusFilter && statusFilter !== STATUS_FILTER_ALL) {
+        params.append("status", statusFilter);
+      }
       params.append("page", pagination.page.toString());
       params.append("limit", pagination.limit.toString());
 
@@ -246,7 +251,7 @@ export default function WriteOffsPage() {
             <SelectValue placeholder="Filter by status" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="">All Statuses</SelectItem>
+            <SelectItem value={STATUS_FILTER_ALL}>All Statuses</SelectItem>
             <SelectItem value="PENDING">Pending</SelectItem>
             <SelectItem value="APPROVED">Approved</SelectItem>
             <SelectItem value="REJECTED">Rejected</SelectItem>

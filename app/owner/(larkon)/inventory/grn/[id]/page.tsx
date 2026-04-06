@@ -1,13 +1,34 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Modal, Button } from "react-bootstrap";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 import { ownerGet } from "@/app/owner/_lib/ownerApi";
-import { grnVoid } from "@/lib/api";
+import { grnVoid, grnSubmitForConfirmation, grnPrintUrl } from "@/lib/api";
 import { useToast } from "@/src/hooks/useToast";
+
+function deriveDisplayStatus(data: any): string {
+  const grnStatus = (data?.status || "").toUpperCase();
+  if (grnStatus === "VOIDED") return "VOIDED";
+  if (grnStatus === "RECEIVED") return "RECEIVED";
+  if (grnStatus === "DRAFT" && data?.vendorReceiveSession?.status === "AWAITING_CONFIRMATION") return "PENDING_CONFIRMATION";
+  return grnStatus || "DRAFT";
+}
+
+function statusBadgeClass(s: string) {
+  if (s === "DRAFT") return "bg-secondary";
+  if (s === "PENDING_CONFIRMATION") return "bg-warning text-dark";
+  if (s === "RECEIVED") return "bg-success";
+  if (s === "VOIDED") return "bg-danger";
+  return "bg-primary";
+}
+
+function statusBadgeLabel(s: string) {
+  if (s === "PENDING_CONFIRMATION") return "Pending Confirmation";
+  return s;
+}
 
 export default function OwnerGrnDetailPage() {
   const params = useParams();
@@ -20,27 +41,26 @@ export default function OwnerGrnDetailPage() {
   const [voidOpen, setVoidOpen] = useState(false);
   const [voidReason, setVoidReason] = useState("");
   const [voiding, setVoiding] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  const loadGrn = useCallback(async () => {
+    if (!id) return;
+    setLoading(true);
+    setErr("");
+    try {
+      const res = await ownerGet<{ success?: boolean; data?: unknown }>(`/api/v1/grn/${id}`);
+      const g = (res as { data?: unknown })?.data ?? res;
+      setData(g);
+    } catch (e: unknown) {
+      setErr(e instanceof Error ? e.message : "Failed to load GRN");
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
 
   useEffect(() => {
-    if (!id) return;
-    let cancelled = false;
-    (async () => {
-      setLoading(true);
-      setErr("");
-      try {
-        const res = await ownerGet<{ success?: boolean; data?: unknown }>(`/api/v1/grn/${id}`);
-        const g = (res as { data?: unknown })?.data ?? res;
-        if (!cancelled) setData(g);
-      } catch (e: unknown) {
-        if (!cancelled) setErr(e instanceof Error ? e.message : "Failed to load GRN");
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [id]);
+    loadGrn();
+  }, [loadGrn]);
 
   async function doVoid() {
     if (!id) return;
@@ -54,6 +74,20 @@ export default function OwnerGrnDetailPage() {
       toast.error(e instanceof Error ? e.message : "Void failed");
     } finally {
       setVoiding(false);
+    }
+  }
+
+  async function doSubmitForConfirmation() {
+    if (!id) return;
+    setSubmitting(true);
+    try {
+      await grnSubmitForConfirmation(id);
+      toast.success("Submitted for warehouse manager confirmation. Manager will be notified.");
+      await loadGrn();
+    } catch (e: unknown) {
+      toast.error(e instanceof Error ? e.message : "Submit failed");
+    } finally {
+      setSubmitting(false);
     }
   }
 
@@ -72,6 +106,14 @@ export default function OwnerGrnDetailPage() {
 
   const po = data.purchaseOrder;
   const lines = Array.isArray(data.lines) ? data.lines : [];
+  const displayStatus = deriveDisplayStatus(data);
+  const isDraft = String(data.status).toUpperCase() === "DRAFT";
+  const sess = data.vendorReceiveSession;
+  const sessionIsDraft = sess?.status === "DRAFT";
+  const sessionIsAwaiting = sess?.status === "AWAITING_CONFIRMATION";
+  const hasDiscrepancy = lines.some((l: any) =>
+    (l.quantityDamaged ?? 0) > 0 || (l.quantityShort ?? 0) > 0 || (l.quantityExtra ?? 0) > 0
+  );
 
   return (
     <div className="container-fluid py-4">
@@ -96,13 +138,32 @@ export default function OwnerGrnDetailPage() {
             <div className="card-body p-24">
               <div className="text-muted small">Status</div>
               <div className="mt-1 d-flex flex-wrap align-items-center gap-2">
-                <span className="badge bg-primary">{data.status}</span>
-                {String(data.status).toUpperCase() === "DRAFT" && (
+                <span className={`badge ${statusBadgeClass(displayStatus)}`}>{statusBadgeLabel(displayStatus)}</span>
+              </div>
+
+              {isDraft && (
+                <div className="mt-3 d-flex flex-wrap gap-2">
+                  {sessionIsDraft && (
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-warning"
+                      disabled={submitting}
+                      onClick={doSubmitForConfirmation}
+                    >
+                      {submitting ? "Submitting…" : "Submit for confirmation"}
+                    </button>
+                  )}
+                  {sessionIsAwaiting && (
+                    <span className="text-muted small align-self-center">
+                      Awaiting warehouse manager confirmation.
+                    </span>
+                  )}
                   <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => setVoidOpen(true)}>
                     Void draft
                   </button>
-                )}
-              </div>
+                </div>
+              )}
+
               <hr />
               <dl className="small mb-0">
                 <dt className="text-muted">Invoice</dt>
@@ -111,17 +172,44 @@ export default function OwnerGrnDetailPage() {
                 <dd className="mb-2">
                   {data.receivedAt ? new Date(data.receivedAt).toLocaleString() : "—"}
                 </dd>
+                <dt className="text-muted">Vendor</dt>
+                <dd className="mb-2">{data.vendor?.name || "—"}</dd>
                 {po && (
                   <>
                     <dt className="text-muted">Purchase order</dt>
-                    <dd className="mb-0">
+                    <dd className="mb-2">
                       <Link href={`/owner/inventory/purchase-orders/${po.id}`} className="text-decoration-none">
                         {po.poNumber}
                       </Link>
                     </dd>
                   </>
                 )}
+                <dt className="text-muted">Location</dt>
+                <dd className="mb-2">{data.location?.name || "—"} {data.location?.branch ? `(${data.location.branch.name})` : ""}</dd>
+                {sess?.submittedAt && (
+                  <>
+                    <dt className="text-muted">Submitted for confirmation</dt>
+                    <dd className="mb-2">{new Date(sess.submittedAt).toLocaleString()}</dd>
+                  </>
+                )}
+                {sess?.confirmedAt && (
+                  <>
+                    <dt className="text-muted">Confirmed</dt>
+                    <dd className="mb-2">{new Date(sess.confirmedAt).toLocaleString()}</dd>
+                  </>
+                )}
               </dl>
+
+              <div className="mt-3 d-flex flex-wrap gap-2">
+                <a href={grnPrintUrl(data.id, "grn")} target="_blank" rel="noopener" className="btn btn-outline-secondary btn-sm">
+                  <i className="ri-printer-line me-1" />Print GRN
+                </a>
+                {hasDiscrepancy && (
+                  <a href={grnPrintUrl(data.id, "discrepancy")} target="_blank" rel="noopener" className="btn btn-outline-warning btn-sm">
+                    <i className="ri-error-warning-line me-1" />Discrepancy report
+                  </a>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -165,28 +253,37 @@ export default function OwnerGrnDetailPage() {
               <tr>
                 <th>SKU</th>
                 <th className="text-end">Qty</th>
+                <th className="text-end">Damaged</th>
+                <th className="text-end">Short</th>
+                <th className="text-end">Extra</th>
                 <th>Lot</th>
                 <th>Expiry</th>
                 <th>Barcode</th>
               </tr>
             </thead>
             <tbody>
-              {lines.map((l: any) => (
-                <tr key={l.id}>
-                  <td>
-                    <span className="small text-muted d-block">{l.variant?.sku}</span>
-                    {l.variant?.title}
-                  </td>
-                  <td className="text-end">{l.quantity}</td>
-                  <td className="small">{l.lot?.lotCode || l.lotCode || "—"}</td>
-                  <td className="small">
-                    {l.lot?.expDate || l.expDate
-                      ? new Date(l.lot?.expDate || l.expDate).toLocaleDateString()
-                      : "—"}
-                  </td>
-                  <td className="small">{l.supplierBarcode || l.receiveBarcode || "—"}</td>
-                </tr>
-              ))}
+              {lines.map((l: any) => {
+                const disc = (l.quantityDamaged ?? 0) > 0 || (l.quantityShort ?? 0) > 0 || (l.quantityExtra ?? 0) > 0;
+                return (
+                  <tr key={l.id} className={disc ? "table-warning" : ""}>
+                    <td>
+                      <span className="small text-muted d-block">{l.variant?.sku}</span>
+                      {l.variant?.title}
+                    </td>
+                    <td className="text-end">{l.quantity}</td>
+                    <td className="text-end">{l.quantityDamaged || "—"}</td>
+                    <td className="text-end">{l.quantityShort || "—"}</td>
+                    <td className="text-end">{l.quantityExtra ?? "—"}</td>
+                    <td className="small">{l.lot?.lotCode || l.lotCode || "—"}</td>
+                    <td className="small">
+                      {l.lot?.expDate || l.expDate
+                        ? new Date(l.lot?.expDate || l.expDate).toLocaleDateString()
+                        : "—"}
+                    </td>
+                    <td className="small">{l.supplierBarcode || l.receiveBarcode || "—"}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

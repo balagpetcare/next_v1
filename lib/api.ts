@@ -12,18 +12,29 @@ async function parseError(res: Response): Promise<never> {
   let code: string | undefined;
   let unmet: string[] | undefined;
   let errors: unknown[] | undefined;
+  let requiredPermissions: string[] | undefined;
   try {
     const j = await res.json();
     if (j?.message) msg = j.message;
     if (typeof j?.code === "string") code = j.code;
     if (Array.isArray(j?.unmet)) unmet = j.unmet as string[];
     if (Array.isArray(j?.errors)) errors = j.errors as unknown[];
-  } catch {}
-  const err = new Error(msg) as Error & { status?: number; code?: string; unmet?: string[]; errors?: unknown[] };
+    if (Array.isArray(j?.requiredPermissions)) requiredPermissions = j.requiredPermissions as string[];
+  } catch {
+    /* non-JSON body */
+  }
+  const err = new Error(msg) as Error & {
+    status?: number;
+    code?: string;
+    unmet?: string[];
+    errors?: unknown[];
+    requiredPermissions?: string[];
+  };
   err.status = res.status;
   if (code) err.code = code;
   if (unmet?.length) err.unmet = unmet;
   if (errors?.length) err.errors = errors;
+  if (requiredPermissions?.length) err.requiredPermissions = requiredPermissions;
   throw err;
 }
 
@@ -249,7 +260,22 @@ export async function fetchBranchSummary(branchId: string | number): Promise<{
       returnsToday: 0,
       todayAppointments: undefined,
       cashSnapshot: undefined,
+      vendorReceivePendingCount: 0,
     };
+
+    const orgIdForGrn = rawBranch?.orgId != null ? Number(rawBranch.orgId) : null;
+    const canSeeVendorReceiveQueue = ["purchase.receive", "grn.post", "grn.create", "inbound.grn"].some((p) =>
+      (myAccess.permissions ?? []).includes(p)
+    );
+    if (orgIdForGrn && canSeeVendorReceiveQueue) {
+      try {
+        const pc = await grnPendingVendorReceiveCount({ orgId: orgIdForGrn, branchId: Number(id) });
+        kpis.vendorReceivePendingCount = pc.awaitingConfirmation;
+        kpis.vendorReceiveDraftCount = pc.draftVendorReceives;
+      } catch {
+        /* ignore — user may lack GRN route permission in edge cases */
+      }
+    }
     const todayBoard: Record<string, any> = {
       approvalsPending: [],
       tasksAssignedToMe: [],
@@ -435,10 +461,11 @@ export async function staffReceiveTransfer(id: number, body: { items: { variantI
 }
 
 // ========== Stock Requests (branch request → owner fulfill → dispatch → receive) ==========
-export async function staffStockRequestsList(opts?: { branchId?: string; status?: string; dateFrom?: string; dateTo?: string; page?: number; limit?: number }) {
+export async function staffStockRequestsList(opts?: { branchId?: string; status?: string; requestIntent?: string; dateFrom?: string; dateTo?: string; page?: number; limit?: number }) {
   const params = new URLSearchParams();
   if (opts?.branchId) params.set("branchId", opts.branchId);
   if (opts?.status) params.set("status", opts.status ?? "");
+  if (opts?.requestIntent) params.set("requestIntent", opts.requestIntent);
   if (opts?.dateFrom) params.set("dateFrom", opts.dateFrom);
   if (opts?.dateTo) params.set("dateTo", opts.dateTo);
   if (opts?.page) params.set("page", String(opts.page));
@@ -517,18 +544,90 @@ export async function staffGetIncomingInboundUnified(branchId: string | number) 
   return Array.isArray(res?.data) ? res.data : [];
 }
 
+/** GET /api/v1/inventory/receipts/pending-po-receipts?branchId= – Approved/partially-received POs awaiting vendor GRN receipt */
+export async function staffGetPendingPoReceipts(branchId: string | number): Promise<any[]> {
+  try {
+    const res = await apiGet<{ success?: boolean; data?: any[] }>(
+      `/api/v1/inventory/receipts/pending-po-receipts?branchId=${encodeURIComponent(String(branchId))}`
+    );
+    return Array.isArray(res?.data) ? res.data : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Aggregated operational queues (confirmations, discrepancies, draft GRNs, blocked POS) — GET /api/v1/inventory/operations/exception-summary */
+export type OperationsExceptionSummary = {
+  pendingConfirmations: { vendorReceiveSessions: number; dispatchReceiveSessions: number };
+  discrepancies: { inboundOpen: number; dispatchPending: number };
+  queues: { draftGrns: number; inTransitDispatches: number };
+  blockedSales: { posOrdersPendingPayment: number };
+};
+
+export async function inventoryOperationsExceptionSummary(orgId?: number | null): Promise<OperationsExceptionSummary | null> {
+  const q =
+    orgId != null && Number.isFinite(Number(orgId)) && Number(orgId) > 0
+      ? `?orgId=${encodeURIComponent(String(orgId))}`
+      : "";
+  try {
+    const res = await apiGet<{ success?: boolean; data?: OperationsExceptionSummary }>(
+      `/api/v1/inventory/operations/exception-summary${q}`
+    );
+    return res?.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** GET /api/v1/inventory/lookup/variant-by-barcode — catalog variant for receive / scanner */
+export async function inventoryLookupVariantByBarcode(
+  barcode: string,
+  orgId?: number | null
+): Promise<{
+  id: number;
+  sku: string;
+  title: string;
+  productId: number;
+  barcode: string | null;
+  product?: { id: number; name: string };
+} | null> {
+  const trimmed = String(barcode || "").trim();
+  if (!trimmed) return null;
+  const params = new URLSearchParams({ barcode: trimmed });
+  if (orgId != null && Number.isFinite(Number(orgId)) && Number(orgId) > 0) {
+    params.set("orgId", String(orgId));
+  }
+  try {
+    const res = await apiGet<{ success?: boolean; data?: any }>(`/api/v1/inventory/lookup/variant-by-barcode?${params}`);
+    return res?.data ?? null;
+  } catch {
+    return null;
+  }
+}
+
 /** GET /api/v1/inventory/dispatches/:id – Dispatch detail with items (for receive flow) */
 export async function staffGetDispatch(dispatchId: number | string) {
   const res = await apiGet<{ success?: boolean; data?: any }>(`/api/v1/inventory/dispatches/${dispatchId}`);
   return res?.data ?? res;
 }
 
-/** POST /api/v1/inventory/dispatches/:id/receive – Receive (partial/full), creates GRN */
+/**
+ * POST /api/v1/inventory/dispatches/:id/receive
+ * - Without receiveMode: staff without confirm permission saves verification only; managers post immediately (legacy).
+ * - receiveMode: `verify` | `submit` | `confirm` for controlled draft → manager confirmation → ledger post.
+ */
 export async function staffReceiveDispatch(
   dispatchId: number | string,
-  body: { items: { variantId: number; lotId?: number; quantityReceived?: number; quantityDamaged?: number; quantityShort?: number }[]; notes?: string }
+  body: {
+    items?: { variantId: number; lotId?: number; quantityReceived?: number; quantityDamaged?: number; quantityShort?: number }[];
+    notes?: string;
+    receiveMode?: "verify" | "submit" | "confirm";
+  }
 ) {
-  return apiPost<{ success?: boolean; data?: any; message?: string }>(`/api/v1/inventory/dispatches/${dispatchId}/receive`, body);
+  return apiPost<{ success?: boolean; data?: any; message?: string; receiveMode?: string }>(
+    `/api/v1/inventory/dispatches/${dispatchId}/receive`,
+    body
+  );
 }
 
 /** GET /api/v1/inventory/stock-request-products - Paginated products with variant-wise stock for New Stock Request picker */
@@ -634,10 +733,10 @@ export async function staffRecordPosSale(body: {
   return apiPost<{ success?: boolean; data?: { ledgerIds?: number[]; balance?: any }; message?: string }>("/api/v1/inventory/pos-sale", body);
 }
 
-/** POST /api/v1/pos/sale – create POS sale (branchId, items, paymentMethod, discountPercent?, taxPercent?, customerId?, notes) */
+/** POST /api/v1/pos/sale – create POS sale (branchId, items, paymentMethod, discountPercent?, taxPercent?, customerId?, notes). When org POS pricing governance is on, pass retailDiscountApprovalId on a line if an over-threshold discount was pre-approved. */
 export async function staffPosSale(body: {
   branchId: number;
-  items: { productId: number; variantId?: number; quantity: number; price: number }[];
+  items: { productId: number; variantId?: number; quantity: number; price: number; retailDiscountApprovalId?: number }[];
   paymentMethod: string;
   discountPercent?: number;
   taxPercent?: number;
@@ -5135,6 +5234,12 @@ export async function purchaseOrderCreate(body: Record<string, unknown>): Promis
   return (res as { data?: unknown })?.data ?? res;
 }
 
+export async function purchaseOrderCreateFromRequest(requestId: number, body: { vendorId: number; warehouseId?: number; expectedDeliveryDate?: string; notes?: string; currency?: string }): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/purchase-orders/from-request/${requestId}`, body);
+  if (!res?.success && (res as { message?: string })?.message) throw new Error((res as { message: string }).message);
+  return (res as { data?: unknown })?.data ?? res;
+}
+
 export async function purchaseOrderAction(
   id: number,
   action: "submit" | "approve" | "reject" | "cancel",
@@ -5154,10 +5259,101 @@ export async function grnGet(id: number, orgId?: number): Promise<unknown | null
   return res?.data ?? null;
 }
 
+/** Same-origin paths for browser print preview (iframe); auth via cookies. */
+export function grnPrintUrl(grnId: number, kind: "grn" | "discrepancy" = "grn"): string {
+  return kind === "discrepancy" ? `/api/v1/grn/${grnId}/print/discrepancy` : `/api/v1/grn/${grnId}/print`;
+}
+
+export function dispatchPrintUrl(
+  dispatchId: number,
+  kind: "challan" | "branch-confirmation" | "discrepancy" | "branch-worksheet"
+): string {
+  const base = `/api/v1/inventory/dispatches/${dispatchId}/print`;
+  if (kind === "challan") return `${base}/challan`;
+  if (kind === "branch-confirmation") return `${base}/branch-confirmation`;
+  if (kind === "branch-worksheet") return `${base}/branch-worksheet`;
+  return `${base}/discrepancy`;
+}
+
+export function purchaseOrderPrintUrl(poId: number, kind: "po" | "worksheet" = "po"): string {
+  const base = `/api/v1/purchase-orders/${poId}/print`;
+  return kind === "worksheet" ? `${base}/worksheet` : base;
+}
+
+export function pickListPrintUrl(pickListId: number): string {
+  return `/api/v1/pick-lists/${pickListId}/print`;
+}
+
 export async function grnVoid(id: number, body?: { reason?: string }): Promise<unknown> {
   const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/grn/${id}/void`, body || {});
   if (!res?.success && res?.message) throw new Error(res.message);
   return res?.data ?? res;
+}
+
+export async function grnSubmitForConfirmation(id: number): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/grn/${id}/vendor-receive/submit`, {});
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+export async function grnReceive(id: number): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/grn/${id}/receive`, {});
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+export type GrnManagerConfirmLinePayload = {
+  lineId: number;
+  acceptedQty: number;
+  damagedQty: number;
+  shortQty?: number | null;
+  extraQty: number;
+  lot?: string | null;
+  expiry?: string | null;
+  note?: string | null;
+};
+
+export async function grnConfirm(
+  id: number,
+  body?: {
+    lines?: GrnManagerConfirmLinePayload[];
+    notes?: string;
+    deliveryConditionNote?: string;
+    vendorHandoverNote?: string;
+  }
+): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/grn/${id}/confirm`, body || {});
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+/** Warehouse manager: persist line edits on a draft GRN without posting stock. */
+export async function grnSaveVendorReceiveDraft(
+  id: number,
+  body?: { lines?: GrnManagerConfirmLinePayload[]; notes?: string }
+): Promise<unknown> {
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(
+    `/api/v1/grn/${id}/vendor-receive/draft`,
+    body || {}
+  );
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+/** Pending vendor receive counts for branch (AWAITING_CONFIRMATION + draft sessions). */
+export async function grnPendingVendorReceiveCount(params: {
+  orgId: number;
+  branchId: number;
+}): Promise<{ awaitingConfirmation: number; draftVendorReceives: number }> {
+  const q = new URLSearchParams({ orgId: String(params.orgId), branchId: String(params.branchId) });
+  const res = await apiGet<{ success?: boolean; data?: { awaitingConfirmation?: number; draftVendorReceives?: number } }>(
+    `/api/v1/grn/pending-count?${q.toString()}`
+  );
+  const data = res && typeof res === "object" && "data" in res ? (res as { data?: { awaitingConfirmation?: number; draftVendorReceives?: number } }).data : undefined;
+  return {
+    awaitingConfirmation: Number(data?.awaitingConfirmation ?? 0) || 0,
+    draftVendorReceives: Number(data?.draftVendorReceives ?? 0) || 0,
+  };
 }
 
 export async function networkBalanceRecompute(orgId: number, branchId?: number): Promise<unknown> {
@@ -5288,6 +5484,33 @@ export async function inboundDiscrepancyResolve(id: number, body?: Record<string
   return res?.data ?? res;
 }
 
+/** GET /api/v1/inventory/locations — org-scoped list for owner dispatch destination picker */
+export type InventoryLocationRow = {
+  id: number;
+  name: string;
+  type: string;
+  branchId?: number;
+  branch?: {
+    id: number;
+    name: string;
+    orgId?: number;
+    typeLinks?: Array<{
+      isPrimary: boolean;
+      branchType: { code: string; nameEn: string } | null;
+    }>;
+  };
+};
+
+export async function inventoryLocationsList(orgId?: number): Promise<InventoryLocationRow[]> {
+  const q = new URLSearchParams();
+  if (orgId != null) q.set("orgId", String(orgId));
+  const qs = q.toString();
+  const res = await apiGet<{ success?: boolean; data?: InventoryLocationRow[] }>(
+    `/api/v1/inventory/locations${qs ? `?${qs}` : ""}`
+  );
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
 export async function allocationPlansList(params?: { orgId?: number; status?: string }): Promise<{ items: unknown[]; pagination?: unknown }> {
   const q = new URLSearchParams();
   if (params?.orgId) q.set("orgId", String(params.orgId));
@@ -5317,9 +5540,51 @@ export async function allocationPlanRunFefo(id: number, orgId?: number): Promise
   return res?.data ?? res;
 }
 
-export async function allocationPlanConfirm(id: number, orgId?: number): Promise<unknown> {
+export async function allocationPlanConfirm(
+  id: number,
+  orgId?: number,
+  opts?: { expectedVersion?: number }
+): Promise<unknown> {
   const q = orgId ? `?orgId=${orgId}` : "";
-  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/allocation-plans/${id}/confirm${q}`, {});
+  const payload: Record<string, unknown> = {};
+  if (opts?.expectedVersion != null) payload.expectedVersion = opts.expectedVersion;
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(
+    `/api/v1/allocation-plans/${id}/confirm${q}`,
+    payload
+  );
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+export async function allocationPlanReallocate(id: number, orgId?: number): Promise<unknown> {
+  const q = orgId ? `?orgId=${orgId}` : "";
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(
+    `/api/v1/allocation-plans/${id}/reallocate${q}`,
+    orgId != null ? { orgId } : {}
+  );
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+export async function allocationPlanManualLine(
+  id: number,
+  body: { variantId: number; lotId: number; locationId: number; quantity: number; orgId?: number }
+): Promise<unknown> {
+  const q = body.orgId ? `?orgId=${body.orgId}` : "";
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(
+    `/api/v1/allocation-plans/${id}/lines/manual${q}`,
+    body
+  );
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+export async function allocationPlanCancel(id: number, orgId?: number, reason?: string): Promise<unknown> {
+  const q = orgId ? `?orgId=${orgId}` : "";
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(
+    `/api/v1/allocation-plans/${id}/cancel${q}`,
+    { reason: reason ?? undefined }
+  );
   if (!res?.success && res?.message) throw new Error(res.message);
   return res?.data ?? res;
 }
@@ -5396,19 +5661,21 @@ export async function deliveryFail(id: number, reason: string): Promise<unknown>
   return res?.data ?? res;
 }
 
-/** POST /api/v1/fulfillment/stock-requests/:id/start — create allocation plan draft for enterprise path */
+/** POST /api/v1/fulfillment/stock-requests/:id/start — create allocation plan draft for enterprise path (idempotent: returns existing plan with meta.existingPlan) */
 export async function fulfillmentStartFromStockRequest(
   stockRequestId: number,
   body: { fromLocationId: number; warehouseId?: number; orgId?: number }
-): Promise<unknown> {
+): Promise<{ data: unknown; meta?: { existingPlan?: boolean } }> {
   const q = body.orgId ? `?orgId=${body.orgId}` : "";
   const { orgId, ...rest } = body;
-  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(
-    `/api/v1/fulfillment/stock-requests/${stockRequestId}/start${q}`,
-    rest
-  );
+  const res = await apiPost<{
+    success?: boolean;
+    data?: unknown;
+    message?: string;
+    meta?: { existingPlan?: boolean };
+  }>(`/api/v1/fulfillment/stock-requests/${stockRequestId}/start${q}`, rest);
   if (!res?.success && (res as { message?: string })?.message) throw new Error((res as { message?: string }).message);
-  return (res as { data?: unknown })?.data ?? res;
+  return { data: (res as { data?: unknown }).data ?? res, meta: (res as { meta?: { existingPlan?: boolean } }).meta };
 }
 
 /** GET /api/v1/fulfillment/stock-requests/:id/status — plan / pick / dispatch aggregate */

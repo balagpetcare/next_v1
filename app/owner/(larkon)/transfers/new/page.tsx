@@ -1,9 +1,15 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { ownerGet, ownerPost } from "@/app/owner/_lib/ownerApi";
+import { getUniqueVariants } from "@/src/lib/getUniqueVariants";
 
+/**
+ * @deprecated This page creates legacy StockTransfers.
+ * Users should use Stock Requests → Allocation → Dispatch flow instead.
+ */
 export default function NewTransferPage() {
   const router = useRouter();
   const [locations, setLocations] = useState<any[]>([]);
@@ -14,6 +20,7 @@ export default function NewTransferPage() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [showDeprecatedForm, setShowDeprecatedForm] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -74,14 +81,63 @@ export default function NewTransferPage() {
     }
   };
 
-  const allVariants = products.flatMap((p: any) =>
-    (p.variants ?? []).map((v: any) => ({ ...v, productName: p.name }))
-  );
+  const variantOptions = useMemo(() => {
+    const flat = products.flatMap((p: any) =>
+      (p.variants ?? []).map((v: any) => ({
+        id: v.id,
+        sku: v.sku,
+        title: v.title,
+        productName: p.name as string,
+      }))
+    );
+    return getUniqueVariants(flat);
+  }, [products]);
 
   if (loading) {
     return (
       <div className="container py-4">
         <div className="text-center py-5">Loading...</div>
+      </div>
+    );
+  }
+
+  // Show deprecation notice by default, with option to proceed
+  if (!showDeprecatedForm) {
+    return (
+      <div className="container py-4">
+        <div className="d-flex align-items-center gap-2 mb-4">
+          <button className="btn btn-outline-secondary btn-sm" onClick={() => router.back()}>
+            Back
+          </button>
+          <h5 className="mb-0">Create Stock Transfer</h5>
+        </div>
+
+        <div className="alert alert-warning">
+          <h5 className="alert-heading">Legacy Feature - Use Stock Requests Instead</h5>
+          <p>
+            This Stock Transfer feature is <strong>deprecated</strong>. For new transfers, please use the
+            modern workflow which provides:
+          </p>
+          <ul className="mb-3">
+            <li>Manager confirmation before stock posts</li>
+            <li>Controlled receiving with discrepancy tracking</li>
+            <li>Full audit trail with transport/challan details</li>
+            <li>Integration with allocation plans and pick lists</li>
+          </ul>
+          <hr />
+          <div className="d-flex gap-2">
+            <Link href="/owner/inventory/stock-requests" className="btn btn-primary">
+              Create Stock Request (Recommended)
+            </Link>
+            <button
+              type="button"
+              className="btn btn-outline-secondary"
+              onClick={() => setShowDeprecatedForm(true)}
+            >
+              Continue with Legacy Transfer
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -92,7 +148,15 @@ export default function NewTransferPage() {
         <button className="btn btn-outline-secondary btn-sm" onClick={() => router.back()}>
           Back
         </button>
-        <h5 className="mb-0">Create Stock Transfer</h5>
+        <h5 className="mb-0">Create Stock Transfer (Legacy)</h5>
+        <span className="badge bg-warning text-dark">Deprecated</span>
+      </div>
+
+      <div className="alert alert-warning mb-3">
+        <small>
+          <strong>Note:</strong> This is a legacy feature. Consider using{" "}
+          <Link href="/owner/inventory/stock-requests">Stock Requests</Link> for better control and audit trail.
+        </small>
       </div>
 
       {error && <div className="alert alert-danger">{error}</div>}
@@ -151,9 +215,9 @@ export default function NewTransferPage() {
                   required={i === 0}
                 >
                   <option value="">Variant...</option>
-                  {allVariants.map((v: any) => (
-                    <option key={v.id} value={v.id}>
-                      {v.productName} - {v.title ?? v.sku}
+                  {variantOptions.map((v) => (
+                    <option key={`variant-${v.id}`} value={v.id}>
+                      {v.productName ? `${v.productName} - ` : ""}{v.title ?? v.sku ?? v.id}
                     </option>
                   ))}
                 </select>

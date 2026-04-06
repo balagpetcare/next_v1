@@ -116,6 +116,8 @@ export default function OwnerStockRequestDetailPage() {
   const [enterpriseFulfillment, setEnterpriseFulfillment] = useState<any>(null);
   const [enterpriseLoading, setEnterpriseLoading] = useState(false);
   const [enterpriseActionLoading, setEnterpriseActionLoading] = useState(false);
+  /** After start (new or idempotent), quick link to the allocation plan detail */
+  const [enterprisePlanHighlightId, setEnterprisePlanHighlightId] = useState<number | null>(null);
 
   const prevFromLocationIdRef = useRef<string | undefined>(undefined);
 
@@ -128,6 +130,7 @@ export default function OwnerStockRequestDetailPage() {
     setExtraLines([]);
     setFromLocationId("");
     setLocations([]);
+    setEnterprisePlanHighlightId(null);
     prevFromLocationIdRef.current = undefined;
     (async () => {
       try {
@@ -534,11 +537,54 @@ export default function OwnerStockRequestDetailPage() {
 
       <div className="d-flex align-items-center gap-2 mb-3">
         <span className={`badge ${statusClass(request.status)}`}>{request.status}</span>
+        {request.requestIntent === "PROCUREMENT" ? (
+          <span className="badge bg-warning text-dark">Procurement Request</span>
+        ) : (
+          <span className="badge bg-light text-dark">Branch Transfer</span>
+        )}
         {request.transfers?.[0] && <span className="badge bg-light text-dark">Transfer #{request.transfers[0].id}</span>}
+        {request.linkedPurchaseOrderId && (
+          <Link href={`/owner/inventory/purchase-orders/${request.linkedPurchaseOrderId}`} className="badge bg-info text-white text-decoration-none">
+            Linked PO #{request.linkedPurchaseOrderId}
+          </Link>
+        )}
         {request.status === "CANCELLED" && (request as any).declineReason && (
           <span className="text-muted small">Reason: {(request as any).declineReason}</span>
         )}
       </div>
+
+      {/* Procurement info card */}
+      {request.requestIntent === "PROCUREMENT" && (
+        <div className="card radius-12 mb-3 border-warning">
+          <div className="card-body">
+            <div className="d-flex justify-content-between align-items-start">
+              <div>
+                <h6 className="mb-1 fw-semibold">Procurement / Replenishment Request</h6>
+                <p className="mb-1 small text-muted">
+                  This request is from a warehouse branch for external vendor stock, not an internal transfer.
+                </p>
+                {request.procurementNote && (
+                  <p className="mb-1 small"><strong>Note:</strong> {request.procurementNote}</p>
+                )}
+                {request.urgency && (
+                  <span className={`badge me-2 ${request.urgency === "CRITICAL" ? "bg-danger" : request.urgency === "URGENT" ? "bg-warning text-dark" : "bg-secondary"}`}>
+                    {request.urgency}
+                  </span>
+                )}
+              </div>
+              {!request.linkedPurchaseOrderId &&
+                ["SUBMITTED", "OWNER_REVIEW", "APPROVED"].includes(request.status) && (
+                <Link
+                  href={`/owner/inventory/purchase-orders/new?fromRequestId=${request.id}`}
+                  className="btn btn-warning btn-sm"
+                >
+                  Create Purchase Order
+                </Link>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {error && <div className="alert alert-danger radius-12">{error}</div>}
       {success && <div className="alert alert-success radius-12">{success}</div>}
@@ -624,11 +670,23 @@ export default function OwnerStockRequestDetailPage() {
               if (!fromLocationId || !request?.orgId || !id) return;
               setEnterpriseActionLoading(true);
               setError("");
+              setSuccess("");
               try {
-                await ownerPost(`/api/v1/fulfillment/stock-requests/${encodeURIComponent(id)}/start`, {
+                const startJson = await ownerPost<{
+                  success?: boolean;
+                  data?: { id?: number };
+                  meta?: { existingPlan?: boolean };
+                }>(`/api/v1/fulfillment/stock-requests/${encodeURIComponent(id)}/start`, {
                   fromLocationId: Number(fromLocationId),
                   orgId: request.orgId,
                 });
+                const pid = startJson?.data?.id;
+                if (typeof pid === "number") setEnterprisePlanHighlightId(pid);
+                if (startJson?.meta?.existingPlan && pid) {
+                  setSuccess(`Using existing allocation plan #${pid}.`);
+                } else {
+                  setSuccess("Allocation plan ready.");
+                }
                 const res = await ownerGet(
                   `/api/v1/fulfillment/stock-requests/${encodeURIComponent(id)}/status?orgId=${encodeURIComponent(String(request.orgId))}`
                 );
@@ -642,6 +700,16 @@ export default function OwnerStockRequestDetailPage() {
           >
             {enterpriseActionLoading ? "Starting…" : "Start allocation plan (draft)"}
           </button>
+          {enterprisePlanHighlightId != null && (
+            <div className="mt-2">
+              <Link
+                className="btn btn-sm btn-outline-secondary"
+                href={`/owner/inventory/allocation/${enterprisePlanHighlightId}`}
+              >
+                Open allocation plan #{enterprisePlanHighlightId}
+              </Link>
+            </div>
+          )}
           <p className="text-muted mt-2 mb-0">
             Uses the selected source location. Staff complete FEFO run, confirm, pick, and dispatch in the warehouse
             operations UI. Legacy “Fulfill & Dispatch” below remains available.

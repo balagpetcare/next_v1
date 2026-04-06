@@ -8,7 +8,7 @@ import { ownerGet } from "@/app/owner/_lib/ownerApi";
 import { Modal } from "react-bootstrap";
 import { purchaseOrderCreate } from "@/lib/api";
 import type { VariantOption } from "../../receipts/bulk/types";
-import { ProductBrowserPanel } from "../../receipts/bulk/ProductBrowserPanel";
+import { POProductPicker } from "./POProductPicker";
 
 type Org = { id: number; name?: string };
 type WarehouseRow = { id: number; name: string };
@@ -186,11 +186,7 @@ export default function PurchaseOrderCreateForm() {
   const [showWhModal, setShowWhModal] = useState(false);
   const [whFilter, setWhFilter] = useState("");
 
-  const [showProductModal, setShowProductModal] = useState(false);
-  const [pmQ, setPmQ] = useState("");
-  const [pmOpts, setPmOpts] = useState<VariantOption[]>([]);
-  const [pmLoading, setPmLoading] = useState(false);
-  const [pmSelected, setPmSelected] = useState<Set<number>>(new Set());
+  const [pickerCollapsed, setPickerCollapsed] = useState(false);
 
   useEffect(() => {
     let c = false;
@@ -261,34 +257,6 @@ export default function PurchaseOrderCreateForm() {
     };
   }, [showVendorModal, orgId, vendorModalQ]);
 
-  useEffect(() => {
-    if (!showProductModal || orgId == null) return;
-    let cancelled = false;
-    const t = setTimeout(() => {
-      if (!pmQ.trim() || pmQ.trim().length < 2) {
-        setPmOpts([]);
-        setPmLoading(false);
-        return;
-      }
-      (async () => {
-        setPmLoading(true);
-        try {
-          const res = await ownerGet<{ data?: VariantOption[] }>(
-            `/api/v1/inventory/variants/search?q=${encodeURIComponent(pmQ.trim())}&limit=40&orgId=${orgId}`
-          );
-          if (!cancelled) setPmOpts(Array.isArray(res?.data) ? res.data : []);
-        } catch {
-          if (!cancelled) setPmOpts([]);
-        } finally {
-          if (!cancelled) setPmLoading(false);
-        }
-      })();
-    }, 280);
-    return () => {
-      cancelled = true;
-      clearTimeout(t);
-    };
-  }, [showProductModal, orgId, pmQ]);
 
   const filteredWarehouses = useMemo(() => {
     const t = whFilter.trim().toLowerCase();
@@ -433,33 +401,6 @@ export default function PurchaseOrderCreateForm() {
     return s;
   }, [lines]);
 
-  function addSelectedProductLines() {
-    const picked = pmOpts.filter((v) => pmSelected.has(v.id));
-    const used = new Set(usedVariantIds);
-    const toAdd: LineDraft[] = [];
-    for (const v of picked) {
-      if (used.has(v.id)) continue;
-      used.add(v.id);
-      toAdd.push({
-        ...newLine(),
-        variantId: v.id,
-        sku: v.sku,
-        title: v.title,
-        productLabel: v.product?.name ?? "",
-        orderedQty: "1",
-        unitCost: "",
-        note: "",
-      });
-    }
-    if (toAdd.length) {
-      setLines((prev) => [...prev, ...toAdd]);
-      setError("");
-    }
-    setShowProductModal(false);
-    setPmSelected(new Set());
-    setPmQ("");
-    setPmOpts([]);
-  }
 
   const selectedWarehouseLabel =
     warehouseId && warehouses.length
@@ -651,46 +592,31 @@ export default function PurchaseOrderCreateForm() {
               <div className="card-header py-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
                 <h6 className="mb-0 fw-semibold">Line items</h6>
                 <div className="d-flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    className="btn btn-sm btn-outline-secondary"
-                    onClick={() => {
-                      setPmQ("");
-                      setPmOpts([]);
-                      setPmSelected(new Set());
-                      setShowProductModal(true);
-                    }}
-                    disabled={submitting || orgId == null}
-                  >
-                    Add products (multi)
-                  </button>
                   <button type="button" className="btn btn-sm btn-outline-primary" onClick={addLine} disabled={submitting}>
-                    + Add line
+                    + Add blank line
                   </button>
                 </div>
               </div>
               {orgId != null && (
-                <div className="card-body border-bottom py-3 d-none d-lg-block">
-                  <p className="small text-muted mb-2">
-                    Browse catalog (same filters as bulk receive): tick variants to add lines, or use the table below.
-                  </p>
-                  <div className="row g-3">
-                    <div className="col-lg-5">
-                      <div className="border rounded p-2 bg-light">
-                        <ProductBrowserPanel
-                          orgId={orgId}
-                          disabled={submitting}
-                          selectedVariantIds={usedVariantIds}
-                          onAddVariant={(v) => {
-                            if (usedVariantIds.has(v.id)) {
-                              setError("Variant already on a line. Adjust quantity on that line.");
-                              return;
-                            }
-                            setError("");
-                            setLines((prev) => [
-                              ...prev,
-                              {
-                                ...newLine(),
+                <POProductPicker
+                  orgId={orgId}
+                  disabled={submitting}
+                  selectedVariantIds={usedVariantIds}
+                  collapsed={pickerCollapsed}
+                  onToggleCollapse={() => setPickerCollapsed((v) => !v)}
+                  onAddVariant={(v) => {
+                    if (usedVariantIds.has(v.id)) {
+                      setError("Variant already on a line. Adjust quantity on that line.");
+                      return;
+                    }
+                    setError("");
+                    setLines((prev) => {
+                      const emptyIdx = prev.findIndex((l) => l.variantId == null);
+                      if (emptyIdx >= 0) {
+                        return prev.map((l, i) =>
+                          i === emptyIdx
+                            ? {
+                                ...l,
                                 variantId: v.id,
                                 sku: v.sku,
                                 title: v.title,
@@ -698,31 +624,26 @@ export default function PurchaseOrderCreateForm() {
                                 orderedQty: "1",
                                 unitCost: "",
                                 note: "",
-                              },
-                            ]);
-                          }}
-                          onRemoveVariant={(variantId) => {
-                            setLines((prev) => {
-                              const idx = prev.findIndex((l) => l.variantId === variantId);
-                              if (idx < 0) return prev;
-                              if (prev.length <= 1) {
-                                return prev.map((l, i) =>
-                                  i === idx
-                                    ? { ...newLine(), key: l.key }
-                                    : l
-                                );
                               }
-                              return prev.filter((_, i) => i !== idx);
-                            });
-                          }}
-                        />
-                      </div>
-                    </div>
-                    <div className="col-lg-7 small text-muted align-self-center">
-                      Use category / brand filters or search, then check variants. Uncheck in the browser to remove a line for that SKU.
-                    </div>
-                  </div>
-                </div>
+                            : l
+                        );
+                      }
+                      return [
+                        ...prev,
+                        {
+                          ...newLine(),
+                          variantId: v.id,
+                          sku: v.sku,
+                          title: v.title,
+                          productLabel: v.product?.name ?? "",
+                          orderedQty: "1",
+                          unitCost: "",
+                          note: "",
+                        },
+                      ];
+                    });
+                  }}
+                />
               )}
               <div className="table-responsive d-none d-md-block">
                 <table className="table table-hover align-middle mb-0">
@@ -795,19 +716,23 @@ export default function PurchaseOrderCreateForm() {
                           <td className="text-end">
                             <button
                               type="button"
-                              className="btn btn-link btn-sm text-decoration-none p-0 me-2"
+                              className="btn btn-link btn-sm text-decoration-none p-1 me-1"
                               onClick={() => duplicateLine(l.key)}
                               disabled={submitting}
+                              title="Duplicate line"
+                              aria-label="Duplicate line"
                             >
-                              Duplicate
+                              <i className="ri-file-copy-line fs-5" aria-hidden />
                             </button>
                             <button
                               type="button"
-                              className="btn btn-link btn-sm text-danger text-decoration-none p-0"
+                              className="btn btn-link btn-sm text-danger text-decoration-none p-1"
                               onClick={() => removeLine(l.key)}
                               disabled={submitting || lines.length <= 1}
+                              title="Remove line"
+                              aria-label="Remove line"
                             >
-                              Remove
+                              <i className="ri-delete-bin-line fs-5" aria-hidden />
                             </button>
                           </td>
                         </tr>
@@ -859,16 +784,24 @@ export default function PurchaseOrderCreateForm() {
                       </div>
                       <div className="mt-2 small text-muted">Line total: {lineTot != null ? lineTot.toFixed(2) : "—"}</div>
                       <div className="d-flex gap-2 mt-2">
-                        <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => duplicateLine(l.key)}>
-                          Duplicate
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-secondary"
+                          onClick={() => duplicateLine(l.key)}
+                          title="Duplicate line"
+                          aria-label="Duplicate line"
+                        >
+                          <i className="ri-file-copy-line" aria-hidden />
                         </button>
                         <button
                           type="button"
                           className="btn btn-sm btn-outline-danger"
                           onClick={() => removeLine(l.key)}
                           disabled={lines.length <= 1}
+                          title="Remove line"
+                          aria-label="Remove line"
                         >
-                          Remove
+                          <i className="ri-delete-bin-line" aria-hidden />
                         </button>
                       </div>
                     </div>
@@ -1030,75 +963,6 @@ export default function PurchaseOrderCreateForm() {
         </Modal.Body>
       </Modal>
 
-      <Modal show={showProductModal} onHide={() => setShowProductModal(false)} size="lg" centered scrollable>
-        <Modal.Header closeButton>
-          <Modal.Title>Add line items (multi-select)</Modal.Title>
-        </Modal.Header>
-        <Modal.Body>
-          <input
-            type="text"
-            className="form-control mb-3"
-            placeholder="Search SKU / product (min 2 characters)…"
-            value={pmQ}
-            onChange={(e) => setPmQ(e.target.value)}
-          />
-          <div className="small text-muted mb-2">
-            {pmSelected.size > 0 ? `${pmSelected.size} selected` : "Search, then tick variants to add."}
-          </div>
-          <div style={{ maxHeight: 360, overflowY: "auto" }}>
-            {pmLoading && <div className="text-muted small py-2">Searching…</div>}
-            {!pmLoading && pmQ.trim().length >= 2 && pmOpts.length === 0 && (
-              <div className="text-muted small py-2">No variants found.</div>
-            )}
-            {!pmLoading && pmQ.trim().length < 2 && (
-              <div className="text-muted small py-2">Type at least 2 characters to search.</div>
-            )}
-            {pmOpts.map((v) => {
-              const disabled = usedVariantIds.has(v.id);
-              const checked = pmSelected.has(v.id);
-              return (
-                <div key={v.id} className="form-check border-bottom py-2">
-                  <input
-                    className="form-check-input"
-                    type="checkbox"
-                    id={`po-pm-${v.id}`}
-                    checked={checked}
-                    disabled={disabled}
-                    onChange={() => {
-                      setPmSelected((prev) => {
-                        const next = new Set(prev);
-                        if (next.has(v.id)) next.delete(v.id);
-                        else next.add(v.id);
-                        return next;
-                      });
-                    }}
-                  />
-                  <label className="form-check-label w-100" htmlFor={`po-pm-${v.id}`}>
-                    <span className="fw-semibold">{v.sku}</span>{" "}
-                    <span className="text-muted">{v.title}</span>
-                    {disabled && (
-                      <span className="badge bg-secondary ms-2">Already on PO</span>
-                    )}
-                  </label>
-                </div>
-              );
-            })}
-          </div>
-        </Modal.Body>
-        <Modal.Footer>
-          <button type="button" className="btn btn-outline-secondary" onClick={() => setShowProductModal(false)}>
-            Cancel
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary"
-            disabled={pmSelected.size === 0}
-            onClick={addSelectedProductLines}
-          >
-            Add selected
-          </button>
-        </Modal.Footer>
-      </Modal>
     </div>
   );
 }

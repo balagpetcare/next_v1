@@ -6,6 +6,7 @@ import { useSearchParams } from "next/navigation";
 import { Modal, Button, Offcanvas } from "react-bootstrap";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 import { ownerGet, ownerPost } from "@/app/owner/_lib/ownerApi";
+import { apiPost, inventoryLookupVariantByBarcode } from "@/lib/api";
 import { useToast } from "@/src/hooks/useToast";
 import { getMessageFromApiError } from "@/src/lib/apiErrorToMessage";
 import type { Location, SelectedRow, VariantOption } from "./types";
@@ -18,6 +19,36 @@ type Vendor = { id: number; name: string };
 
 type PoOpt = { id: number; poNumber: string; status: string; vendor?: { id: number; name: string } };
 
+/** Full PO line including variant details for grid pre-population */
+type PoDetailLine = {
+  id: number;
+  variantId: number;
+  orderedQty: number;
+  receivedQty: number;
+  unitCost?: number | null;
+  note?: string | null;
+  variant?: { id: number; sku: string; title: string };
+};
+
+/** Full PO detail for summary banner */
+type PoDetail = {
+  id: number;
+  poNumber: string;
+  status: string;
+  vendor?: { id: number; name: string } | null;
+  warehouse?: { id: number; name: string; branchId?: number | null } | null;
+  expectedDeliveryDate?: string | null;
+  currency?: string | null;
+  lines: PoDetailLine[];
+};
+
+export type BulkReceivePageProps = {
+  /** Staff embed: org when GET /api/v1/owner/organizations is unavailable */
+  fallbackOrgId?: number | null;
+  embedInStaff?: boolean;
+  staffBranchId?: string;
+};
+
 function resolvePurchaseOrderLineId(
   variantId: number,
   poLines: Array<{ id: number; variantId: number }> | undefined
@@ -28,7 +59,11 @@ function resolvePurchaseOrderLineId(
   return undefined;
 }
 
-export default function BulkReceivePage() {
+function BulkReceivePageInner(props?: BulkReceivePageProps) {
+  const fallbackOrgId = props?.fallbackOrgId ?? null;
+  const embedInStaff = props?.embedInStaff === true;
+  const staffBranchId = props?.staffBranchId ?? "";
+
   const searchParams = useSearchParams();
   const toast = useToast();
   const [locations, setLocations] = useState<Location[]>([]);
@@ -42,16 +77,24 @@ export default function BulkReceivePage() {
   const [purchaseOrderId, setPurchaseOrderId] = useState("");
   const [poOptions, setPoOptions] = useState<PoOpt[]>([]);
   const [poLoading, setPoLoading] = useState(false);
+  /** Full PO header + lines — loaded when purchaseOrderId is set */
+  const [poDetail, setPoDetail] = useState<PoDetail | null>(null);
   /** Loaded when purchaseOrderId is set — used to auto-fill purchaseOrderLineId per variant */
   const [poDetailLines, setPoDetailLines] = useState<Array<{ id: number; variantId: number }> | null>(null);
+  /** Whether the grid has been auto-populated from PO lines (prevents re-populate on subsequent re-renders) */
+  const poGridPopulatedRef = useRef<string>("");
+  /** OrgId from the user's first org — used to fetch PO data before a location is selected */
+  const [userOrgId, setUserOrgId] = useState<number | null>(null);
   const [rows, setRows] = useState<SelectedRow[]>([emptyRow()]);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
-  const [lastReceipt, setLastReceipt] = useState<{ grnId: number; lineCount: number; totalQty: number } | null>(null);
+  const [lastReceipt, setLastReceipt] = useState<{ grnId: number; lineCount: number; totalQty: number; submitted?: boolean; submitting?: boolean } | null>(null);
   const [mode, setMode] = useState<"visual" | "spreadsheet">("visual");
   const [showBrowserDrawer, setShowBrowserDrawer] = useState(false);
   const [focusedRowId, setFocusedRowId] = useState<string | null>(null);
   const [flashRowId, setFlashRowId] = useState<string | null>(null);
+  const [barcodeInput, setBarcodeInput] = useState("");
+  const [barcodeLoading, setBarcodeLoading] = useState(false);
   const [showBranchDispatchModal, setShowBranchDispatchModal] = useState(false);
   const [dispatchSourceWarehouseId, setDispatchSourceWarehouseId] = useState<string>("");
   const [creatingDispatch, setCreatingDispatch] = useState(false);
@@ -64,6 +107,13 @@ export default function BulkReceivePage() {
 
   const selectedLocation = locations.find((l) => String(l.id) === locationId);
   const orgId = selectedLocation?.branch?.orgId;
+
+  const resolvedOrgId = useMemo(() => {
+    if (orgId != null) return orgId;
+    if (userOrgId != null) return userOrgId;
+    if (fallbackOrgId != null && Number.isFinite(Number(fallbackOrgId))) return Number(fallbackOrgId);
+    return null;
+  }, [orgId, userOrgId, fallbackOrgId]);
 
   /** Only warehouses in the same org as the selected receive location — avoids defaulting to another org's warehouse (zero stock / wrong allocation). */
   const warehouseLocations = useMemo(
@@ -117,7 +167,7 @@ export default function BulkReceivePage() {
   }, [showBranchDispatchModal, warehouseLocations, dispatchSourceWarehouseId]);
 
   useEffect(() => {
-    if (!showBranchDispatchModal || !dispatchSourceWarehouseId || !orgId || !dispatchVariantIdsKey) {
+    if (!showBranchDispatchModal || !dispatchSourceWarehouseId || !resolvedOrgId || !dispatchVariantIdsKey) {
       setDispatchAvailability({});
       setDispatchAvailLoading(false);
       return;
@@ -155,7 +205,7 @@ export default function BulkReceivePage() {
       cancelled = true;
       setDispatchAvailLoading(false);
     };
-  }, [showBranchDispatchModal, dispatchSourceWarehouseId, orgId, dispatchVariantIdsKey]);
+  }, [showBranchDispatchModal, dispatchSourceWarehouseId, resolvedOrgId, dispatchVariantIdsKey]);
 
   const loadLocations = useCallback(async () => {
     setLoading(true);
@@ -174,6 +224,21 @@ export default function BulkReceivePage() {
     loadLocations();
   }, [loadLocations]);
 
+  // Load user's first org early so PO data can be fetched before location is selected
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await ownerGet<{ data?: { id: number }[] }>("/api/v1/owner/organizations");
+        const list = Array.isArray(res?.data) ? res.data : [];
+        if (!cancelled && list[0]?.id) setUserOrgId(list[0].id);
+      } catch {
+        // ignore
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   useEffect(() => {
     const po = searchParams.get("purchaseOrderId");
     const v = searchParams.get("vendorId");
@@ -182,7 +247,7 @@ export default function BulkReceivePage() {
   }, [searchParams]);
 
   useEffect(() => {
-    if (!orgId) {
+    if (!resolvedOrgId) {
       setPoOptions([]);
       return;
     }
@@ -190,7 +255,7 @@ export default function BulkReceivePage() {
     (async () => {
       setPoLoading(true);
       try {
-        const res = await ownerGet<{ data?: PoOpt[] }>(`/api/v1/purchase-orders?orgId=${orgId}&limit=100`);
+        const res = await ownerGet<{ data?: PoOpt[] }>(`/api/v1/purchase-orders?orgId=${resolvedOrgId}&limit=100`);
         const rows = Array.isArray(res?.data) ? res.data : [];
         const open = rows.filter((r) => ["APPROVED", "PARTIALLY_RECEIVED"].includes(String(r.status || "").toUpperCase()));
         if (!cancelled) setPoOptions(open);
@@ -203,32 +268,70 @@ export default function BulkReceivePage() {
     return () => {
       cancelled = true;
     };
-  }, [orgId]);
+  }, [resolvedOrgId]);
 
   useEffect(() => {
-    if (!orgId || !purchaseOrderId?.trim()) {
+    if (!resolvedOrgId || !purchaseOrderId?.trim()) {
+      setPoDetail(null);
       setPoDetailLines(null);
       return;
     }
     let cancelled = false;
     (async () => {
       try {
-        const res = await ownerGet<{ data?: { lines?: Array<{ id: number; variantId: number }> } }>(
-          `/api/v1/purchase-orders/${purchaseOrderId.trim()}?orgId=${orgId}`
+        const res = await ownerGet<{ data?: PoDetail }>(
+          `/api/v1/purchase-orders/${purchaseOrderId.trim()}?orgId=${resolvedOrgId}`
         );
-        const lines = res?.data?.lines;
-        if (!cancelled) setPoDetailLines(Array.isArray(lines) ? lines : null);
+        const po = res?.data ?? null;
+        if (cancelled) return;
+        setPoDetail(po);
+        const lines = po?.lines ?? null;
+        setPoDetailLines(Array.isArray(lines) ? lines.map((l) => ({ id: l.id, variantId: l.variantId })) : null);
+
+        // Auto-populate grid from PO lines — only once per PO load
+        const populateKey = `${purchaseOrderId.trim()}`;
+        if (po && Array.isArray(po.lines) && poGridPopulatedRef.current !== populateKey) {
+          poGridPopulatedRef.current = populateKey;
+          const pendingLines = po.lines.filter((l) => l.orderedQty - l.receivedQty > 0);
+          if (pendingLines.length > 0) {
+            const newRows: SelectedRow[] = pendingLines.map((l) => {
+              const pending = l.orderedQty - l.receivedQty;
+              return {
+                id: Math.random().toString(36).slice(2),
+                variantId: l.variantId,
+                sku: l.variant?.sku ?? "",
+                productName: l.variant?.title ?? "",
+                quantity: String(pending),
+                unitCost: l.unitCost != null ? String(l.unitCost) : "",
+                lotCode: "",
+                mfgDate: "",
+                expDate: "",
+                purchaseOrderLineId: String(l.id),
+                supplierBarcode: "",
+                orderedQty: l.orderedQty,
+                receivedQty: l.receivedQty,
+                pendingQty: pending,
+                poUnitCost: l.unitCost ?? null,
+              };
+            });
+            setRows(newRows);
+          }
+        }
       } catch {
-        if (!cancelled) setPoDetailLines(null);
+        if (!cancelled) {
+          setPoDetail(null);
+          setPoDetailLines(null);
+        }
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [orgId, purchaseOrderId]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resolvedOrgId, purchaseOrderId]);
 
   useEffect(() => {
-    if (!orgId || vendorSearch.length < 2) {
+    if (!resolvedOrgId || vendorSearch.length < 2) {
       setVendorOptions([]);
       return;
     }
@@ -236,7 +339,7 @@ export default function BulkReceivePage() {
     vendorSearchTimeoutRef.current = setTimeout(async () => {
       try {
         const res = await ownerGet<{ data: Vendor[] }>(
-          `/api/v1/vendors/lookup?orgId=${orgId}&q=${encodeURIComponent(vendorSearch)}&limit=15`
+          `/api/v1/vendors/lookup?orgId=${resolvedOrgId}&q=${encodeURIComponent(vendorSearch)}&limit=15`
         );
         setVendorOptions(Array.isArray(res?.data) ? res.data : []);
       } catch {
@@ -246,7 +349,7 @@ export default function BulkReceivePage() {
     return () => {
       if (vendorSearchTimeoutRef.current) clearTimeout(vendorSearchTimeoutRef.current);
     };
-  }, [orgId, vendorSearch]);
+  }, [resolvedOrgId, vendorSearch]);
 
   const selectedVariantIds = new Set(rows.filter((r) => r.variantId != null).map((r) => r.variantId as number));
 
@@ -286,6 +389,63 @@ export default function BulkReceivePage() {
     },
     [toast]
   );
+
+  const handleBarcodeLookup = useCallback(async () => {
+    const code = barcodeInput.trim();
+    if (!code) return;
+    if (!resolvedOrgId) {
+      toast.error("Select a receiving location first (needed for org-scoped barcode lookup).");
+      return;
+    }
+    setBarcodeLoading(true);
+    try {
+      const v = await inventoryLookupVariantByBarcode(code, resolvedOrgId);
+      if (!v) {
+        toast.error("No active variant found for this barcode.");
+        return;
+      }
+      const pol = resolvePurchaseOrderLineId(v.id, poDetailLines ?? undefined);
+      const poLine = poDetail?.lines?.find((l) => l.variantId === v.id);
+      setRows((prev) => {
+        const existing = prev.find((r) => r.variantId === v.id);
+        if (existing) {
+          setFocusedRowId(existing.id);
+          setFlashRowId(existing.id);
+          if (flashTimeoutRef.current) clearTimeout(flashTimeoutRef.current);
+          flashTimeoutRef.current = setTimeout(() => {
+            setFlashRowId(null);
+            flashTimeoutRef.current = null;
+          }, 1200);
+          toast.info("Variant already in grid. Row highlighted.");
+          return prev;
+        }
+        const validRows = prev.filter((r) => r.variantId != null || r.sku || r.quantity);
+        const pendingRemain =
+          poLine && poLine.orderedQty - poLine.receivedQty > 0 ? poLine.orderedQty - poLine.receivedQty : null;
+        const newRow: SelectedRow = {
+          id: Math.random().toString(36).slice(2),
+          variantId: v.id,
+          sku: v.sku,
+          productName: v.product?.name ?? v.title ?? "",
+          quantity: pendingRemain != null ? String(pendingRemain) : "1",
+          unitCost: poLine?.unitCost != null ? String(poLine.unitCost) : "",
+          lotCode: "",
+          mfgDate: "",
+          expDate: "",
+          purchaseOrderLineId: pol != null ? String(pol) : undefined,
+          orderedQty: poLine?.orderedQty,
+          receivedQty: poLine?.receivedQty,
+          pendingQty: poLine ? poLine.orderedQty - poLine.receivedQty : undefined,
+          poUnitCost: poLine?.unitCost ?? null,
+        };
+        return prev.length === 1 && !prev[0].variantId ? [newRow] : [...validRows, newRow];
+      });
+      setBarcodeInput("");
+      toast.success(`Added line for ${v.sku}`);
+    } finally {
+      setBarcodeLoading(false);
+    }
+  }, [barcodeInput, resolvedOrgId, poDetail?.lines, poDetailLines, toast]);
 
   const removeVariantFromGrid = useCallback((variantId: number) => {
     setRows((prev) => {
@@ -365,6 +525,21 @@ export default function BulkReceivePage() {
       return;
     }
     const locId = parseInt(locationId, 10);
+
+    // PO mode: validate over-receipt before sending to backend
+    if (isPOMode) {
+      const overRows = rows.filter((r) => {
+        if (r.variantId == null || r.pendingQty == null) return false;
+        const q = parseInt(r.quantity, 10);
+        return Number.isFinite(q) && q > r.pendingQty;
+      });
+      if (overRows.length > 0) {
+        const labels = overRows.map((r) => `${r.productName || r.sku} (receive ${r.quantity}, pending ${r.pendingQty})`);
+        toast.error(`Over-receipt: ${labels.join("; ")}. Reduce qty or clear PO link to allow excess.`);
+        return;
+      }
+    }
+
     const lines = rows
       .map((r) => {
         if (r.variantId == null) return null;
@@ -383,6 +558,10 @@ export default function BulkReceivePage() {
           expDate: r.expDate || undefined,
           purchaseOrderLineId: polResolved,
           supplierBarcode: r.supplierBarcode?.trim() || undefined,
+          quantityDamaged: r.quantityDamaged ? parseInt(r.quantityDamaged, 10) || 0 : undefined,
+          quantityShort: r.quantityShort ? parseInt(r.quantityShort, 10) || 0 : undefined,
+          lineRemarks: r.lineRemarks?.trim() || undefined,
+          lineDiscrepancyNote: r.lineDiscrepancyNote?.trim() || undefined,
         };
       })
       .filter((l): l is NonNullable<typeof l> => l != null && Number.isInteger(l.quantity) && l.quantity > 0);
@@ -390,16 +569,22 @@ export default function BulkReceivePage() {
       toast.warning("Add at least one line with variant and quantity.");
       return;
     }
-    if (selectedLocation?.type && selectedLocation.type !== "CENTRAL_WAREHOUSE") {
+    // PO-linked vendor inbound: skip internal dispatch confirmation regardless of location type.
+    // The receiving destination is a PO target warehouse/DC — not a branch requiring internal dispatch.
+    if (!isPOMode && selectedLocation?.type && selectedLocation.type !== "CENTRAL_WAREHOUSE") {
       setShowBranchDispatchModal(true);
       return;
     }
     setSubmitting(true);
     setLastReceipt(null);
     try {
-      const res = await ownerPost<{
+      // Use staff API when embedded in staff context, owner API otherwise
+      const apiCall = embedInStaff ? apiPost : ownerPost;
+      const res = await apiCall<{
         success: boolean;
-        data: { id: number; lines?: unknown[] };
+        message?: string;
+        requiresManagerConfirmation?: boolean;
+        data: { id: number; lines?: unknown[]; vendorReceiveSession?: { status?: string } };
         errors?: { rowIndex: number; message: string }[];
       }>("/api/v1/inventory/receipts/bulk", {
         locationId: locId,
@@ -409,20 +594,42 @@ export default function BulkReceivePage() {
         invoiceDate: invoiceDate || undefined,
         notes: notes.trim() || undefined,
         lines,
+        /** Omit or false = draft GRN only; true = immediate post (requires manager permission). */
+        postImmediately: false,
       });
       const grn = res?.data;
       const lineCount = Array.isArray(grn?.lines) ? grn.lines.length : lines.length;
       const totalQty = lines.reduce((s, l) => s + (l.quantity || 0), 0);
-      setLastReceipt(grn?.id != null ? { grnId: grn.id, lineCount, totalQty } : null);
-      toast.success(`Bulk receipt saved. GRN #${grn?.id ?? "—"}, ${lineCount} line(s), ${totalQty} units.`);
+      setLastReceipt(grn?.id != null ? { grnId: grn.id, lineCount, totalQty, submitted: false, submitting: false } : null);
+      const toastMsg =
+        typeof res?.message === "string" && res.message.trim()
+          ? res.message
+          : `Bulk receipt saved. GRN #${grn?.id ?? "—"}, ${lineCount} line(s), ${totalQty} units.`;
+      toast.success(toastMsg);
       setRows([emptyRow()]);
       setInvoiceNo("");
       setInvoiceDate("");
       setNotes("");
-      setPurchaseOrderId("");
+      // In PO mode, reset the populate guard so the grid re-fetches and repopulates with updated pending qtys
+      if (isPOMode) {
+        poGridPopulatedRef.current = "";
+        setPoDetail(null);
+        setPoDetailLines(null);
+      } else {
+        setPurchaseOrderId("");
+      }
     } catch (err: unknown) {
       const j = (err as { response?: { code?: string; errors?: { rowIndex: number; message: string }[] } })?.response;
-      if (j?.code === "BRANCH_LOCATION_REQUIRES_DISPATCH") {
+      const errorStatus = (err as { status?: number })?.status;
+      
+      // Handle permission denied for owner trying to post warehouse stock
+      if (errorStatus === 403 && !embedInStaff && isPOMode) {
+        toast.error("Warehouse receiving permissions required. This PO should be received by warehouse staff. Use 'Open in warehouse receiving' instead.");
+        return;
+      }
+      
+      // Only surface the dispatch modal for non-PO flows — PO inbound should never trigger dispatch creation.
+      if (!isPOMode && j?.code === "BRANCH_LOCATION_REQUIRES_DISPATCH") {
         setShowBranchDispatchModal(true);
         return;
       }
@@ -513,19 +720,51 @@ export default function BulkReceivePage() {
   );
 
   const hasNoLocations = !loading && locations.length === 0;
+  /** True when a purchase order is linked — changes layout and grid behavior */
+  const isPOMode = !!purchaseOrderId && !!poDetail;
 
   return (
     <div className="dashboard-main-body">
-      <PageHeader
-        title="Bulk receive"
-        subtitle="Product browser + multi-select. Location required; vendor optional."
-        breadcrumbs={[
-          { label: "Owner", href: "/owner/dashboard" },
-          { label: "Inventory", href: "/owner/inventory" },
-          { label: "Receipts", href: "/owner/inventory/receipts" },
-          { label: "Bulk", href: "/owner/inventory/receipts/bulk" },
-        ]}
-      />
+      {!embedInStaff && (
+        <PageHeader
+          title={isPOMode ? `Receive against ${poDetail!.poNumber}` : "Bulk receive"}
+          subtitle={isPOMode ? `Vendor: ${poDetail!.vendor?.name ?? "—"} · Status: ${poDetail!.status}` : "Product browser + multi-select. Location required; vendor optional."}
+          breadcrumbs={[
+            { label: "Owner", href: "/owner/dashboard" },
+            { label: "Inventory", href: "/owner/inventory" },
+            { label: "Receipts", href: "/owner/inventory/receipts" },
+            isPOMode
+              ? { label: "Purchase Orders", href: "/owner/inventory/purchase-orders" }
+              : { label: "Bulk", href: "/owner/inventory/receipts/bulk" },
+            ...(isPOMode ? [{ label: poDetail!.poNumber, href: `/owner/inventory/purchase-orders/${poDetail!.id}` }] : []),
+          ]}
+        />
+      )}
+      {embedInStaff && (
+        <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+          <div>
+            <h5 className="mb-0 fw-semibold">{isPOMode ? `Receive against ${poDetail?.poNumber ?? "PO"}` : "Bulk receive"}</h5>
+            <p className="text-muted small mb-0">Warehouse receiving — saves a draft GRN; manager confirms to post stock.</p>
+          </div>
+          {staffBranchId ? (
+            <Link href={`/staff/branch/${staffBranchId}/warehouse`} className="btn btn-sm btn-outline-secondary">
+              ← Warehouse
+            </Link>
+          ) : null}
+        </div>
+      )}
+
+      {isPOMode && !embedInStaff && (
+        <div className="alert alert-info radius-12 mb-3 d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <span>
+            <strong>Note:</strong> PO-linked receiving should be performed by warehouse staff. This page remains available when needed;
+            use <strong>Open in warehouse receiving</strong> from the PO for the standard path.
+          </span>
+          <Link href={`/owner/inventory/purchase-orders/${purchaseOrderId}`} className="btn btn-sm btn-outline-secondary shrink-0">
+            Back to PO
+          </Link>
+        </div>
+      )}
 
       {hasNoLocations && (
         <div className="alert alert-info radius-12 mb-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
@@ -536,13 +775,112 @@ export default function BulkReceivePage() {
         </div>
       )}
 
+      {/* Loading PO context before location is selected */}
+      {purchaseOrderId && !poDetail && !loading && (
+        <div className="alert alert-secondary radius-12 mb-3 small">
+          Loading PO context for #{purchaseOrderId}… Select a receiving location above to continue.
+        </div>
+      )}
+
+      {/* PO fully received warning */}
+      {isPOMode && poDetail && poDetail.lines.every((l) => l.orderedQty - l.receivedQty <= 0) && (
+        <div className="alert alert-warning radius-12 mb-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+          <span>
+            <strong>PO {poDetail.poNumber}</strong> is fully received. All lines have been received in full.
+          </span>
+          <Link href={`/owner/inventory/purchase-orders/${poDetail.id}`} className="btn btn-sm btn-outline-secondary">
+            Back to PO
+          </Link>
+        </div>
+      )}
+
+      {/* PO summary card — shown when receiving against a specific PO */}
+      {isPOMode && poDetail && poDetail.lines.some((l) => l.orderedQty - l.receivedQty > 0) && (
+        <div className="card border-primary border radius-12 mb-3">
+          <div className="card-body p-3">
+            <div className="d-flex flex-wrap justify-content-between align-items-start gap-2">
+              <div>
+                <div className="d-flex align-items-center gap-2 mb-1">
+                  <span className="badge bg-primary">PO linked</span>
+                  <span className="fw-semibold">{poDetail.poNumber}</span>
+                  <span className={`badge ${poDetail.status === "APPROVED" ? "bg-success" : "bg-warning text-dark"}`}>
+                    {poDetail.status}
+                  </span>
+                </div>
+                <div className="small text-muted d-flex flex-wrap gap-3">
+                  <span><strong>Vendor:</strong> {poDetail.vendor?.name ?? "—"}</span>
+                  {poDetail.warehouse && <span><strong>Warehouse:</strong> {poDetail.warehouse.name}</span>}
+                  {poDetail.expectedDeliveryDate && (
+                    <span><strong>Expected:</strong> {new Date(poDetail.expectedDeliveryDate).toLocaleDateString()}</span>
+                  )}
+                  <span><strong>Lines:</strong> {poDetail.lines.length}</span>
+                  <span>
+                    <strong>Pending lines:</strong>{" "}
+                    {poDetail.lines.filter((l) => l.orderedQty - l.receivedQty > 0).length}
+                    {" / "}
+                    {poDetail.lines.length}
+                  </span>
+                </div>
+              </div>
+              <Link
+                href={`/owner/inventory/purchase-orders/${poDetail.id}`}
+                className="btn btn-sm btn-outline-secondary"
+              >
+                View PO
+              </Link>
+            </div>
+            {poDetail.lines.some((l) => l.orderedQty - l.receivedQty <= 0) && (
+              <div className="mt-2 small text-muted">
+                {poDetail.lines.filter((l) => l.orderedQty - l.receivedQty <= 0).length} line(s) already fully received
+                are excluded from the grid below.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       {lastReceipt && (
-        <div className="alert alert-success radius-12 mb-3">
-          Last receipt:{" "}
-          <Link href={`/owner/inventory/grn/${lastReceipt.grnId}`} className="fw-semibold">
-            GRN #{lastReceipt.grnId}
-          </Link>{" "}
-          — {lastReceipt.lineCount} line(s), {lastReceipt.totalQty} units.
+        <div className={`alert ${lastReceipt.submitted ? "alert-info" : "alert-success"} radius-12 mb-3`}>
+          <div className="d-flex align-items-center justify-content-between flex-wrap gap-2">
+            <span>
+              Last receipt:{" "}
+              <Link href={`/owner/inventory/grn/${lastReceipt.grnId}`} className="fw-semibold">
+                GRN #{lastReceipt.grnId}
+              </Link>{" "}
+              — {lastReceipt.lineCount} line(s), {lastReceipt.totalQty} units.{" "}
+              {lastReceipt.submitted ? (
+                <span className="badge bg-warning text-dark">Pending Confirmation</span>
+              ) : (
+                <span className="badge bg-secondary">DRAFT</span>
+              )}
+            </span>
+            <span className="d-flex gap-2 flex-wrap">
+              {!lastReceipt.submitted && (
+                <button type="button" className="btn btn-sm btn-warning" disabled={lastReceipt.submitting} onClick={async () => {
+                  setLastReceipt((prev) => prev ? { ...prev, submitting: true } : prev);
+                  try {
+                    const { grnSubmitForConfirmation } = await import("@/lib/api");
+                    await grnSubmitForConfirmation(lastReceipt.grnId);
+                    toast.success("Submitted for warehouse manager confirmation. Manager will be notified.");
+                    setLastReceipt((prev) => prev ? { ...prev, submitted: true, submitting: false } : prev);
+                  } catch (e: unknown) {
+                    toast.error((e as Error)?.message ?? "Failed");
+                    setLastReceipt((prev) => prev ? { ...prev, submitting: false } : prev);
+                  }
+                }}>{lastReceipt.submitting ? "Submitting…" : "Submit for confirmation"}</button>
+              )}
+              {lastReceipt.submitted && (
+                <span className="text-muted small align-self-center">
+                  Warehouse manager has been notified.
+                </span>
+              )}
+              <Link href={`/owner/inventory/grn/${lastReceipt.grnId}`} className="btn btn-sm btn-outline-primary">
+                View GRN
+              </Link>
+              <a href={`/api/v1/grn/${lastReceipt.grnId}/print`} target="_blank" rel="noopener" className="btn btn-sm btn-outline-secondary">Print GRN</a>
+              <a href={`/api/v1/grn/${lastReceipt.grnId}/print/discrepancy`} target="_blank" rel="noopener" className="btn btn-sm btn-outline-secondary">Discrepancy report</a>
+            </span>
+          </div>
         </div>
       )}
 
@@ -625,7 +963,7 @@ export default function BulkReceivePage() {
                 placeholder="Search vendor"
                 value={vendorSearch}
                 onChange={(e) => setVendorSearch(e.target.value)}
-                onFocus={() => orgId && setVendorSearch("")}
+                onFocus={() => resolvedOrgId && setVendorSearch("")}
               />
               {vendorOptions.length > 0 && (
                 <ul
@@ -661,33 +999,35 @@ export default function BulkReceivePage() {
                 </button>
               )}
             </div>
-            <div className="col-12 col-md-3">
-              <label className="form-label small">Purchase order (optional)</label>
-              <select
-                className="form-select form-select-sm"
-                value={purchaseOrderId}
-                onChange={(e) => {
-                  const v = e.target.value;
-                  setPurchaseOrderId(v);
-                  if (v) {
-                    const p = poOptions.find((x) => String(x.id) === v);
-                    if (p?.vendor?.id) {
-                      setVendorId(String(p.vendor.id));
-                      setVendorSearch(p.vendor.name ?? "");
+            {!isPOMode && (
+              <div className="col-12 col-md-3">
+                <label className="form-label small">Purchase order (optional)</label>
+                <select
+                  className="form-select form-select-sm"
+                  value={purchaseOrderId}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setPurchaseOrderId(v);
+                    if (v) {
+                      const p = poOptions.find((x) => String(x.id) === v);
+                      if (p?.vendor?.id) {
+                        setVendorId(String(p.vendor.id));
+                        setVendorSearch(p.vendor.name ?? "");
+                      }
                     }
-                  }
-                }}
-                disabled={!orgId || poLoading}
-              >
-                <option value="">{poLoading ? "Loading…" : "None"}</option>
-                {poOptions.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.poNumber} ({p.status})
-                  </option>
-                ))}
-              </select>
-              <p className="small text-muted mb-0 mt-1">Vendor is taken from the PO when linked.</p>
-            </div>
+                  }}
+                  disabled={!resolvedOrgId || poLoading}
+                >
+                  <option value="">{poLoading ? "Loading…" : "None"}</option>
+                  {poOptions.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.poNumber} ({p.status})
+                    </option>
+                  ))}
+                </select>
+                <p className="small text-muted mb-0 mt-1">Vendor is taken from the PO when linked.</p>
+              </div>
+            )}
             <div className="col-12 col-md-2">
               <label className="form-label small">Invoice No</label>
               <input
@@ -719,33 +1059,85 @@ export default function BulkReceivePage() {
             </div>
           </div>
 
+          {mode === "visual" && (
+            <div className="row g-2 mb-2">
+              <div className="col-12 col-lg-6">
+                <label className="form-label small mb-1">Barcode / scan</label>
+                <div className="input-group input-group-sm">
+                  <input
+                    type="text"
+                    className="form-control"
+                    autoComplete="off"
+                    placeholder="Scan or type barcode, Enter to add line"
+                    value={barcodeInput}
+                    onChange={(e) => setBarcodeInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter") {
+                        e.preventDefault();
+                        void handleBarcodeLookup();
+                      }
+                    }}
+                    disabled={hasNoLocations || !resolvedOrgId || barcodeLoading}
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-outline-primary"
+                    disabled={hasNoLocations || !resolvedOrgId || barcodeLoading}
+                    onClick={() => void handleBarcodeLookup()}
+                  >
+                    {barcodeLoading ? "…" : "Add"}
+                  </button>
+                </div>
+                <p className="small text-muted mb-0">Looks up an active catalog variant by barcode for the selected org.</p>
+              </div>
+            </div>
+          )}
+
           {mode === "visual" ? (
             /* Split view: Product Browser (left) + Selected Grid (right) */
             <div className="row g-3">
-              {/* Product Browser — desktop: col-lg-4; mobile: drawer */}
-              <div className="col-12 col-lg-4 d-none d-lg-block">
-                <div className="border rounded p-3 bg-light">
-                  <h6 className="mb-2 small fw-bold">Product Browser</h6>
-                  <ProductBrowserPanel
-                    selectedVariantIds={selectedVariantIds}
-                    onAddVariant={addVariant}
-                    onRemoveVariant={removeVariantFromGrid}
-                    disabled={hasNoLocations}
-                    orgId={orgId ?? null}
-                  />
+              {/* Product Browser — hidden in PO mode (grid is pre-populated from PO lines) */}
+              {!isPOMode && (
+                <>
+                  <div className="col-12 col-lg-4 d-none d-lg-block">
+                    <div className="border rounded p-3 bg-light">
+                      <h6 className="mb-2 small fw-bold">Product Browser</h6>
+                      <ProductBrowserPanel
+                        selectedVariantIds={selectedVariantIds}
+                        onAddVariant={addVariant}
+                        onRemoveVariant={removeVariantFromGrid}
+                        disabled={hasNoLocations}
+                        orgId={resolvedOrgId ?? null}
+                      />
+                    </div>
+                  </div>
+                  <div className="d-lg-none mb-2">
+                    <button
+                      type="button"
+                      className="btn btn-outline-primary btn-sm"
+                      onClick={() => setShowBrowserDrawer(true)}
+                    >
+                      Open Product Browser
+                    </button>
+                  </div>
+                </>
+              )}
+              <div className={isPOMode ? "col-12" : "col-12 col-lg-8"}>
+                <div className="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                  <h6 className="mb-0 small fw-bold">
+                    {isPOMode ? "Receive items from PO" : "Selected Items"}
+                  </h6>
+                  {isPOMode && (
+                    <button
+                      type="button"
+                      className="btn btn-outline-secondary btn-sm"
+                      onClick={() => setShowBrowserDrawer(true)}
+                      title="Add a non-PO item to this receipt"
+                    >
+                      + Add non-PO item
+                    </button>
+                  )}
                 </div>
-              </div>
-              <div className="d-lg-none mb-2">
-                <button
-                  type="button"
-                  className="btn btn-outline-primary btn-sm"
-                  onClick={() => setShowBrowserDrawer(true)}
-                >
-                  Open Product Browser
-                </button>
-              </div>
-              <div className="col-12 col-lg-8">
-                <h6 className="mb-2 small fw-bold">Selected Items</h6>
                 <SelectedReceiveGrid
                   rows={rows}
                   onRowsChange={setRows}
@@ -756,6 +1148,7 @@ export default function BulkReceivePage() {
                   onDuplicateRow={duplicateRow}
                   onRemoveRow={removeRow}
                   onSubmit={handleSubmit}
+                  isPOMode={isPOMode}
                 />
               </div>
             </div>
@@ -793,7 +1186,7 @@ export default function BulkReceivePage() {
               onClick={handleSubmit}
               disabled={submitting || hasNoLocations}
             >
-              {submitting ? "Submitting…" : "Submit bulk receive (Ctrl+Enter)"}
+              {submitting ? "Submitting…" : isPOMode ? "Post GRN against PO (Ctrl+Enter)" : "Submit bulk receive (Ctrl+Enter)"}
             </button>
           </div>
         </div>
@@ -918,19 +1311,25 @@ export default function BulkReceivePage() {
             onRemoveVariant={removeVariantFromGrid}
             onCloseDrawer={() => setShowBrowserDrawer(false)}
             disabled={hasNoLocations}
-            orgId={orgId ?? null}
+            orgId={resolvedOrgId ?? null}
           />
         </Offcanvas.Body>
       </Offcanvas>
 
-      <div className="d-flex gap-2 mt-2">
-        <Link href="/owner/inventory/receipts" className="btn btn-outline-secondary btn-sm">
-          ← Single receipt
-        </Link>
-        <Link href="/owner/inventory/locations" className="btn btn-outline-secondary btn-sm">
-          Locations
-        </Link>
-      </div>
+      {!embedInStaff && (
+        <div className="d-flex gap-2 mt-2">
+          <Link href="/owner/inventory/receipts" className="btn btn-outline-secondary btn-sm">
+            ← Single receipt
+          </Link>
+          <Link href="/owner/inventory/locations" className="btn btn-outline-secondary btn-sm">
+            Locations
+          </Link>
+        </div>
+      )}
     </div>
   );
+}
+
+export default function BulkReceivePage(props?: BulkReceivePageProps) {
+  return <BulkReceivePageInner {...props} />;
 }

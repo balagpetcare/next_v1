@@ -44,6 +44,22 @@ export type SelectedRow = {
   requiresExpiry?: boolean;
   requiresMfg?: boolean;
   error?: string;
+  /** PO-linked mode: original ordered qty on this PO line */
+  orderedQty?: number;
+  /** PO-linked mode: qty already received on this PO line before this GRN */
+  receivedQty?: number;
+  /** PO-linked mode: pending = orderedQty - receivedQty */
+  pendingQty?: number;
+  /** PO-linked mode: unit cost from PO line (used as default, read-only display) */
+  poUnitCost?: number | null;
+  /** Line-level receive remarks */
+  lineRemarks?: string;
+  /** Line-level discrepancy note (damaged/short reason) */
+  lineDiscrepancyNote?: string;
+  /** Damaged quantity (enterprise receive) */
+  quantityDamaged?: string;
+  /** Short quantity (enterprise receive) */
+  quantityShort?: string;
 };
 
 export function emptyRow(): SelectedRow {

@@ -51,10 +51,16 @@ export default function StaffStockRequestDetailClient() {
   }, [errorCode, router]);
 
   useEffect(() => {
-    if (!requestId || !canRead) return;
+    if (!canRead) return;
+    const idNum = Number(requestId);
+    if (!requestId || !Number.isFinite(idNum) || idNum < 1) {
+      setLoading(false);
+      setRequest(null);
+      return;
+    }
     let cancelled = false;
     setLoading(true);
-    staffStockRequestGet(Number(requestId))
+    staffStockRequestGet(idNum)
       .then((data) => { if (!cancelled) setRequest(data); })
       .catch((e) => { if (!cancelled) setError(e?.message ?? "Failed to load"); })
       .finally(() => { if (!cancelled) setLoading(false); });
@@ -147,8 +153,25 @@ export default function StaffStockRequestDetailClient() {
           <Link href={listPath} className="btn btn-outline-secondary btn-sm radius-12">← Back</Link>
           <h5 className="mb-0">Stock Request #{request.id}</h5>
         </div>
-        <span className={`badge ${statusBadgeClass(request.status)}`}>{request.status}</span>
+        <div className="d-flex gap-2 align-items-center">
+          <span className={`badge ${statusBadgeClass(request.status)}`}>{request.status}</span>
+          {request.requestIntent === "PROCUREMENT" ? (
+            <span className="badge bg-warning text-dark">Procurement</span>
+          ) : (
+            <span className="badge bg-light text-dark">Transfer</span>
+          )}
+          {request.linkedPurchaseOrderId && (
+            <span className="badge bg-info text-white">PO #{request.linkedPurchaseOrderId}</span>
+          )}
+        </div>
       </div>
+
+      {request.requestIntent === "PROCUREMENT" && request.procurementNote && (
+        <div className="alert alert-warning py-2 mb-3">
+          <strong className="small">Procurement note:</strong>{" "}
+          <span className="small">{request.procurementNote}</span>
+        </div>
+      )}
 
       <div className="row g-2 mb-3">
         <div className="col-6 col-md-3">

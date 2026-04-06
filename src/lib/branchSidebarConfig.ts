@@ -34,7 +34,7 @@ export type BranchSidebarItem = {
   requiredPerm: string;
   /** If set, item is shown when user has requiredPerm OR any of these */
   anyPerms?: string[];
-  badgeKey?: "approvals" | "lowStock" | "clinicQueue";
+  badgeKey?: "approvals" | "lowStock" | "clinicQueue" | "vendorReceipts";
 };
 
 export type BranchSidebarGroup = {
@@ -58,8 +58,9 @@ export const BRANCH_SIDEBAR: BranchSidebarGroup[] = [
     items: [
       { key: "inventory", label: "Inventory", icon: "ri:archive-line", href: (id) => "/staff/branch/" + id + "/inventory", requiredPerm: "inventory.read", badgeKey: "lowStock" },
       { key: "receive", label: "Receive Stock", icon: "ri:download-cloud-2-line", href: (id) => "/staff/branch/" + id + "/inventory/receive", requiredPerm: "inventory.receive" },
+      { key: "stock-requests", label: "Stock Requests", icon: "ri:file-list-2-line", href: (id) => "/staff/branch/" + id + "/inventory/stock-requests", requiredPerm: "inventory.read", anyPerms: ["inventory.request.create", "inventory.update"] },
       { key: "adjustments", label: "Adjustments", icon: "ri:scales-3-line", href: (id) => "/staff/branch/" + id + "/inventory/adjustments", requiredPerm: "inventory.adjust" },
-      { key: "transfers", label: "Transfers", icon: "ri:swap-line", href: (id) => "/staff/branch/" + id + "/inventory/transfers", requiredPerm: "inventory.transfer" },
+      { key: "transfers", label: "Transfers (Legacy)", icon: "ri:swap-line", href: (id) => "/staff/branch/" + id + "/inventory/transfers", requiredPerm: "inventory.transfer", deprecated: true },
       {
         key: "ai-replenishment",
         label: "AI replenishment",
@@ -95,6 +96,8 @@ export const BRANCH_SIDEBAR: BranchSidebarGroup[] = [
       { key: "warehouse-putaway", label: "Putaway", icon: "ri:archive-line", href: (id) => "/staff/branch/" + id + "/warehouse/putaway", requiredPerm: "warehouse.operations", anyPerms: ["warehouse.dashboard.view", "inbound.read", "inbound.grn"] },
       { key: "warehouse-deliveries", label: "My Deliveries", icon: "ri:truck-line", href: (id) => "/staff/branch/" + id + "/warehouse?tab=deliveries", requiredPerm: "delivery.view", anyPerms: ["delivery.read", "delivery.manage"] },
       { key: "warehouse-receive", label: "Receive stock", icon: "ri:download-cloud-2-line", href: (id) => "/staff/branch/" + id + "/inventory/receive", requiredPerm: "inventory.receive", anyPerms: ["inbound.receive"] },
+      { key: "warehouse-vendor-receipts", label: "Vendor receipts", icon: "ri:inbox-archive-line", href: (id) => "/staff/branch/" + id + "/warehouse/receive-po", requiredPerm: "purchase.receive", anyPerms: ["grn.post", "grn.create", "inbound.grn"], badgeKey: "vendorReceipts" },
+      { key: "warehouse-procurement-requests", label: "Procurement requests", icon: "ri:shopping-bag-line", href: (id) => "/staff/branch/" + id + "/inventory/stock-requests?intent=PROCUREMENT", requiredPerm: "warehouse.operations", anyPerms: ["warehouse.request.create", "procurement.po.view"] },
     ],
   },
   {
@@ -242,6 +245,8 @@ export type BranchSummaryCounts = {
   approvals?: number;
   lowStock?: number;
   clinicQueue?: number;
+  /** AWAITING_CONFIRMATION vendor GRNs for this branch (warehouse queue). */
+  vendorReceipts?: number;
 };
 
 /** Filter groups/items by permissions and branch type; optionally attach badge counts. */
@@ -267,6 +272,7 @@ export function getFilteredBranchSidebar(
           if (it.badgeKey === "approvals") badge = counts.approvals;
           else if (it.badgeKey === "lowStock") badge = counts.lowStock;
           else if (it.badgeKey === "clinicQueue") badge = counts.clinicQueue;
+          else if (it.badgeKey === "vendorReceipts") badge = counts.vendorReceipts;
         }
         return {
           key: it.key,

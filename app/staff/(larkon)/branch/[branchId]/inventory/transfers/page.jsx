@@ -18,6 +18,7 @@ import {
 import Card from "@/src/bpa/components/ui/Card";
 import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
+import { getUniqueVariants, getUniqueVariantsFromStaffInventoryItems } from "@/src/lib/getUniqueVariants";
 
 const REQUIRED_PERM = "inventory.transfer";
 const STATUS_OPTIONS = [
@@ -101,20 +102,15 @@ export default function StaffBranchInventoryTransfersPage() {
           }))
         );
         const items = listRes?.items ?? [];
-        const seen = new Set();
-        const list = items
-          .filter((i) => i.variant && !seen.has(i.variant.id))
-          .map((i) => {
-            seen.add(i.variant.id);
-            return { id: i.variant.id, sku: i.variant.sku, title: i.variant.title };
-          });
-        setVariants(list);
+        setVariants(getUniqueVariantsFromStaffInventoryItems(items));
         if (branchLocs.length && !createForm.fromLocationId)
           setCreateForm((f) => ({ ...f, fromLocationId: String(branchLocs[0].id) }));
       })
       .catch(() => {});
     return () => { cancelled = true; };
   }, [branchId, canTransfer]);
+
+  const variantOptions = useMemo(() => getUniqueVariants(variants), [variants]);
 
   const retryTransfers = () => {
     if (!branchId || !canTransfer) return;
@@ -495,8 +491,8 @@ export default function StaffBranchInventoryTransfersPage() {
                           onChange={(e) => setCreateLine(idx, "variantId", e.target.value)}
                         >
                           <option value="">Variant</option>
-                          {variants.map((v) => (
-                            <option key={v.id} value={v.id}>{v.sku ?? v.title ?? v.id}</option>
+                          {variantOptions.map((v) => (
+                            <option key={`variant-${v.id}`} value={v.id}>{v.sku ?? v.title ?? v.id}</option>
                           ))}
                         </LkSelect>
                       </div>

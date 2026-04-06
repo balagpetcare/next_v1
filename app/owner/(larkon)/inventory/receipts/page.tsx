@@ -20,6 +20,7 @@ type GrnRow = {
   vendor?: { id: number; name: string } | null;
   purchaseOrder?: { id: number; poNumber: string; status: string } | null;
   location?: { id: number; name: string } | null;
+  vendorReceiveSession?: { id: number; status: string; submittedAt?: string | null; confirmedAt?: string | null } | null;
   lines?: Array<{ id: number; quantity: number; variant?: { id: number; sku: string; title: string } }>;
 };
 
@@ -30,7 +31,9 @@ type GrnDetail = GrnRow & {
 const STATUS_OPTIONS = [
   { value: "", label: "All statuses" },
   { value: "DRAFT", label: "Draft" },
+  { value: "PENDING_CONFIRMATION", label: "Pending Confirmation" },
   { value: "RECEIVED", label: "Received" },
+  { value: "VOIDED", label: "Voided" },
 ];
 
 function formatDate(d: string | null | undefined) {
@@ -38,18 +41,56 @@ function formatDate(d: string | null | undefined) {
   return new Date(d).toLocaleDateString("en-BD", { year: "numeric", month: "short", day: "numeric" });
 }
 
+function deriveDisplayStatus(grn: GrnRow): string {
+  const grnStatus = (grn.status || "").toUpperCase();
+  if (grnStatus === "VOIDED") return "VOIDED";
+  if (grnStatus === "RECEIVED") return "RECEIVED";
+  if (grnStatus === "DRAFT" && grn.vendorReceiveSession?.status === "AWAITING_CONFIRMATION") return "PENDING_CONFIRMATION";
+  return grnStatus || "DRAFT";
+}
+
 function statusClass(s: string) {
   const u = (s || "").toUpperCase();
   if (u === "DRAFT") return "bg-secondary";
+  if (u === "PENDING_CONFIRMATION") return "bg-warning text-dark";
   if (u === "RECEIVED") return "bg-success";
+  if (u === "VOIDED") return "bg-danger";
   return "bg-light text-dark";
+}
+
+function statusLabel(s: string) {
+  const u = (s || "").toUpperCase();
+  if (u === "PENDING_CONFIRMATION") return "Pending Confirmation";
+  if (u === "VOIDED") return "Voided";
+  return s;
 }
 
 function pickArray(resp: any): unknown[] {
   if (!resp) return [];
   if (Array.isArray(resp)) return resp;
   if (Array.isArray(resp.data)) return resp.data;
+  if (Array.isArray(resp.items)) return resp.items;
   return [];
+}
+
+function parsePositiveInt(raw: string | null | undefined): number | null {
+  if (raw == null || String(raw).trim() === "") return null;
+  const n = Number.parseInt(String(raw).trim(), 10);
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
+function normalizeGrnListPayload(res: any): { rows: GrnRow[]; pagination: { page: number; limit: number; total: number; totalPages: number } } {
+  if (res == null) {
+    return { rows: [], pagination: { page: 1, limit: 20, total: 0, totalPages: 1 } };
+  }
+  const raw = res?.data;
+  const rows = Array.isArray(raw) ? raw : Array.isArray(res?.items) ? res.items : [];
+  const pag = res?.pagination;
+  const page = Number.isFinite(Number(pag?.page)) ? Number(pag.page) : 1;
+  const limit = Number.isFinite(Number(pag?.limit)) ? Number(pag.limit) : 20;
+  const total = Number.isFinite(Number(pag?.total)) ? Number(pag.total) : rows.length;
+  const totalPages = Number.isFinite(Number(pag?.totalPages)) ? Number(pag.totalPages) : Math.max(1, Math.ceil(total / limit));
+  return { rows: rows as GrnRow[], pagination: { page, limit, total, totalPages } };
 }
 
 export default function OwnerInventoryReceiptsPage() {
@@ -70,64 +111,100 @@ export default function OwnerInventoryReceiptsPage() {
   const [drawerLoading, setDrawerLoading] = useState(false);
   const printAfterLoad = useRef(false);
   const printRef = useRef<HTMLDivElement>(null);
+  const listRequestId = useRef(0);
+
+  const loadOrgContext = useCallback(async (): Promise<number | null> => {
+    type MeRes = { organizations?: { id: number }[]; data?: { organizations?: { id: number }[] } };
+    const [me, locRes] = await Promise.all([
+      ownerGet<MeRes>("/api/v1/owner/me").catch((): MeRes => ({})),
+      ownerGet<{ data?: Location[] }>("/api/v1/inventory/locations").catch(() => ({ data: [] })),
+    ]);
+    let orgs = me?.organizations ?? (me as any)?.data?.organizations ?? [];
+    let oid: number | null = orgs[0]?.id != null ? Number(orgs[0].id) : null;
+    if (oid == null || !Number.isFinite(oid) || oid <= 0) {
+      const orgsRes = await ownerGet("/api/v1/owner/organizations").catch(() => null);
+      const orgRows = pickArray(orgsRes) as { id?: number }[];
+      const fallback = orgRows[0]?.id != null ? Number(orgRows[0].id) : null;
+      oid = fallback != null && Number.isFinite(fallback) && fallback > 0 ? fallback : null;
+    }
+    setOrgId(oid);
+    setLocations(pickArray(locRes) as Location[]);
+    return oid;
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       try {
-        type MeRes = { organizations?: { id: number }[]; data?: { organizations?: { id: number }[] } };
-        const [me, locRes] = await Promise.all([
-          ownerGet<MeRes>("/api/v1/owner/me").catch((): MeRes => ({})),
-          ownerGet<{ data?: Location[] }>("/api/v1/inventory/locations").catch(() => ({ data: [] })),
-        ]);
-        if (cancelled) return;
-        const orgs = me?.organizations ?? (me as any)?.data?.organizations ?? [];
-        setOrgId(orgs[0]?.id ?? null);
-        setLocations(pickArray(locRes) as Location[]);
-        setOrgLoaded(true);
+        await loadOrgContext();
       } catch (e: any) {
         if (!cancelled) setError(e?.message ?? "Failed to load");
+      } finally {
+        if (!cancelled) setOrgLoaded(true);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadOrgContext]);
 
   useEffect(() => {
     const w = searchParams.get("warehouseId");
-    if (w) setWarehouseFilter(String(w));
+    setWarehouseFilter(w ? String(w) : "");
     const po = searchParams.get("purchaseOrderId");
-    if (po) setPoFilter(String(po));
+    setPoFilter(po ? String(po) : "");
   }, [searchParams]);
 
-  const loadList = useCallback(async () => {
-    if (!orgId) {
-      setItems([]);
-      return;
-    }
-    setLoading(true);
-    setError("");
-    try {
-      const params = new URLSearchParams({ orgId: String(orgId), page: String(pagination.page), limit: String(pagination.limit) });
-      if (filters.locationId) params.set("locationId", filters.locationId);
-      if (filters.status) params.set("status", filters.status);
-      if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
-      if (filters.dateTo) params.set("dateTo", filters.dateTo);
-      if (warehouseFilter) params.set("warehouseId", warehouseFilter);
-      if (poFilter) params.set("purchaseOrderId", poFilter);
-      const res: any = await ownerGet(`/api/v1/grn?${params.toString()}`);
-      const data = res?.data ?? [];
-      const pag = res?.pagination ?? { page: 1, limit: 20, total: 0, totalPages: 1 };
-      setItems(Array.isArray(data) ? data : []);
-      setPagination((prev) => ({ ...prev, ...pag }));
-    } catch (e: any) {
-      setItems([]);
-      setError(e?.message ?? "Failed to load receipts");
-    } finally {
-      setLoading(false);
-    }
-  }, [orgId, filters, pagination.page, pagination.limit, warehouseFilter, poFilter]);
+  const loadList = useCallback(
+    async (orgIdOverride?: number | null) => {
+      const resolvedOrgId = orgIdOverride !== undefined ? orgIdOverride : orgId;
+      if (!orgLoaded) return;
+      if (!resolvedOrgId) {
+        setItems([]);
+        setLoading(false);
+        return;
+      }
+      const reqId = ++listRequestId.current;
+      const poIdForApi = parsePositiveInt(poFilter);
+      setLoading(true);
+      setError("");
+      try {
+        const params = new URLSearchParams({
+          orgId: String(resolvedOrgId),
+          page: String(pagination.page),
+          limit: String(pagination.limit),
+        });
+        if (filters.locationId) params.set("locationId", filters.locationId);
+        if (filters.status === "PENDING_CONFIRMATION") {
+          params.set("status", "DRAFT");
+          params.set("sessionStatus", "AWAITING_CONFIRMATION");
+        } else if (filters.status) {
+          params.set("status", filters.status);
+        }
+        if (filters.dateFrom) params.set("dateFrom", filters.dateFrom);
+        if (filters.dateTo) params.set("dateTo", filters.dateTo);
+        if (warehouseFilter) params.set("warehouseId", warehouseFilter);
+        if (poIdForApi != null) params.set("purchaseOrderId", String(poIdForApi));
+        const res: any = await ownerGet(`/api/v1/grn?${params.toString()}`);
+        if (reqId !== listRequestId.current) return;
+        if (res == null) {
+          setItems([]);
+          setError("Unable to load receipts (access denied or session issue).");
+          return;
+        }
+        const { rows, pagination: pag } = normalizeGrnListPayload(res);
+        setItems(rows);
+        setPagination((prev) => ({ ...prev, ...pag }));
+      } catch (e: any) {
+        if (reqId !== listRequestId.current) return;
+        setItems([]);
+        setError(e?.message ?? "Failed to load receipts");
+      } finally {
+        if (reqId === listRequestId.current) setLoading(false);
+      }
+    },
+    [orgLoaded, orgId, filters, pagination.page, pagination.limit, warehouseFilter, poFilter]
+  );
 
   useEffect(() => {
     if (!orgLoaded) return;
@@ -183,6 +260,9 @@ export default function OwnerInventoryReceiptsPage() {
   }, [drawerGrnId]);
 
   const hasFilters = !!(filters.locationId || filters.status || filters.dateFrom || filters.dateTo || warehouseFilter);
+  const poIdParsed = parsePositiveInt(poFilter);
+  const poFilterInvalid = poFilter.trim() !== "" && poIdParsed == null;
+  const orgMissing = orgLoaded && orgId == null;
 
   return (
     <div className="dashboard-main-body">
@@ -219,11 +299,27 @@ export default function OwnerInventoryReceiptsPage() {
         </div>
       ) : null}
 
-      {poFilter ? (
+      {poFilterInvalid ? (
+        <div className="alert alert-warning d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+          <span>
+            The URL contains an invalid <code className="small">purchaseOrderId</code> (<strong>{poFilter}</strong>). Receipts are shown without a PO filter until you clear or fix the link.
+          </span>
+          <button
+            type="button"
+            className="btn btn-sm btn-outline-secondary"
+            onClick={() => {
+              setPoFilter("");
+              router.replace("/owner/inventory/receipts");
+            }}
+          >
+            Clear PO filter
+          </button>
+        </div>
+      ) : poIdParsed != null ? (
         <div className="alert alert-info d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
           <span>
-            Showing GRNs for purchase order <strong>#{poFilter}</strong>.{" "}
-            <Link href={`/owner/inventory/purchase-orders/${poFilter}`} className="fw-semibold">
+            Showing GRNs for purchase order <strong>#{poIdParsed}</strong>.{" "}
+            <Link href={`/owner/inventory/purchase-orders/${poIdParsed}`} className="fw-semibold">
               Back to PO
             </Link>
           </span>
@@ -308,22 +404,80 @@ export default function OwnerInventoryReceiptsPage() {
         </div>
       </div>
 
-      {error && <div className="alert alert-danger radius-12">{error}</div>}
+      {error && (
+        <div className="alert alert-danger radius-12 d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <span>{error}</span>
+          <button type="button" className="btn btn-sm btn-outline-danger shrink-0" onClick={() => loadList()}>
+            Retry
+          </button>
+        </div>
+      )}
 
       {loading ? (
         <div className="card radius-12">
-          <div className="card-body text-center py-4 text-secondary">Loading receipts…</div>
+          <div className="card-body text-center py-5">
+            <div className="spinner-border text-primary" role="status" />
+            <p className="mt-2 text-muted small mb-0">Loading receipts…</p>
+          </div>
+        </div>
+      ) : orgMissing ? (
+        <div className="card radius-12">
+          <div className="card-body text-center py-5">
+            <i className="ri-building-line d-block mb-2" style={{ fontSize: "2.5rem", opacity: 0.4 }} />
+            <h6 className="fw-semibold mb-1">No organization available</h6>
+            <p className="text-muted small mb-3">
+              We could not resolve an organization for your account. Check owner access or complete onboarding, then refresh.
+            </p>
+            <button
+              type="button"
+              className="btn btn-outline-primary btn-sm"
+              onClick={async () => {
+                setError("");
+                try {
+                  const oid = await loadOrgContext();
+                  await loadList(oid);
+                } catch (e: any) {
+                  setError(e?.message ?? "Failed to reload organization");
+                }
+              }}
+            >
+              Retry
+            </button>
+          </div>
         </div>
       ) : items.length === 0 ? (
         <div className="card radius-12">
-          <div className="card-body text-center py-4 text-secondary">
-            No receipts found. Create one via <Link href="/owner/inventory/receipts/bulk">Bulk receive</Link>.
-            <div className="mt-3">
+          <div className="card-body text-center py-5">
+            <i className="ri-inbox-line d-block mb-2" style={{ fontSize: "2.5rem", opacity: 0.4 }} />
+            {poFilterInvalid ? (
+              <>
+                <h6 className="fw-semibold mb-1">No receipts to show under this link</h6>
+                <p className="text-muted small mb-3">Fix or clear the invalid purchase order filter above to see receipts.</p>
+              </>
+            ) : poIdParsed != null ? (
+              <>
+                <h6 className="fw-semibold mb-1">No receipts for this purchase order yet</h6>
+                <p className="text-muted small mb-3">
+                  Goods haven&apos;t been received against PO <strong>#{poIdParsed}</strong> yet. Use the warehouse receiving flow to create a GRN.
+                </p>
+                <Link href={`/owner/inventory/purchase-orders/${poIdParsed}`} className="btn btn-outline-primary btn-sm me-2">
+                  Back to PO #{poIdParsed}
+                </Link>
+              </>
+            ) : (
+              <>
+                <h6 className="fw-semibold mb-1">No receipts found</h6>
+                <p className="text-muted small mb-3">
+                  Receive goods from the warehouse to create GRN entries here.
+                </p>
+              </>
+            )}
+            <div className="mt-2">
               <Link href="/owner/inventory/receipts/bulk" className="btn btn-primary btn-sm me-2">
                 Bulk receive
               </Link>
-              <Link href="/owner/inventory/warehouse" className="btn btn-outline-secondary btn-sm">
-                Warehouse
+              <Link href="/owner/inventory/purchase-orders" className="btn btn-outline-secondary btn-sm">
+                Purchase orders
               </Link>
             </div>
           </div>
@@ -346,43 +500,49 @@ export default function OwnerInventoryReceiptsPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {items.map((r) => (
-                    <tr key={r.id}>
-                      <td className="fw-semibold">#{r.id}</td>
-                      <td className="text-muted small">{formatDate(r.createdAt)}</td>
-                      <td>{r.location?.name ?? "—"}</td>
-                      <td>{r.vendor?.name ?? "—"}</td>
-                      <td className="small">
-                        {r.purchaseOrder ? (
-                          <Link href={`/owner/inventory/purchase-orders/${r.purchaseOrder.id}`} className="text-decoration-none">
-                            {r.purchaseOrder.poNumber}
+                  {items.map((r) => {
+                    const displayStatus = deriveDisplayStatus(r);
+                    return (
+                      <tr key={r.id}>
+                        <td className="fw-semibold">
+                          <Link href={`/owner/inventory/grn/${r.id}`} className="text-decoration-none">
+                            #{r.id}
                           </Link>
-                        ) : (
-                          "—"
-                        )}
-                      </td>
-                      <td>
-                        <span className={`badge ${statusClass(r.status)}`}>{r.status ?? "—"}</span>
-                      </td>
-                      <td>{r.lines?.length ?? 0}</td>
-                      <td className="text-end">
-                        <button
-                          type="button"
-                          className="btn btn-outline-primary btn-sm me-1"
-                          onClick={() => openDrawer(r.id)}
-                        >
-                          View
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-outline-secondary btn-sm"
-                          onClick={() => openDrawer(r.id, true)}
-                        >
-                          Print
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                        <td className="text-muted small">{formatDate(r.createdAt)}</td>
+                        <td>{r.location?.name ?? "—"}</td>
+                        <td>{r.vendor?.name ?? "—"}</td>
+                        <td className="small">
+                          {r.purchaseOrder ? (
+                            <Link href={`/owner/inventory/purchase-orders/${r.purchaseOrder.id}`} className="text-decoration-none">
+                              {r.purchaseOrder.poNumber}
+                            </Link>
+                          ) : (
+                            "—"
+                          )}
+                        </td>
+                        <td>
+                          <span className={`badge ${statusClass(displayStatus)}`}>{statusLabel(displayStatus)}</span>
+                        </td>
+                        <td>{r.lines?.length ?? 0}</td>
+                        <td className="text-end">
+                          <Link
+                            href={`/owner/inventory/grn/${r.id}`}
+                            className="btn btn-outline-primary btn-sm me-1"
+                          >
+                            View
+                          </Link>
+                          <button
+                            type="button"
+                            className="btn btn-outline-secondary btn-sm"
+                            onClick={() => openDrawer(r.id, true)}
+                          >
+                            Print
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -408,8 +568,8 @@ export default function OwnerInventoryReceiptsPage() {
         <Link href="/owner/inventory/receipts/bulk" className="btn btn-outline-primary btn-sm me-2">
           Bulk receive
         </Link>
-        <Link href="/owner/inventory/warehouse" className="btn btn-outline-secondary btn-sm">
-          Warehouse
+        <Link href="/owner/inventory/purchase-orders" className="btn btn-outline-secondary btn-sm">
+          Purchase orders
         </Link>
       </div>
 

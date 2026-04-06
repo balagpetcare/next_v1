@@ -151,7 +151,11 @@ export default function StaffPickListDetailPage() {
                             const v = window.prompt("Quantity picked", String(ln.quantityToPick ?? ""));
                             if (v == null) return;
                             const n = parseInt(v, 10);
-                            if (!Number.isFinite(n) || n < 0) return;
+                            const maxQ = Number(ln.quantityToPick ?? 0);
+                            if (!Number.isFinite(n) || n < 0 || n > maxQ) {
+                              toast.error(`Quantity must be between 0 and ${maxQ}`);
+                              return;
+                            }
                             setBusy(true);
                             try {
                               await pickListUpdateLine(Number(pickListId), ln.id, { quantityPicked: n });

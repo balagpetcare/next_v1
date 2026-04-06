@@ -48,13 +48,31 @@ export default function WarehouseTransfersPage() {
 
   return (
     <div className="space-y-6">
+      {/* Deprecation Notice */}
+      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+        <div className="flex items-center gap-3">
+          <div className="text-yellow-600 text-xl">⚠️</div>
+          <div>
+            <p className="font-semibold text-yellow-800">Legacy Warehouse Transfer Orders</p>
+            <p className="text-sm text-yellow-700">
+              This module is deprecated. For new inter-warehouse transfers, use{" "}
+              <Link href="/owner/inventory/stock-requests" className="font-semibold underline">
+                Stock Requests → Allocation → Dispatch
+              </Link>{" "}
+              which includes controlled receiving, manager confirmation, and full audit trail.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Warehouse Transfer Orders</h1>
-          <p className="text-muted-foreground">Manage inter-warehouse stock movements</p>
+          <h1 className="text-3xl font-bold tracking-tight">Warehouse Transfer Orders (Legacy)</h1>
+          <p className="text-muted-foreground">View existing orders — use Stock Requests for new transfers</p>
         </div>
-        <Link href="/owner/inventory/warehouse-transfers/new">
-          <Button><Plus className="mr-2 h-4 w-4" />New Transfer</Button>
+        {/* New Transfer button redirects to canonical flow */}
+        <Link href="/owner/inventory/stock-requests">
+          <Button><Plus className="mr-2 h-4 w-4" />New Stock Request</Button>
         </Link>
       </div>
 

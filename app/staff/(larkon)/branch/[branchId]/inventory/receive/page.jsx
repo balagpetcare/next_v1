@@ -13,12 +13,14 @@ import {
   staffCreateOpeningStock,
   staffInventoryList,
   staffGetIncomingInboundUnified,
+  staffGetPendingPoReceipts,
 } from "@/lib/api";
 import Card from "@/src/bpa/components/ui/Card";
 import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
 import DispatchReceiveDrawer from "./_components/DispatchReceiveDrawer";
 import TransferReceiveDrawer from "./_components/TransferReceiveDrawer";
+import { getUniqueVariants, getUniqueVariantsFromStaffInventoryItems } from "@/src/lib/getUniqueVariants";
 
 const REQUIRED_PERM = "inventory.receive";
 
@@ -45,6 +47,10 @@ export default function StaffBranchInventoryReceivePage() {
   const [dispatchesError, setDispatchesError] = useState("");
   const [drawerDispatchId, setDrawerDispatchId] = useState(null);
   const [drawerTransferId, setDrawerTransferId] = useState(null);
+
+  const [pendingPoRows, setPendingPoRows] = useState([]);
+  const [pendingPoLoading, setPendingPoLoading] = useState(true);
+  const [pendingPoError, setPendingPoError] = useState("");
 
   const [locations, setLocations] = useState([]);
   const [variants, setVariants] = useState([]);
@@ -76,8 +82,21 @@ export default function StaffBranchInventoryReceivePage() {
       .finally(() => setDispatchesLoading(false));
   };
 
+  const loadPendingPoReceipts = () => {
+    if (!branchId) return;
+    setPendingPoLoading(true);
+    setPendingPoError("");
+    staffGetPendingPoReceipts(branchId)
+      .then((list) => setPendingPoRows(Array.isArray(list) ? list : []))
+      .catch((e) => setPendingPoError(e?.message ?? "Failed to load pending PO receipts"))
+      .finally(() => setPendingPoLoading(false));
+  };
+
   useEffect(() => {
-    if (branchId && canReceive) loadInbound();
+    if (branchId && canReceive) {
+      loadInbound();
+      loadPendingPoReceipts();
+    }
   }, [branchId, canReceive]);
 
   useEffect(() => {
@@ -90,17 +109,16 @@ export default function StaffBranchInventoryReceivePage() {
         const branchLocs = (locs || []).filter((l) => l.branch && String(l.branch.id) === String(branchId));
         setLocations(branchLocs);
         const items = listRes.items ?? [];
-        const seen = new Set();
-        const list = items
-          .filter((i) => i.variant && !seen.has(i.variant.id))
-          .map((i) => { seen.add(i.variant.id); return { id: i.variant.id, sku: i.variant.sku, title: i.variant.title, product: i.variant.product }; });
-        setVariants(list);
+        setVariants(getUniqueVariantsFromStaffInventoryItems(items));
         if (branchLocs.length && !form.locationId) setForm((f) => ({ ...f, locationId: String(branchLocs[0].id) }));
       })
       .catch((e) => !cancelled && setError(e?.message ?? "Failed to load"))
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
   }, [branchId, canReceive]);
+
+  /** Defense in depth: stable dedupe for dropdown keys even if state ever contained duplicates. */
+  const variantOptions = useMemo(() => getUniqueVariants(variants), [variants]);
 
   const addLine = () => setForm((f) => ({ ...f, items: [...f.items, { variantId: "", quantity: "" }] }));
   const setLine = (idx, field, value) => setForm((f) => ({
@@ -149,6 +167,8 @@ export default function StaffBranchInventoryReceivePage() {
     );
   }, 0);
 
+  const totalPendingPoQty = pendingPoRows.reduce((s, po) => s + (po.pendingQty ?? 0), 0);
+
   if (ctxLoading) {
     return (
       <div className="container py-40 text-center">
@@ -174,10 +194,15 @@ export default function StaffBranchInventoryReceivePage() {
           </Link>
           <h5 className="mb-0">Receive Center</h5>
         </div>
-        {tab === "incoming" && pendingCount > 0 && (
-          <span className="badge bg-info">
-            {pendingCount} pending · {pendingQty} unit(s)
-          </span>
+        {tab === "incoming" && (pendingCount > 0 || pendingPoRows.length > 0) && (
+          <div className="d-flex gap-8 flex-wrap">
+            {pendingCount > 0 && (
+              <span className="badge bg-info">{pendingCount} transfer(s) · {pendingQty} unit(s)</span>
+            )}
+            {pendingPoRows.length > 0 && (
+              <span className="badge bg-warning text-dark">{pendingPoRows.length} PO(s) · {totalPendingPoQty} unit(s) pending</span>
+            )}
+          </div>
         )}
       </div>
 
@@ -193,6 +218,92 @@ export default function StaffBranchInventoryReceivePage() {
 
         <Tab.Content>
           <Tab.Pane eventKey="incoming">
+          {/* ── Vendor PO receipts ── */}
+          <Card
+            title="Vendor purchase orders — pending receipt"
+            subtitle="Approved purchase orders assigned to this warehouse that have not been fully received. Click 'Receive PO' to open the GRN receiving form."
+          >
+            {pendingPoError && (
+              <div className="alert alert-danger d-flex align-items-center justify-content-between">
+                <span>{pendingPoError}</span>
+                <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => setPendingPoError("")}>Dismiss</button>
+              </div>
+            )}
+            {pendingPoLoading ? (
+              <p className="text-secondary-light">Loading…</p>
+            ) : pendingPoRows.length === 0 ? (
+              <div className="text-center py-3">
+                <p className="text-secondary-light mb-1">No purchase orders pending receipt.</p>
+                <p className="small text-muted mb-0">
+                  Purchase orders approved by the owner and assigned to this warehouse will appear here.
+                </p>
+              </div>
+            ) : (
+              <div className="table-responsive">
+                <table className="table table-sm table-hover">
+                  <thead>
+                    <tr>
+                      <th>PO #</th>
+                      <th>Vendor</th>
+                      <th>Status</th>
+                      <th>Lines</th>
+                      <th>Pending qty</th>
+                      <th>Expected delivery</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {pendingPoRows.map((po) => {
+                      const receiveHref = `/staff/branch/${branchId}/warehouse/receive-po?purchaseOrderId=${po.id}${po.vendorId ? `&vendorId=${po.vendorId}` : ""}`;
+                      const isOverdue = po.expectedDeliveryDate && new Date(po.expectedDeliveryDate) < new Date();
+                      return (
+                        <tr key={`po-${po.id}`}>
+                          <td className="fw-semibold">{po.poNumber}</td>
+                          <td>{po.vendorName ?? "—"}</td>
+                          <td>
+                            <span className={`badge ${po.status === "PARTIALLY_RECEIVED" ? "bg-warning text-dark" : "bg-success"}`}>
+                              {po.status === "PARTIALLY_RECEIVED" ? "Partial" : "Approved"}
+                            </span>
+                          </td>
+                          <td>{po.lineCount} line(s)</td>
+                          <td>
+                            <div className="d-flex align-items-center gap-2">
+                              <div className="progress flex-grow-1" style={{ height: "6px", minWidth: "60px" }}>
+                                <div
+                                  className={`progress-bar ${po.totalReceivedQty >= po.totalOrderedQty ? "bg-success" : "bg-primary"}`}
+                                  style={{ width: `${po.totalOrderedQty > 0 ? Math.min(100, (po.totalReceivedQty / po.totalOrderedQty) * 100) : 0}%` }}
+                                />
+                              </div>
+                              <span className="small text-nowrap">
+                                {po.pendingQty} / {po.totalOrderedQty}
+                              </span>
+                            </div>
+                          </td>
+                          <td>
+                            {po.expectedDeliveryDate ? (
+                              <span className={isOverdue ? "text-danger fw-semibold" : ""}>
+                                {new Date(po.expectedDeliveryDate).toLocaleDateString()}
+                                {isOverdue && " ⚠ overdue"}
+                              </span>
+                            ) : "—"}
+                          </td>
+                          <td>
+                            <Link href={receiveHref} className="btn btn-primary btn-sm">
+                              Receive PO
+                            </Link>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+
+          <div className="mb-24" />
+
+          {/* ── Transfers and dispatches ── */}
           <Card
             title="Incoming shipments"
             subtitle="Warehouse dispatches (challan) and stock-request transfers in transit or packed. Receive when status is in transit (or SENT for transfers). If you also manage transfers elsewhere, use Inventory → Transfers."
@@ -359,8 +470,8 @@ export default function StaffBranchInventoryReceivePage() {
                             onChange={(e) => setLine(idx, "variantId", e.target.value)}
                           >
                             <option value="">Select</option>
-                            {variants.map((v) => (
-                              <option key={v.id} value={v.id}>{v.sku ?? v.title ?? v.id}</option>
+                            {variantOptions.map((v) => (
+                              <option key={`variant-${v.id}`} value={v.id}>{v.sku ?? v.title ?? v.id}</option>
                             ))}
                           </LkSelect>
                         </LkFormGroup>

@@ -32,6 +32,26 @@ function formatMoney(amount: unknown, currency?: string | null) {
   return `${sym}${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
+/** Owner-facing vendor receive status from linked GRNs (requires vendorReceiveSession on PO API). */
+function poVendorReceiveChip(po: { status?: string; grns?: any[] }): { label: string; className: string } | null {
+  const st = (po.status || "").toUpperCase();
+  if (!["APPROVED", "PARTIALLY_RECEIVED", "RECEIVED"].includes(st)) return null;
+  const grns = po.grns || [];
+  const anyAwaiting = grns.some((g: any) => g.vendorReceiveSession?.status === "AWAITING_CONFIRMATION");
+  if (anyAwaiting) return { label: "Pending warehouse confirmation", className: "bg-warning text-dark" };
+  const anyDraft = grns.some(
+    (g: any) =>
+      g.status === "DRAFT" &&
+      g.vendorReceiveSession?.status !== "AWAITING_CONFIRMATION" &&
+      g.vendorReceiveSession?.status !== "POSTED"
+  );
+  if (anyDraft) return { label: "Vendor receive draft", className: "bg-secondary" };
+  if (st === "RECEIVED") return { label: "Received", className: "bg-success" };
+  if (["APPROVED", "PARTIALLY_RECEIVED"].includes(st))
+    return { label: "Awaiting warehouse receipt", className: "bg-info text-dark" };
+  return null;
+}
+
 export default function OwnerPurchaseOrderDetailPage() {
   const params = useParams();
   const id = Number(params?.id);
@@ -75,12 +95,23 @@ export default function OwnerPurchaseOrderDetailPage() {
     }
   }
 
-  const receiveHref = useMemo(() => {
-    if (!po?.id || !po?.vendor?.id) return "/owner/inventory/receipts/bulk";
-    const q = new URLSearchParams({
-      purchaseOrderId: String(po.id),
-      vendorId: String(po.vendor.id),
-    });
+  const receiveChip = useMemo(() => (po ? poVendorReceiveChip(po) : null), [po]);
+
+  const draftGrnForOwner = useMemo(() => {
+    const grns = po?.grns || [];
+    return grns.find(
+      (g: any) =>
+        g.status === "DRAFT" &&
+        g.vendorReceiveSession?.status !== "AWAITING_CONFIRMATION" &&
+        g.vendorReceiveSession?.status !== "POSTED"
+    ) as { id: number; vendorReceiveSession?: { status?: string } | null } | undefined;
+  }, [po]);
+
+  const bulkReceiveHref = useMemo(() => {
+    if (!po?.id) return "/owner/inventory/receipts/bulk";
+    const q = new URLSearchParams();
+    q.set("purchaseOrderId", String(po.id));
+    if (po.vendor?.id) q.set("vendorId", String(po.vendor.id));
     return `/owner/inventory/receipts/bulk?${q.toString()}`;
   }, [po]);
 
@@ -190,13 +221,30 @@ export default function OwnerPurchaseOrderDetailPage() {
                     Cancel PO
                   </button>
                 )}
+                {st === "RECEIVED" && receiveChip && (
+                  <span className={`badge align-self-center ${receiveChip.className}`}>{receiveChip.label}</span>
+                )}
                 {["APPROVED", "PARTIALLY_RECEIVED"].includes(st) && (
                   <>
-                    <Link href={receiveHref} className="btn btn-sm btn-dark">
-                      Receive against this PO
+                    {receiveChip && (
+                      <span className={`badge align-self-center ${receiveChip.className}`}>{receiveChip.label}</span>
+                    )}
+                    <Link href={bulkReceiveHref} className="btn btn-sm btn-primary">
+                      <i className="ri-inbox-archive-line me-1" />
+                      Create vendor receive draft
                     </Link>
+                    {draftGrnForOwner && (
+                      <Link href={`/owner/inventory/grn/${draftGrnForOwner.id}`} className="btn btn-sm btn-outline-primary">
+                        Continue draft
+                      </Link>
+                    )}
+                    {draftGrnForOwner && (
+                      <Link href={`/owner/inventory/grn/${draftGrnForOwner.id}`} className="btn btn-sm btn-outline-warning">
+                        Submit for confirmation
+                      </Link>
+                    )}
                     <Link href={`/owner/inventory/receipts?purchaseOrderId=${po.id}`} className="btn btn-sm btn-outline-secondary">
-                      All GRNs for this PO
+                      View GRNs for this PO
                     </Link>
                   </>
                 )}

@@ -6,6 +6,9 @@ import Link from "next/link";
 import {
   warehouseAccessible,
   warehouseOperationsDashboard,
+  inventoryOperationsExceptionSummary,
+  grnPendingVendorReceiveCount,
+  type OperationsExceptionSummary,
 } from "@/lib/api";
 import { useToast } from "@/src/hooks/useToast";
 import { getMessageFromApiError } from "@/src/lib/apiErrorToMessage";
@@ -80,6 +83,8 @@ export default function StaffWarehouseDashboardPage() {
     deliveryTab ? "tasks" : "requests"
   );
   const [confirmAction, setConfirmAction] = useState<{ label: string; href: string } | null>(null);
+  const [orgOpsSummary, setOrgOpsSummary] = useState<OperationsExceptionSummary | null>(null);
+  const [branchVendorPending, setBranchVendorPending] = useState<{ awaiting: number; draft: number } | null>(null);
 
   const whCtx = (branchInfo as { warehouseContext?: { linkedWarehouseCount?: number; userHasWarehouseAssignment?: boolean } } | null)
     ?.warehouseContext;
@@ -90,6 +95,59 @@ export default function StaffWarehouseDashboardPage() {
       }),
     [myAccess?.permissions, whCtx?.userHasWarehouseAssignment]
   );
+
+  const orgIdForOps = (branchInfo as { orgId?: number } | null)?.orgId;
+
+  useEffect(() => {
+    if (!orgIdForOps || !warehousePerms.hasAnyWarehouseAccess) {
+      setOrgOpsSummary(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      const s = await inventoryOperationsExceptionSummary(orgIdForOps);
+      if (!cancelled) setOrgOpsSummary(s);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [orgIdForOps, warehousePerms.hasAnyWarehouseAccess]);
+
+  useEffect(() => {
+    if (!orgIdForOps || !branchId) {
+      setBranchVendorPending(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const pc = await grnPendingVendorReceiveCount({ orgId: orgIdForOps, branchId: Number(branchId) });
+        if (!cancelled) setBranchVendorPending({ awaiting: pc.awaitingConfirmation, draft: pc.draftVendorReceives });
+      } catch {
+        if (!cancelled) setBranchVendorPending(null);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [orgIdForOps, branchId]);
+
+  const orgOpsAttentionTotal = useMemo(() => {
+    if (!orgOpsSummary) return 0;
+    const p = orgOpsSummary.pendingConfirmations;
+    const d = orgOpsSummary.discrepancies;
+    const q = orgOpsSummary.queues;
+    const b = orgOpsSummary.blockedSales;
+    return (
+      (p?.vendorReceiveSessions ?? 0) +
+      (p?.dispatchReceiveSessions ?? 0) +
+      (d?.inboundOpen ?? 0) +
+      (d?.dispatchPending ?? 0) +
+      (q?.draftGrns ?? 0) +
+      (q?.inTransitDispatches ?? 0) +
+      (b?.posOrdersPendingPayment ?? 0)
+    );
+  }, [orgOpsSummary]);
 
   // Auth / branch access via StaffBranchLayout (default: no in-page sidebar; Larkon shell owns branch nav).
 
@@ -314,6 +372,39 @@ export default function StaffWarehouseDashboardPage() {
         </div>
       )}
 
+      {orgOpsSummary && orgOpsAttentionTotal > 0 && (
+        <div className="alert alert-warning radius-12 py-2 small mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <span>
+            <strong>Org queues:</strong> vendor confirm {orgOpsSummary.pendingConfirmations.vendorReceiveSessions}, dispatch
+            confirm {orgOpsSummary.pendingConfirmations.dispatchReceiveSessions}, discrepancies (in/dispatch){" "}
+            {orgOpsSummary.discrepancies.inboundOpen}/{orgOpsSummary.discrepancies.dispatchPending}, draft GRNs{" "}
+            {orgOpsSummary.queues.draftGrns}, in transit {orgOpsSummary.queues.inTransitDispatches}, POS blocked{" "}
+            {orgOpsSummary.blockedSales.posOrdersPendingPayment}
+          </span>
+          <Link href={`/staff/branch/${branchId}/inventory/receive`} className="btn btn-sm btn-outline-dark shrink-0">
+            Branch receive
+          </Link>
+        </div>
+      )}
+
+      {branchVendorPending != null && branchVendorPending.awaiting > 0 && (
+        <div className="alert alert-warning radius-12 py-3 mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+          <div>
+            <strong>Pending vendor receives</strong>
+            <span className="ms-2">
+              {branchVendorPending.awaiting} awaiting confirmation
+              {branchVendorPending.draft > 0 ? ` · ${branchVendorPending.draft} draft(s)` : ""}
+            </span>
+          </div>
+          <Link
+            href={`/staff/branch/${branchId}/warehouse/receive-po`}
+            className="btn btn-sm btn-dark shrink-0"
+          >
+            Review now
+          </Link>
+        </div>
+      )}
+
       {warehousePerms.canViewDashboard && selectedWhId && dashboard && (
         <>
           <div className="row g-3 mb-3">
@@ -494,12 +585,12 @@ export default function StaffWarehouseDashboardPage() {
                                 <>
                                   <td>#{row.id}</td>
                                   <td>{row.location?.name || row.locationName || "—"}</td>
-                                  <td><QueueStatusBadge label={String(row.status || "DRAFT")} tone={statusTone(row.status)} /></td>
+                                  <td><QueueStatusBadge label={String(row.vendorReceiveSession?.status === "AWAITING_CONFIRMATION" ? "AWAITING_CONFIRMATION" : row.status || "DRAFT")} tone={row.vendorReceiveSession?.status === "AWAITING_CONFIRMATION" ? "warning" : statusTone(row.status)} /></td>
                                   <td>{row.lines?.length ?? 0}</td>
                                   <td>{row.vendor?.name || "—"}</td>
                                   <td>
-                                    <Link href={`/staff/branch/${branchId}/inventory/receive`} className="btn btn-sm btn-outline-primary">
-                                      Receive
+                                    <Link href={`/staff/branch/${branchId}/warehouse/receive-po`} className="btn btn-sm btn-outline-primary">
+                                      Review & Confirm
                                     </Link>
                                   </td>
                                 </>
