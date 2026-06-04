@@ -64,10 +64,11 @@ function convertItem(
   }
 
   const key = item.id.replace(/\./g, '_')
+  const isRoot = parentKey == null
   const node: MenuItemType = {
     key,
     label: item.label,
-    icon: item.icon ?? 'solar:widget-5-outline',
+    ...(isRoot ? { icon: item.icon ?? 'solar:widget-5-outline' } : {}),
     url,
     parentKey: parentKey ?? undefined,
   }

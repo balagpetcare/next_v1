@@ -49,9 +49,11 @@ export default function TopProfileMenu() {
     (me as any)?.data?.owner?.name ||
     (me as any)?.user?.profile?.displayName ||
     "User";
-  const avatarUrl = 
-    userProfile?.avatarMedia?.url || 
-    (me as any)?.user?.profile?.avatarMedia?.url || 
+  const avatarUrl =
+    userProfile?.effectivePhotoUrl ||
+    userProfile?.avatarMedia?.url ||
+    (me as any)?.user?.profile?.effectivePhotoUrl ||
+    (me as any)?.user?.profile?.avatarMedia?.url ||
     null;
   const userAuth = (me as any)?.auth || (me as any)?.data?.auth || (me as any)?.user?.auth;
   const userEmail = userAuth?.email || (me as any)?.email || "";
@@ -149,17 +151,33 @@ export default function TopProfileMenu() {
           <span className="pill" style={{ borderRadius: 999, padding: "6px 10px", maxWidth: 150, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {displayName}
           </span>
-          <span style={{ width: 34, height: 34, borderRadius: 999, background: avatarUrl && !imageError ? "transparent" : "rgba(255,255,255,0.08)", display: "inline-flex", alignItems: "center", justifyContent: "center", overflow: "hidden" }}>
+          <span
+            style={{
+              width: 34,
+              height: 34,
+              minWidth: 34,
+              minHeight: 34,
+              borderRadius: 999,
+              background: avatarUrl && !imageError ? "transparent" : "rgba(255,255,255,0.08)",
+              display: "inline-flex",
+              alignItems: "center",
+              justifyContent: "center",
+              overflow: "hidden",
+              flexShrink: 0,
+            }}
+          >
             {avatarUrl && !imageError ? (
               <img
                 src={avatarUrl}
-                alt={displayName}
-                style={{ width: "100%", height: "100%", objectFit: "cover" }}
+                alt=""
+                width={34}
+                height={34}
+                style={{ width: 34, height: 34, objectFit: "cover", display: "block" }}
                 onError={() => setImageError(true)}
-                onClick={(e) => e.stopPropagation()}
+                decoding="async"
               />
             ) : (
-              <User size={18} />
+              <User size={18} aria-hidden />
             )}
           </span>
         </span>
@@ -185,9 +203,12 @@ export default function TopProfileMenu() {
               {avatarUrl && !dropdownImageError ? (
                 <img
                   src={avatarUrl}
-                  alt={displayName}
-                  style={{ width: 48, height: 48, borderRadius: 999, objectFit: "cover" }}
+                  alt=""
+                  width={48}
+                  height={48}
+                  style={{ width: 48, height: 48, borderRadius: 999, objectFit: "cover", display: "block", flexShrink: 0 }}
                   onError={() => setDropdownImageError(true)}
+                  decoding="async"
                 />
               ) : (
                 <div style={{ width: 48, height: 48, borderRadius: 999, background: "rgba(0, 0, 0, 0.05)", display: "flex", alignItems: "center", justifyContent: "center" }}>

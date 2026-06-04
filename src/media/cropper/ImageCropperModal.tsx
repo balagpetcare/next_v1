@@ -5,97 +5,15 @@ import { Modal, Button } from "react-bootstrap";
 import Cropper from "react-easy-crop";
 import type { Area } from "react-easy-crop";
 import type { CropperConfig, CropParams, CropResult, OutputFormat } from "./types";
+import { cropImageToBlob } from "./cropUtils";
 
 export type { CropperConfig, CropParams, CropResult, OutputFormat } from "./types";
 
 const ZOOM_MIN = 1;
 const ZOOM_MAX = 3;
 
-async function loadImage(src: string): Promise<HTMLImageElement> {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.crossOrigin = "anonymous";
-    img.onload = () => resolve(img);
-    img.onerror = reject;
-    img.src = src;
-  });
-}
-
-async function cropToBlob(
-  imageSrc: string,
-  cropArea: Area,
-  rotation: number,
-  output: { format: "webp" | "jpg" | "png"; quality?: number; maxWidth?: number; maxHeight?: number }
-): Promise<Blob | null> {
-  const img = await loadImage(imageSrc);
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
-  if (!ctx) return null;
-
-  const rad = (rotation * Math.PI) / 180;
-  const sin = Math.abs(Math.sin(rad));
-  const cos = Math.abs(Math.cos(rad));
-  const rotatedWidth = img.width * cos + img.height * sin;
-  const rotatedHeight = img.width * sin + img.height * cos;
-
-  canvas.width = rotatedWidth;
-  canvas.height = rotatedHeight;
-  ctx.translate(rotatedWidth / 2, rotatedHeight / 2);
-  ctx.rotate(rad);
-  ctx.drawImage(img, -img.width / 2, -img.height / 2);
-
-  const croppedCanvas = document.createElement("canvas");
-  const croppedCtx = croppedCanvas.getContext("2d");
-  if (!croppedCtx) return null;
-
-  const scaleX = img.naturalWidth / img.width;
-  const scaleY = img.naturalHeight / img.height;
-  const cropX = cropArea.x * scaleX;
-  const cropY = cropArea.y * scaleY;
-  const cropWidth = cropArea.width * scaleX;
-  const cropHeight = cropArea.height * scaleY;
-
-  const maxW = output.maxWidth || 1800;
-  const maxH = output.maxHeight || 1800;
-  const scale = Math.min(1, maxW / cropWidth, maxH / cropHeight);
-  const finalWidth = Math.round(cropWidth * scale);
-  const finalHeight = Math.round(cropHeight * scale);
-
-  croppedCanvas.width = finalWidth;
-  croppedCanvas.height = finalHeight;
-  croppedCtx.drawImage(
-    canvas,
-    cropX,
-    cropY,
-    cropWidth,
-    cropHeight,
-    0,
-    0,
-    finalWidth,
-    finalHeight
-  );
-
-  const mime = output.format === "jpg" ? "image/jpeg" : output.format === "png" ? "image/png" : "image/webp";
-  const quality = output.format === "png" ? undefined : (output.quality ?? 0.92);
-
-  return new Promise((resolve) => {
-    croppedCanvas.toBlob(
-      (blob) => {
-        if (!blob) {
-          croppedCanvas.toBlob(
-            (fallbackBlob) => resolve(fallbackBlob),
-            mime,
-            Math.max(0.5, (quality ?? 0.92) - 0.2)
-          );
-        } else {
-          resolve(blob);
-        }
-      },
-      mime,
-      quality
-    );
-  });
-}
+/** Minimum output size (bytes) before we treat the crop as failed — avoids uploading empty/garbage buffers. */
+const MIN_CROP_OUTPUT_BYTES = 64;
 
 export interface ImageCropperModalProps {
   open: boolean;
@@ -112,6 +30,7 @@ export function ImageCropperModal({ open, file, config, onClose, onSave }: Image
   const [rotation, setRotation] = useState(0);
   const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
   const [saving, setSaving] = useState(false);
+  const [cropError, setCropError] = useState<string | null>(null);
 
   const output = config.output;
   const aspectRatio = config.aspectRatio ?? undefined;
@@ -129,6 +48,7 @@ export function ImageCropperModal({ open, file, config, onClose, onSave }: Image
     setZoom(1);
     setRotation(0);
     setCroppedAreaPixels(null);
+    setCropError(null);
     return () => URL.revokeObjectURL(url);
   }, [open, file]);
 
@@ -144,26 +64,38 @@ export function ImageCropperModal({ open, file, config, onClose, onSave }: Image
     setCrop({ x: 0, y: 0 });
     setZoom(1);
     setRotation(0);
+    setCropError(null);
   }, []);
 
   const handleSave = useCallback(async () => {
     if (!imageSrc || !croppedAreaPixels) return;
 
     setSaving(true);
+    setCropError(null);
     try {
-      const blob = await cropToBlob(imageSrc, croppedAreaPixels, rotation, output);
-      if (!blob) throw new Error("Crop failed");
-
-      // Debug: Log blob details
-      console.log('Crop Debug - Blob created:', {
-        type: blob.type,
-        size: blob.size,
-        isBlob: blob instanceof Blob,
-        arrayBuffer: await blob.slice(0, 10).arrayBuffer().then(buf => new Uint8Array(buf)),
+      const format = output.format as OutputFormat;
+      const { blob, width, height } = await cropImageToBlob(imageSrc, croppedAreaPixels, {
+        format,
+        quality: output.quality ?? 0.92,
+        maxWidth: output.maxWidth,
+        maxHeight: output.maxHeight,
+        rotation,
       });
 
-      const width = Math.round(croppedAreaPixels.width);
-      const height = Math.round(croppedAreaPixels.height);
+      if (!blob || blob.size < MIN_CROP_OUTPUT_BYTES) {
+        setCropError("Could not produce a valid image from this crop. Try adjusting zoom or rotation, or use another image.");
+        return;
+      }
+
+      const mimeExpected =
+        format === "jpg" ? "image/jpeg" : format === "png" ? "image/png" : "image/webp";
+      const mimeForFile = blob.type && blob.type.length > 0 ? blob.type : mimeExpected;
+      const ext =
+        mimeForFile === "image/png" ? ".png" : mimeForFile === "image/webp" ? ".webp" : ".jpg";
+      const baseName = file?.name?.replace(/\.[^.]+$/, "") || "cropped";
+      const fileOut = new File([blob], `${baseName}${ext}`, {
+        type: mimeForFile,
+      });
 
       const cropParams: CropParams = {
         x: croppedAreaPixels.x,
@@ -173,31 +105,21 @@ export function ImageCropperModal({ open, file, config, onClose, onSave }: Image
         rotation,
       };
 
-      const fileOut = new File([blob], file?.name?.replace(/\.[^.]+$/, "") || "cropped", {
-        type: blob.type,
-      });
-
-      // Debug: Log file details
-      console.log('Crop Debug - File created:', {
-        name: fileOut.name,
-        type: fileOut.type,
-        size: fileOut.size,
-        lastModified: fileOut.lastModified,
-      });
-
       const result: CropResult = {
         blob,
         file: fileOut,
         width,
         height,
-        format: output.format as OutputFormat,
+        format,
         size: blob.size,
         cropParams,
       };
       onSave(result);
       onClose();
     } catch (e) {
-      console.error("Crop failed", e);
+      setCropError(
+        e instanceof Error ? e.message : "Could not process this image. Please try another file."
+      );
     } finally {
       setSaving(false);
     }
@@ -212,6 +134,11 @@ export function ImageCropperModal({ open, file, config, onClose, onSave }: Image
       </Modal.Header>
       <Modal.Body>
         <div className="d-flex flex-column gap-3">
+          {cropError ? (
+            <div className="alert alert-danger py-2 mb-0" role="alert">
+              {cropError}
+            </div>
+          ) : null}
           <div
             className="position-relative overflow-hidden bg-dark rounded"
             style={{ height: 400 }}

@@ -1,53 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useState, useCallback } from "react";
-import LocationPicker from "@/components/location/LocationPicker";
+import LocationField from "@/src/components/location/LocationField";
 import { normalizeLocation, withLegacyLocationFields } from "@/src/lib/location/normalizeLocation";
 import LkFormGroup from "@larkon-ui/components/LkFormGroup";
 import LkInput from "@larkon-ui/components/LkInput";
 import LkSelect from "@larkon-ui/components/LkSelect";
 import LkTextarea from "@larkon-ui/components/LkTextarea";
 import LkFileUpload from "@larkon-ui/components/LkFileUpload";
-
-// Reusable LocationPicker is SSR-safe (exported with ssr: false). Use it directly.
-function legacyLocationToPickerValue(loc) {
-  if (!loc) return { lat: null, lng: null, address: "", city: "", state: "", country: "Bangladesh", postalCode: "" };
-  const lat = loc.lat ?? loc.latitude ?? null;
-  const lng = loc.lng ?? loc.longitude ?? null;
-  return {
-    lat: lat != null && Number.isFinite(lat) ? lat : null,
-    lng: lng != null && Number.isFinite(lng) ? lng : null,
-    address: loc.addressLine || loc.formattedAddress || loc.fullPathText || loc.text || "",
-    city: loc.city || loc.cityName || "",
-    state: loc.state || loc.stateName || "",
-    country: loc.countryName || (loc.countryCode === "BD" ? "Bangladesh" : loc.countryCode || "Bangladesh"),
-    postalCode: loc.postalCode || "",
-  };
-}
-
-function pickerValueToLegacyLocation(pickerVal, previousLocation) {
-  const prev = previousLocation || {};
-  const parts = [pickerVal.address, pickerVal.city, pickerVal.state, pickerVal.country].filter(Boolean);
-  const fullPathText = parts.join(", ");
-  return {
-    ...prev,
-    countryCode: prev.countryCode || "BD",
-    lat: pickerVal.lat ?? undefined,
-    lng: pickerVal.lng ?? undefined,
-    latitude: pickerVal.lat ?? null,
-    longitude: pickerVal.lng ?? null,
-    addressLine: pickerVal.address || undefined,
-    city: pickerVal.city || undefined,
-    cityName: pickerVal.city || undefined,
-    state: pickerVal.state || undefined,
-    stateName: pickerVal.state || undefined,
-    countryName: pickerVal.country || undefined,
-    postalCode: pickerVal.postalCode || undefined,
-    formattedAddress: fullPathText || undefined,
-    fullPathText: fullPathText || undefined,
-    text: fullPathText || undefined,
-  };
-}
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
 
@@ -509,11 +469,16 @@ export default function OrganizationWizardForm({
             </div>
 
             <div className="col-12 mt-3">
-              <LocationPicker
-                value={legacyLocationToPickerValue(location)}
-                onChange={(pickerVal) => setLocation(normalizeLoc(pickerValueToLegacyLocation(pickerVal, location)))}
+              <LocationField
+                value={location}
+                onChange={(next) => setLocation(normalizeLoc(next))}
                 label="Business Location"
                 required
+                defaultCountryCode="BD"
+                enableRecent
+                enableGPS
+                enableMap
+                enableBdHierarchy
               />
               {locationHelperText ? (
                 <div className="text-muted mt-1" style={{ fontSize: 12 }}>

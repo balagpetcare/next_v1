@@ -3,7 +3,9 @@ import { cookies } from "next/headers";
 import "@/src/styles/landing.css";
 import "@/src/styles/producer-landing.css";
 import { LanguageProvider } from "./_lib/LanguageContext";
+import { organization, buildOrganizationJsonLd } from "@/config/organization";
 import PublicHeader from "./_components/PublicHeader";
+import PublicSiteFooter from "./_components/PublicSiteFooter";
 import GoToTopButton from "./_components/GoToTopButton";
 
 const siteMode = process.env.SITE_MODE || "owner";
@@ -18,19 +20,27 @@ const defaultPaths: Record<string, string> = {
   country: "/country",
 };
 
+const appBase = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3104";
+
 export const metadata = {
-  title: "BPA/WPA — পোষা প্রাণীর ব্যবসা প্ল্যাটফর্ম | Bangladesh Pet Association",
+  title: `BPA/WPA — পোষা প্রাণীর ব্যবসা প্ল্যাটফর্ম | ${organization.name.en}`,
   description:
     "পেট শপ, ভেট ক্লিনিক, গ্রুমিং সেন্টার ও সাপ্লাইয়ারদের জন্য সম্পূর্ণ ব্যবসায়িক সমাধান। বিক্রয়, ইনভেন্টরি, রিপোর্ট, স্টাফ—সব এক প্ল্যাটফর্মে। BPA অফিসিয়াল।",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3104"),
+  metadataBase: new URL(appBase),
   openGraph: {
-    title: "BPA/WPA — Pet Business Platform",
+    title: `BPA/WPA — Pet Business Platform | ${organization.name.en}`,
     description:
       "Complete pet business management for shops, clinics, groomers. Sales, inventory, reports—all in one. Official BPA platform.",
     images: ["/og-image.png"],
     url: "/",
+    siteName: organization.name.en,
   },
   alternates: { canonical: "/" },
+  other: {
+    "contact:email": organization.email,
+    "contact:phone": organization.phone,
+    "contact:website": organization.website,
+  },
 };
 
 export default async function PublicLayout({
@@ -59,20 +69,26 @@ export default async function PublicLayout({
 
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "SoftwareApplication",
-    name: "BPA/WPA Pet Business Platform",
-    applicationCategory: "BusinessApplication",
-    operatingSystem: "Web",
-    offers: {
-      "@type": "Offer",
-      price: "0",
-      priceCurrency: "BDT",
-    },
-    aggregateRating: {
-      "@type": "AggregateRating",
-      ratingValue: "5",
-      reviewCount: "3",
-    },
+    "@graph": [
+      buildOrganizationJsonLd(`${organization.website}/og-image.png`),
+      {
+        "@type": "SoftwareApplication",
+        name: "BPA/WPA Pet Business Platform",
+        applicationCategory: "BusinessApplication",
+        operatingSystem: "Web",
+        url: appBase,
+        publisher: {
+          "@type": "Organization",
+          name: organization.name.en,
+          url: organization.website,
+        },
+        offers: {
+          "@type": "Offer",
+          price: "0",
+          priceCurrency: "BDT",
+        },
+      },
+    ],
   };
 
   if (siteMode === "producer") {
@@ -96,6 +112,7 @@ export default async function PublicLayout({
         <main id="main-content" role="main">
           {children}
         </main>
+        <PublicSiteFooter />
         <GoToTopButton />
       </LanguageProvider>
     </div>

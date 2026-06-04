@@ -30,6 +30,7 @@ export default function ClinicConsoleTabs({ branchId }: ClinicConsoleTabsProps) 
     { key: "doctors", label: "Doctors", href: `${base}/doctors`, icon: "ri-stethoscope-line" },
     { key: "services", label: "Services", href: `${base}/services`, icon: "ri-service-line" },
     { key: "catalog", label: "Catalog", href: `${base}/catalog`, icon: "ri-archive-line", matchers: [`${base}/catalog/`] },
+    { key: "vaccine-mapping", label: "Vaccine Mapping", href: `${base}/catalog/vaccine-mappings`, icon: "ri-syringe-line" },
     { key: "packages", label: "Packages", href: `${base}/packages`, icon: "ri-box-3-line" },
     { key: "inventory", label: "Inventory", href: `${base}/inventory`, icon: "ri-stack-line" },
     { key: "sterilization", label: "Sterilization", href: `${base}/sterilization`, icon: "ri-temp-cold-line" },

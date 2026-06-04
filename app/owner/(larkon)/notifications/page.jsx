@@ -38,6 +38,9 @@ function getViewHref(item) {
   if (type === "INVENTORY_STOCK_REQUEST" && meta.stockRequestId) {
     return `/owner/inventory/stock-requests/${meta.stockRequestId}`;
   }
+  if (meta.kind === "DISPATCH_RECEIVE_AWAITING_CONFIRMATION" && meta.stockRequestId) {
+    return `/owner/inventory/stock-requests/${meta.stockRequestId}`;
+  }
   return null;
 }
 

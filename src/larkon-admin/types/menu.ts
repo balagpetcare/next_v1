@@ -5,7 +5,6 @@ export type MenuItemType = {
   label: string
   isTitle?: boolean
   icon?: string
-  showIcon?: boolean
   url?: string
   badge?: {
     variant: string

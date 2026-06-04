@@ -5,6 +5,8 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/src/lib/apiFetch";
 import { notify } from "@/app/owner/_components/Notification";
+import { ownerGet } from "@/app/owner/_lib/ownerApi";
+import BarcodePrintButton from "@/app/_components/barcode/BarcodePrintButton";
 import LkInput from "@larkon-ui/components/LkInput";
 import LkSelect from "@larkon-ui/components/LkSelect";
 import LkButton from "@larkon-ui/components/LkButton";
@@ -31,6 +33,7 @@ export default function ProductVariantsPage() {
   const [error, setError] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [defaultBranchId, setDefaultBranchId] = useState<number | null>(null);
   const [formData, setFormData] = useState({
     sku: "",
     title: "",
@@ -57,6 +60,21 @@ export default function ProductVariantsPage() {
   useEffect(() => {
     loadProduct();
   }, [productId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    ownerGet<{ data?: Array<{ branch?: { id?: number } }> }>("/api/v1/inventory/locations")
+      .then((res) => {
+        if (cancelled) return;
+        const rows = res?.data;
+        const bid = Array.isArray(rows) ? rows.find((r) => r?.branch?.id)?.branch?.id : null;
+        if (bid != null && Number.isFinite(Number(bid))) setDefaultBranchId(Number(bid));
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const handleAddVariant = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -337,6 +355,7 @@ export default function ProductVariantsPage() {
                         <VariantRow
                           key={variant.id}
                           variant={variant}
+                          defaultBranchId={defaultBranchId}
                           isEditing={editingId === variant.id}
                           onEdit={() => setEditingId(variant.id)}
                           onCancel={() => setEditingId(null)}
@@ -358,6 +377,7 @@ export default function ProductVariantsPage() {
 
 function VariantRow({
   variant,
+  defaultBranchId,
   isEditing,
   onEdit,
   onCancel,
@@ -365,6 +385,7 @@ function VariantRow({
   onDelete,
 }: {
   variant: Variant;
+  defaultBranchId: number | null;
   isEditing: boolean;
   onEdit: () => void;
   onCancel: () => void;
@@ -562,6 +583,14 @@ function VariantRow({
         </span>
       </td>
       <td className="text-end">
+        {defaultBranchId ? (
+          <BarcodePrintButton
+            href={`/owner/inventory/labels/product/${variant.id}/print?branchId=${defaultBranchId}`}
+            className="btn btn-sm btn-outline-secondary radius-12 me-2"
+          >
+            Print SKU
+          </BarcodePrintButton>
+        ) : null}
         <button
           type="button"
           className="btn btn-sm btn-outline-primary radius-12 me-2"

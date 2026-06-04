@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useParams } from "next/navigation";
 import { apiPost } from "@/lib/api";
 import { useToast } from "@/src/hooks/useToast";
-import { normalizeApiError, useApiErrorPopup } from "../../../_lib/apiErrorPopup";
+import { normalizeApiError, useApiErrorPopup } from "../../../../_lib/apiErrorPopup";
 
 export default function ProducerGenerateCodesPage() {
   const params = useParams();

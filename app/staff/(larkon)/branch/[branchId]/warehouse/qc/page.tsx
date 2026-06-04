@@ -36,7 +36,7 @@ export default function StaffWarehouseQcPage() {
       setError(null);
       try {
         const list = await warehouseAccessible().catch(() => []);
-        const arr = Array.isArray(list) ? list : [];
+        const arr = (Array.isArray(list) ? list : []) as Array<{ id: number; name?: string; orgId?: number }>;
         if (cancelled) return;
         setWarehouses(arr);
         const fromQ = whQ ? Number(whQ) : null;

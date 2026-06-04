@@ -391,11 +391,11 @@ export default function AdminBranchesPage() {
           {totalPages > 1 && (
             <div className="mt-3">
               <PaginationBar
-                currentPage={page}
+                page={page}
+                pageSize={ITEMS_PER_PAGE}
+                total={items.length}
                 totalPages={totalPages}
                 onPageChange={setPage}
-                itemsPerPage={ITEMS_PER_PAGE}
-                totalItems={items.length}
               />
             </div>
           )}

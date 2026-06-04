@@ -1,10 +1,9 @@
 "use client";
 
 /**
- * LocationPickerUnified – single unified location picker for ALL countries.
- * Fields: Country (searchable) -> State/Province (searchable) -> City -> Postal -> Address Line
- * + Formatted Address (read-only) + Lat/Lng + Map with search.
- * No BD special-case; no DB-driven Division/District/Upazila.
+ * LocationPickerUnified – single picker for all countries.
+ * Bangladesh path uses centralized Division -> District -> Upazila -> Union selectors.
+ * Other countries use Country -> State/Province -> City.
  */
 
 import {
@@ -30,6 +29,7 @@ import {
   withLegacyLocationFields,
 } from "@/src/lib/location/normalizeLocation";
 import { useRecentLocations } from "@/src/components/location/hooks/useRecentLocations";
+import type { BangladeshLocationSelection } from "@/components/location/LocationSelector";
 
 const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
 
@@ -247,6 +247,10 @@ const MapPickerUnified = dynamic(
   () => import("@/src/components/location/MapPickerUnified"),
   { ssr: false }
 );
+const BangladeshLocationSelector = dynamic(
+  () => import("@/components/location/LocationSelector"),
+  { ssr: false }
+);
 
 export type LocationPickerUnifiedProps = {
   value: LocationValue | null;
@@ -283,6 +287,7 @@ export default function LocationPickerUnified({
   const [isUsingGps, setIsUsingGps] = useState(false);
 
   const countryCode = draft.countryCode?.toUpperCase() || defaultCountryCode.toUpperCase();
+  const isBangladesh = countryCode === "BD";
 
   const { recentCountries, lastAddressPreview, saveRecent, clearRecent, hasAny } = useRecentLocations({
     contextKey: "owner",
@@ -327,6 +332,11 @@ export default function LocationPickerUnified({
     (code: string) => {
       emit({
         countryCode: code.toUpperCase(),
+        divisionId: undefined,
+        districtId: undefined,
+        upazilaId: undefined,
+        unionId: undefined,
+        areaId: undefined,
         state: undefined,
         city: undefined,
         postalCode: undefined,
@@ -336,6 +346,28 @@ export default function LocationPickerUnified({
       });
     },
     [emit]
+  );
+
+  const handleBdHierarchyChange = useCallback(
+    (next: BangladeshLocationSelection) => {
+      const path = [next.unionName, next.upazilaName, next.districtName, next.divisionName]
+        .filter(Boolean)
+        .join(", ");
+      emit(
+        {
+          divisionId: next.divisionId,
+          districtId: next.districtId,
+          upazilaId: next.upazilaId,
+          unionId: next.unionId,
+          areaId: undefined,
+          state: next.divisionName || draft.state || undefined,
+          city: next.districtName || draft.city || undefined,
+          formattedAddress: path || draft.formattedAddress || undefined,
+        },
+        "manual"
+      );
+    },
+    [draft.city, draft.formattedAddress, draft.state, emit]
   );
 
   const handleMapPick = useCallback(
@@ -450,23 +482,42 @@ export default function LocationPickerUnified({
               />
 
               <div className="mt-3">
-                <label className="form-label small fw-medium">State / Province</label>
-                <SearchableStateSelect
-                  value={draft.state || ""}
-                  onChange={(v) => emit({ state: v || undefined })}
-                  states={states}
-                  placeholder="State / Province"
-                />
+                {isBangladesh ? (
+                  <BangladeshLocationSelector
+                    value={{
+                      divisionId: draft.divisionId,
+                      districtId: draft.districtId,
+                      upazilaId: draft.upazilaId,
+                      unionId: draft.unionId,
+                      divisionName: draft.state || undefined,
+                      districtName: draft.city || undefined,
+                      upazilaName: undefined,
+                      unionName: undefined,
+                    }}
+                    onChange={handleBdHierarchyChange}
+                    required={required}
+                  />
+                ) : (
+                  <>
+                    <label className="form-label small fw-medium">State / Province</label>
+                    <SearchableStateSelect
+                      value={draft.state || ""}
+                      onChange={(v) => emit({ state: v || undefined })}
+                      states={states}
+                      placeholder="State / Province"
+                    />
+                  </>
+                )}
               </div>
 
               <div className="mt-3 row g-2">
                 <div className="col-md-6">
-                  <label className="form-label small fw-medium">City</label>
+                  <label className="form-label small fw-medium">{isBangladesh ? "District / City (optional override)" : "City"}</label>
                   <input
                     className="form-control radius-12"
                     value={draft.city || ""}
                     onChange={(e) => emit({ city: e.target.value || undefined })}
-                    placeholder="City"
+                    placeholder={isBangladesh ? "Auto from district, editable if needed" : "City"}
                   />
                 </div>
                 <div className="col-md-6">

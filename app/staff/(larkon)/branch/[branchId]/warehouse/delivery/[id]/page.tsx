@@ -9,7 +9,36 @@ import { useBranchContext } from "@/lib/useBranchContext";
 import { getWarehouseCapabilities } from "@/src/lib/warehouseRbac";
 import WarehouseAccessFallback from "../../_components/WarehouseAccessFallback";
 
-function statusBadge(s) {
+type DispatchItemRow = {
+  variant?: { sku?: string; title?: string };
+  quantity?: number;
+  qty?: number;
+};
+
+type DeliveryDispatchRow = {
+  fromLocation?: { name?: string; type?: string };
+  fromLocationId?: number;
+  toLocation?: { name?: string; type?: string };
+  toLocationId?: number;
+  items?: DispatchItemRow[];
+  proofOfDelivery?: { recipientPhone?: string; receivedAt?: string };
+};
+
+type DeliveryAssignmentRow = {
+  id: number;
+  status?: string;
+  assignedAt?: string;
+  startedAt?: string;
+  arrivedAt?: string;
+  completedAt?: string;
+  assignedBy?: { name?: string; email?: string };
+  receivedByName?: string;
+  podNote?: string;
+  failureReason?: string;
+  dispatch?: DeliveryDispatchRow;
+};
+
+function statusBadge(s: string | null | undefined) {
   const u = (s || "").toUpperCase();
   if (u === "ASSIGNED") return "bg-info";
   if (u === "EN_ROUTE") return "bg-warning text-dark";
@@ -26,9 +55,9 @@ export default function StaffDeliveryDetailPage() {
   const { myAccess } = useBranchContext(branchId);
   const caps = getWarehouseCapabilities(myAccess?.permissions ?? []);
 
-  const [assignment, setAssignment] = useState(null);
+  const [assignment, setAssignment] = useState<DeliveryAssignmentRow | null>(null);
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<string | null>(null);
   const [acting, setActing] = useState(false);
 
   // POD fields
@@ -40,9 +69,9 @@ export default function StaffDeliveryDetailPage() {
   async function loadAssignment() {
     try {
       const data = await deliveryAssignmentById(assignmentId);
-      setAssignment(data);
+      setAssignment(data as DeliveryAssignmentRow);
     } catch (e) {
-      setError((e && e.message) || "Failed to load assignment");
+      setError(e instanceof Error ? e.message : "Failed to load assignment");
     } finally {
       setLoading(false);
     }
@@ -58,7 +87,7 @@ export default function StaffDeliveryDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [assignmentId, caps.canViewDeliveries]);
 
-  async function handleAction(action) {
+  async function handleAction(action: string) {
     setActing(true);
     setError(null);
     try {
@@ -74,7 +103,7 @@ export default function StaffDeliveryDetailPage() {
       }
       await loadAssignment();
     } catch (e) {
-      setError((e && e.message) || "Action failed");
+      setError(e instanceof Error ? e.message : "Action failed");
     } finally {
       setActing(false);
     }
@@ -114,6 +143,7 @@ export default function StaffDeliveryDetailPage() {
 
   const a = assignment;
   const d = a.dispatch || {};
+  const dispatchItems = d.items ?? [];
   const status = (a.status || "").toUpperCase();
 
   return (
@@ -184,16 +214,16 @@ export default function StaffDeliveryDetailPage() {
       </div>
 
       {/* Dispatch Items */}
-      {d.items?.length > 0 && (
+      {dispatchItems.length > 0 && (
         <div className="card border mb-4">
-          <div className="card-header"><h6 className="mb-0">Items ({d.items.length})</h6></div>
+          <div className="card-header"><h6 className="mb-0">Items ({dispatchItems.length})</h6></div>
           <div className="card-body p-0">
             <table className="table table-sm mb-0">
               <thead className="table-light">
                 <tr><th>SKU</th><th>Product</th><th>Qty</th></tr>
               </thead>
               <tbody>
-                {d.items.map((item, idx) => (
+                {dispatchItems.map((item, idx) => (
                   <tr key={idx}>
                     <td className="text-muted small">{item.variant?.sku || "—"}</td>
                     <td>{item.variant?.title || "—"}</td>

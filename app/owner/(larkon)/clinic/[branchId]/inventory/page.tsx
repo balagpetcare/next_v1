@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -17,6 +17,7 @@ import {
 } from "@/app/owner/_lib/ownerApi";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 import ClinicConsoleTabs from "@/app/owner/_components/clinic/ClinicConsoleTabs";
+import { clinicalItemLooksLikeVaccine } from "@/app/_lib/vaccineInventoryUi";
 
 type StockRow = {
   id: number;
@@ -25,7 +26,12 @@ type StockRow = {
   currentQty?: number;
   availableQty?: number;
   reorderLevel?: number;
-  item?: { name: string; itemCode?: string };
+  item?: {
+    name: string;
+    itemCode?: string;
+    domainType?: string;
+    category?: { name?: string };
+  };
   variant?: { variantName: string; sku?: string };
 };
 
@@ -62,7 +68,12 @@ export default function OwnerClinicInventoryPage() {
   const [consumptionData, setConsumptionData] = useState<{ items: unknown[]; total: number }>({ items: [], total: 0 });
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [consumptionLoading, setConsumptionLoading] = useState(false);
+  const [vaccineStockFilter, setVaccineStockFilter] = useState<"all" | "vaccine">("all");
 
+  const displayedStock = useMemo(() => {
+    if (vaccineStockFilter !== "vaccine") return stock;
+    return stock.filter((r) => clinicalItemLooksLikeVaccine(r.item ?? null));
+  }, [stock, vaccineStockFilter]);
   const loadLedger = useCallback(async () => {
     if (!branchId) return;
     try {
@@ -314,7 +325,7 @@ export default function OwnerClinicInventoryPage() {
     <div className="dashboard-main-body">
       <PageHeader
         title="Inventory"
-        subtitle="Clinical item stock for this branch"
+        subtitle="View branch clinical stock, vaccine availability, batches, and reorder status."
         breadcrumbs={[
           { label: "Home", href: "/owner" },
           { label: "Clinic", href: "/owner/clinic" },
@@ -334,6 +345,23 @@ export default function OwnerClinicInventoryPage() {
       />
       <ClinicConsoleTabs branchId={branchId} />
 
+      <div className="alert alert-light border small mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <span>
+          Vaccine distribution uses the same retail lots as product inventory. Map clinical items under{" "}
+          <strong>Vaccine mapping</strong> after stock arrives at the branch.
+        </span>
+        <div className="d-flex flex-wrap gap-2">
+          <Link href="/owner/inventory/batches" className="btn btn-sm btn-outline-secondary radius-8">
+            Batches / expiry
+          </Link>
+          <Link href="/owner/inventory/stock-requests" className="btn btn-sm btn-outline-secondary radius-8">
+            Stock requests
+          </Link>
+          <Link href={`/owner/clinic/${branchId}/catalog/vaccine-mappings`} className="btn btn-sm btn-outline-info radius-8">
+            Vaccine mapping
+          </Link>
+        </div>
+      </div>
       {error && <div className="alert alert-danger radius-12 mb-3">{error}</div>}
       {success && <div className="alert alert-success radius-12 mb-3">{success}</div>}
 
@@ -468,14 +496,22 @@ export default function OwnerClinicInventoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {alerts.map((r) => (
+                  {alerts.map((r) => {
+                    const vax = clinicalItemLooksLikeVaccine(r.item ?? null);
+                    return (
                     <tr key={r.id}>
-                      <td>{r.item?.name ?? r.itemId}</td>
+                      <td>
+                        {r.item?.name ?? r.itemId}
+                        {vax ? (
+                          <span className="badge bg-info-subtle text-info-emphasis border border-info-subtle small ms-1">Vaccine</span>
+                        ) : null}
+                      </td>
                       <td>{r.variant?.variantName ?? r.variantId}</td>
                       <td>{Number(r.availableQty ?? r.currentQty ?? 0)}</td>
                       <td>{r.reorderLevel != null ? Number(r.reorderLevel) : "—"}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -484,8 +520,20 @@ export default function OwnerClinicInventoryPage() {
       )}
 
       <div className="card radius-12">
-        <div className="card-header bg-transparent p-24">
+        <div className="card-header bg-transparent p-24 d-flex flex-wrap justify-content-between align-items-center gap-2">
           <h6 className="mb-0 fw-semibold">Branch item stock</h6>
+          <div className="d-flex align-items-center gap-2">
+            <label className="small text-muted mb-0 me-1">Show</label>
+            <select
+              className="form-select form-select-sm radius-8"
+              style={{ width: "auto" }}
+              value={vaccineStockFilter}
+              onChange={(e) => setVaccineStockFilter(e.target.value as "all" | "vaccine")}
+            >
+              <option value="all">All clinical items</option>
+              <option value="vaccine">Vaccine-like only</option>
+            </select>
+          </div>
         </div>
         <div className="card-body p-24">
           {loading ? (
@@ -495,6 +543,8 @@ export default function OwnerClinicInventoryPage() {
             </div>
           ) : stock.length === 0 ? (
             <p className="text-muted mb-0">No clinical item stock recorded for this branch. Use Receive to add stock.</p>
+          ) : displayedStock.length === 0 ? (
+            <p className="text-muted mb-0">No rows match the vaccine filter. Switch back to all items or confirm warehouse→branch receive posted.</p>
           ) : (
             <div className="table-responsive">
               <table className="table table-sm table-hover mb-0">
@@ -508,15 +558,23 @@ export default function OwnerClinicInventoryPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {stock.map((r) => (
+                  {displayedStock.map((r) => {
+                    const vax = clinicalItemLooksLikeVaccine(r.item ?? null);
+                    return (
                     <tr key={r.id}>
-                      <td>{r.item?.name ?? r.itemId}</td>
+                      <td>
+                        {r.item?.name ?? r.itemId}
+                        {vax ? (
+                          <span className="badge bg-info-subtle text-info-emphasis border border-info-subtle small ms-1">Vaccine</span>
+                        ) : null}
+                      </td>
                       <td>{r.variant?.variantName ?? r.variantId}</td>
                       <td>{Number(r.currentQty ?? 0)}</td>
                       <td>{Number(r.availableQty ?? 0)}</td>
                       <td>{r.reorderLevel != null ? Number(r.reorderLevel) : "—"}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

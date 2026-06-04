@@ -34,3 +34,27 @@
     margin-bottom: 0 !important;
   }
 }
+
+body.staff-pos-dense-mode {
+  .larkon-dashboard.wrapper {
+    min-height: 100dvh;
+  }
+
+  .page-content.bpa-app-workspace {
+    padding-bottom: 0;
+    overflow: visible;
+  }
+
+  .page-content.bpa-app-workspace > .container-fluid {
+    display: flex;
+    flex-direction: column;
+    min-height: calc(100dvh - var(--bs-topbar-height, 100px));
+    max-width: none;
+    width: 100%;
+    padding: 8px 10px 10px;
+  }
+
+  .page-content.bpa-app-workspace > .footer {
+    display: none;
+  }
+}

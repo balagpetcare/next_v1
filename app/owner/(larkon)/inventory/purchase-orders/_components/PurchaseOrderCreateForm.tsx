@@ -2,11 +2,17 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
-import { ownerGet } from "@/app/owner/_lib/ownerApi";
+import { getProcurementDemand, getStockRequest, ownerGet } from "@/app/owner/_lib/ownerApi";
 import { Modal } from "react-bootstrap";
 import { purchaseOrderCreate } from "@/lib/api";
+import {
+  getEligibleStockRequestLinesForPoPrefill,
+  mapEligibleStockRequestItemsToPoPrefillPatches,
+  parseOwnerStockRequestPrefillId,
+  stockRequestDetailFromOwnerGetBody,
+} from "@/lib/stockRequestPoPrefill";
 import type { VariantOption } from "../../receipts/bulk/types";
 import { POProductPicker } from "./POProductPicker";
 
@@ -162,8 +168,27 @@ function VariantSearchInput({
   );
 }
 
+type SourceRequestMeta = {
+  id: number;
+  status: string;
+  requestIntent?: string;
+  eligibleLineCount: number;
+  totalLineCount: number;
+};
+
 export default function PurchaseOrderCreateForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromProcurementDemandId = searchParams.get("fromProcurementDemand");
+  const fromRequestId = searchParams.get("fromRequestId");
+  const procurementPrefillDoneRef = useRef(false);
+  /** Invalidates in-flight stock-request prefill when the query param changes or is cleared. */
+  const requestPrefillSeqRef = useRef(0);
+  const [sourceRequest, setSourceRequest] = useState<SourceRequestMeta | null>(null);
+  const [requestPrefillError, setRequestPrefillError] = useState("");
+
+  const fromRequestIdParsed = useMemo(() => parseOwnerStockRequestPrefillId(fromRequestId), [fromRequestId]);
+
   const [orgs, setOrgs] = useState<Org[]>([]);
   const [orgId, setOrgId] = useState<number | null>(null);
   const [warehouses, setWarehouses] = useState<WarehouseRow[]>([]);
@@ -232,6 +257,132 @@ export default function PurchaseOrderCreateForm() {
       c = true;
     };
   }, [orgId]);
+
+  /** Pre-fill one line from procurement demand (central warehouse shortage → PO). */
+  useEffect(() => {
+    if (fromRequestId?.trim()) return;
+    if (!fromProcurementDemandId || orgId == null || loadingMeta || procurementPrefillDoneRef.current) return;
+    const demandId = Number(fromProcurementDemandId);
+    if (!Number.isFinite(demandId) || demandId < 1) return;
+    procurementPrefillDoneRef.current = true;
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getProcurementDemand(demandId, orgId);
+        const envelope = res as { data?: any } | null;
+        const row = envelope?.data ?? res;
+        if (cancelled || !row?.variantId) return;
+        const v = row.variant || {};
+        const productName = v.product?.name ?? "";
+        const remaining = Math.max(1, Number(row.demandQty || 1) - Number(row.fulfilledQty || 0));
+        const line: LineDraft = {
+          ...newLine(),
+          variantId: row.variantId,
+          sku: v.sku || "",
+          title: v.title || "",
+          productLabel: productName,
+          orderedQty: String(remaining),
+          unitCost: "",
+          note: row.stockRequestId
+            ? `Procurement demand #${demandId} (stock request #${row.stockRequestId})`
+            : `Procurement demand #${demandId}`,
+        };
+        setLines([line]);
+      } catch {
+        procurementPrefillDoneRef.current = false;
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [fromProcurementDemandId, fromRequestId, orgId, loadingMeta]);
+
+  /** Clear request-prefill UI state when the query param is removed (client navigation). */
+  useEffect(() => {
+    if (!fromRequestId?.trim()) {
+      requestPrefillSeqRef.current += 1;
+      setSourceRequest(null);
+      setRequestPrefillError("");
+    }
+  }, [fromRequestId]);
+
+  /** Pre-fill lines from stock request (procurement intent or replenishment). */
+  useEffect(() => {
+    if (!fromRequestId?.trim()) return;
+    if (!fromRequestIdParsed.ok) {
+      requestPrefillSeqRef.current += 1;
+      setSourceRequest(null);
+      setRequestPrefillError("Invalid stock request id in URL");
+      setLines([newLine()]);
+      return;
+    }
+    if (loadingMeta) return;
+
+    const reqId = fromRequestIdParsed.id;
+    requestPrefillSeqRef.current += 1;
+    const seq = requestPrefillSeqRef.current;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await getStockRequest(reqId);
+        if (cancelled || seq !== requestPrefillSeqRef.current) return;
+        if (res == null) {
+          setSourceRequest(null);
+          setRequestPrefillError(`Stock request #${reqId} not found or not accessible`);
+          setLines([newLine()]);
+          return;
+        }
+        const req = stockRequestDetailFromOwnerGetBody(res);
+        if (!req?.id) {
+          setSourceRequest(null);
+          setRequestPrefillError(`Stock request #${reqId} not found or not accessible`);
+          setLines([newLine()]);
+          return;
+        }
+        const rid = Number(req.id);
+        if (!Number.isFinite(rid) || rid < 1) {
+          setSourceRequest(null);
+          setRequestPrefillError(`Stock request #${reqId} not found or not accessible`);
+          setLines([newLine()]);
+          return;
+        }
+        const status = typeof req.status === "string" ? req.status : "";
+        const requestIntent = typeof req.requestIntent === "string" ? req.requestIntent : undefined;
+        const { allItems, eligible } = getEligibleStockRequestLinesForPoPrefill(req.items);
+        setSourceRequest({
+          id: rid,
+          status,
+          requestIntent,
+          eligibleLineCount: eligible.length,
+          totalLineCount: allItems.length,
+        });
+        setRequestPrefillError("");
+        if (eligible.length === 0) {
+          setRequestPrefillError(
+            allItems.length > 0
+              ? "All request lines are already fulfilled, cancelled, or have no remaining quantity."
+              : "This stock request has no line items."
+          );
+          setLines([newLine()]);
+          return;
+        }
+        const patches = mapEligibleStockRequestItemsToPoPrefillPatches(eligible, rid);
+        const prefillLines: LineDraft[] = patches.map((p) => ({ ...newLine(), ...p }));
+        setLines(prefillLines);
+      } catch (err: unknown) {
+        if (cancelled || seq !== requestPrefillSeqRef.current) return;
+        setSourceRequest(null);
+        setLines([newLine()]);
+        const msg = err instanceof Error ? err.message : "Failed to load stock request";
+        setRequestPrefillError(msg);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [fromRequestId, fromRequestIdParsed, loadingMeta]);
 
   useEffect(() => {
     if (!showVendorModal || orgId == null) return;
@@ -435,6 +586,41 @@ export default function PurchaseOrderCreateForm() {
         </ol>
       </nav>
 
+      {sourceRequest && (
+        <div className="alert alert-info d-flex align-items-center gap-2 mb-3">
+          <i className="ri-file-list-3-line fs-5" aria-hidden />
+          <div>
+            <strong>Creating purchase order from stock request #{sourceRequest.id}</strong>
+            <span className="ms-2 small text-muted">
+              {sourceRequest.eligibleLineCount} of {sourceRequest.totalLineCount} lines prefilled
+              {sourceRequest.requestIntent === "PROCUREMENT" && " (procurement request)"}
+            </span>
+            <Link
+              href={`/owner/inventory/stock-requests/${sourceRequest.id}`}
+              className="ms-2 small"
+            >
+              View request →
+            </Link>
+          </div>
+        </div>
+      )}
+      {requestPrefillError && (
+        <div className="alert alert-warning d-flex align-items-start gap-2 mb-3">
+          <i className="ri-alert-line fs-5" aria-hidden />
+          <div>
+            <strong>Could not prefill from request</strong>
+            <div className="small">{requestPrefillError}</div>
+            {fromRequestIdParsed.ok && (
+              <Link
+                href={`/owner/inventory/stock-requests/${fromRequestIdParsed.id}`}
+                className="small"
+              >
+                View request #{fromRequestIdParsed.id} →
+              </Link>
+            )}
+          </div>
+        </div>
+      )}
       {error && <div className="alert alert-danger">{error}</div>}
       {orgs.length === 0 && !loadingMeta && (
         <div className="alert alert-warning">
@@ -446,8 +632,13 @@ export default function PurchaseOrderCreateForm() {
         <div className="row g-3">
           <div className="col-lg-8">
             <div className="card border radius-12 mb-3">
-              <div className="card-header py-3 d-flex justify-content-between align-items-center">
-                <h6 className="mb-0 fw-semibold">Order header</h6>
+              <div className="card-header py-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <div className="d-flex align-items-baseline gap-3 flex-wrap">
+                  <h6 className="mb-0 fw-semibold">Order header</h6>
+                  {sourceRequest ? (
+                    <span className="small text-muted mb-0">Stock request #{sourceRequest.id}</span>
+                  ) : null}
+                </div>
                 <span className="badge bg-light text-dark">Draft on save</span>
               </div>
               <div className="card-body p-24">

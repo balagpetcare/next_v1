@@ -324,6 +324,20 @@ export default function OwnerInventoryPage() {
       />
 
       <div className="alert alert-info radius-12 py-2 small mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <span>
+          Warehouse vaccine stock uses the same product lots as retail. See <strong>Batches</strong> for lot/expiry; after branch receive, map under Clinic → <strong>Vaccine mapping</strong>.
+        </span>
+        <div className="d-flex flex-wrap gap-2">
+          <Link href="/owner/inventory/batches" className="btn btn-sm btn-outline-dark">
+            Batches
+          </Link>
+          <Link href="/owner/inventory/stock-requests" className="btn btn-sm btn-outline-dark">
+            Transfers / requests
+          </Link>
+        </div>
+      </div>
+
+      <div className="alert alert-info radius-12 py-2 small mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
         <span>Forecasting, replenishment suggestions, and procurement rankings live under Supply planning.</span>
         <Link href="/owner/inventory/planning" className="btn btn-sm btn-primary">
           Supply planning

@@ -2,10 +2,9 @@ import { notFound } from "next/navigation";
 import StaffStockRequestDetailClient from "../../_components/StaffStockRequestDetailClient";
 
 /**
- * Canonical staff stock request detail (flat segment — reliable under Next 16 / Turbopack).
- * Public URL: /staff/branch/[branchId]/inventory/stock-request-detail/[requestId]
- *
- * Legacy nested URL .../inventory/stock-requests/[id] redirects here (next.config redirects + proxy.ts).
+ * Staff stock request detail — canonical filesystem route (URL matches this path).
+ * /staff/branch/[branchId]/inventory/stock-request-detail/[requestId]
+ * Legacy .../inventory/stock-requests/:id and .../stock-request-detail-page/:id redirect here (next.config.js + proxy.ts).
  */
 export default async function StaffStockRequestDetailPage({
   params,

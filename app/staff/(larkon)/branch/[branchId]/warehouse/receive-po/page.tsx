@@ -1,5 +1,19 @@
 "use client";
 
+/**
+ * Vendor receive queue for this warehouse branch.
+ *
+ * Canonical URLs:
+ * - Queue: /staff/branch/:branchId/warehouse/receive-po
+ * - Prefill PO receive (BulkReceivePage): ?purchaseOrderId=…&vendorId=… (optional)
+ * - Highlight a draft on the queue: ?grnId=…
+ * - GRN review/detail (public URL): /staff/branch/:branchId/warehouse/vendor-receipts/:grnId
+ *   (physical page: warehouse/vendor-receipt-grn-detail-page/[grnId]/page.tsx; beforeFiles rewrite from public URL)
+ *
+ * Legacy /warehouse/receive-po/:numericId → next.config redirect + proxy.ts → vendor-receipts/:grnId (GRN id).
+ * PO receive prefills: ?purchaseOrderId=… (not a path segment).
+ */
+
 import { useEffect, useMemo, useState, useRef, useCallback } from "react";
 import { useParams, useSearchParams } from "next/navigation";
 import Link from "next/link";
@@ -7,11 +21,8 @@ import StaffBranchLayout from "@/src/components/branch/StaffBranchLayout";
 import { useBranchContext } from "@/lib/useBranchContext";
 import WarehouseAccessFallback from "../_components/WarehouseAccessFallback";
 import BulkReceivePage from "@/app/owner/(larkon)/inventory/receipts/bulk/BulkReceivePage";
-import {
-  VendorReceiveGrnCard,
-  canExecuteVendorReceive,
-  type VendorReceiveGrnDraft,
-} from "./_components/VendorReceiveGrnCard";
+import { VendorReceiveGrnCard, type VendorReceiveGrnDraft } from "./_components/VendorReceiveGrnCard";
+import { canExecuteVendorReceive } from "@/src/lib/vendorReceipt/permissions";
 import { useToast } from "@/src/hooks/useToast";
 import { getMessageFromApiError } from "@/src/lib/apiErrorToMessage";
 
@@ -121,11 +132,16 @@ export default function StaffWarehouseReceivePoPage() {
             <Link href={`/staff/branch/${branchId}/warehouse`} className="btn btn-sm btn-outline-secondary">
               ← Warehouse
             </Link>
-            <h5 className="mb-0">Vendor receipts</h5>
+            <h5 className="mb-0">Receive workspace</h5>
           </div>
-          <button className="btn btn-primary btn-sm" onClick={() => setShowCreate(!showCreate)}>
-            {showCreate ? "Hide receive form" : "+ New receive"}
-          </button>
+          <div className="d-flex flex-wrap gap-2">
+            <Link href={`/staff/branch/${branchId}/warehouse/vendor-receipts`} className="btn btn-outline-primary btn-sm">
+              Vendor receipts list
+            </Link>
+            <button className="btn btn-primary btn-sm" onClick={() => setShowCreate(!showCreate)}>
+              {showCreate ? "Hide receive form" : "+ New receive"}
+            </button>
+          </div>
         </div>
 
         <p className="text-muted small mb-3">

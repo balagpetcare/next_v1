@@ -41,7 +41,7 @@ export default function StaffQcInspectionDetailPage() {
     (async () => {
       try {
         const list = await warehouseAccessible().catch(() => []);
-        const arr = Array.isArray(list) ? list : [];
+        const arr = (Array.isArray(list) ? list : []) as Array<{ id: number; orgId?: number }>;
         const fromQ = whQ ? Number(whQ) : null;
         const pick =
           (fromQ && arr.some((w) => Number(w.id) === fromQ) ? fromQ : null) ??

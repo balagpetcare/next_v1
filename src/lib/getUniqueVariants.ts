@@ -81,8 +81,10 @@ export function getUniqueVariantsFromStaffInventoryItems(
   for (const i of items) {
     if (!i?.variant) continue;
     const v = i.variant;
+    const id = normalizeVariantId(v.id);
+    if (id == null) continue;
     rows.push({
-      id: v.id,
+      id,
       sku: v.sku,
       title: v.title,
       product: v.product,

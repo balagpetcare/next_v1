@@ -11,6 +11,8 @@ type StockRequestRow = {
   branch?: { id?: number; name?: string };
   createdAt?: string | null;
   status?: string;
+  derivedStatus?: string;
+  derivedStatusDisplay?: { label?: string; color?: string };
   requestIntent?: string;
   items?: Array<{ id: number }>;
 };
@@ -40,8 +42,10 @@ function statusClass(s: string) {
   const u = (s || "").toUpperCase();
   if (["DRAFT"].includes(u)) return "bg-secondary";
   if (["SUBMITTED", "OWNER_REVIEW"].includes(u)) return "bg-info";
+  if (["APPROVED", "PARTIALLY_DISPATCHED"].includes(u)) return "bg-warning text-dark";
   if (["FULFILLED_PARTIAL", "FULFILLED_FULL", "DISPATCHED"].includes(u)) return "bg-primary";
-  if (["RECEIVED_PARTIAL", "RECEIVED_FULL", "CLOSED"].includes(u)) return "bg-success";
+  if (["RECEIVED_PARTIAL", "RECEIVED_FULL", "PARTIALLY_RECEIVED", "RECEIVED", "CLOSED"].includes(u))
+    return "bg-success";
   if (["CANCELLED"].includes(u)) return "bg-danger";
   return "bg-light text-dark";
 }
@@ -308,7 +312,18 @@ export default function OwnerStockRequestsPage() {
                         )}
                       </td>
                       <td>
-                        <span className={`badge ${statusClass(r.status || "")}`}>{r.status ?? "—"}</span>
+                        <span
+                          className={`badge ${statusClass(
+                            r.derivedStatus || r.status || ""
+                          )}`}
+                          title={
+                            r.derivedStatus && r.derivedStatus !== r.status
+                              ? `DB status: ${r.status ?? "—"}`
+                              : undefined
+                          }
+                        >
+                          {r.derivedStatusDisplay?.label ?? r.derivedStatus ?? r.status ?? "—"}
+                        </span>
                       </td>
                       <td>{r.items?.length ?? 0}</td>
                       <td className="text-end">

@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { Suspense, useEffect, useState, useMemo } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { Nav, Tab, TabContainer, TabContent, TabPane } from "react-bootstrap";
+import { Nav, Tab } from "react-bootstrap";
 import LkFormGroup from "@larkon-ui/components/LkFormGroup";
 import LkInput from "@larkon-ui/components/LkInput";
 import LkSelect from "@larkon-ui/components/LkSelect";
@@ -18,26 +18,29 @@ import {
 import Card from "@/src/bpa/components/ui/Card";
 import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
-import DispatchReceiveDrawer from "./_components/DispatchReceiveDrawer";
 import TransferReceiveDrawer from "./_components/TransferReceiveDrawer";
+import {
+  staffBranchInventoryPath,
+  staffBranchPickerPath,
+  staffDispatchReceiveWorkspacePath,
+  staffInboundTransfersPath,
+  staffReceiveCenterPath,
+  staffReceiveCenterWithTransferPath,
+  staffWarehouseReceivePoQueryPath,
+} from "@/lib/staffInventoryRoutes";
 import { getUniqueVariants, getUniqueVariantsFromStaffInventoryItems } from "@/src/lib/getUniqueVariants";
+import { isWarehouseHubBranch } from "@/src/lib/branchSidebarConfig";
+import {
+  canLoadPendingPoReceipts,
+  canReceiveStockAtBranch,
+  canViewReceiveCenterPage,
+  dispatchStatusBadgeClass,
+} from "@/lib/inboundTransfersUi";
 
-const REQUIRED_PERM = "inventory.receive";
-
-function statusBadge(status) {
-  const map = {
-    IN_TRANSIT: "bg-info",
-    SENT: "bg-info",
-    DELIVERED: "bg-success",
-    CREATED: "bg-secondary",
-    PACKED: "bg-warning text-dark",
-  };
-  return map[status] ?? "bg-secondary";
-}
-
-export default function StaffBranchInventoryReceivePage() {
+function StaffBranchInventoryReceivePageInner() {
   const params = useParams();
   const router = useRouter();
+  const searchParams = useSearchParams();
   const branchId = useMemo(() => String(params?.branchId ?? ""), [params]);
   const { branch, myAccess, isLoading: ctxLoading, errorCode, hasViewPermission } = useBranchContext(branchId);
 
@@ -45,11 +48,10 @@ export default function StaffBranchInventoryReceivePage() {
   const [inboundRows, setInboundRows] = useState([]);
   const [dispatchesLoading, setDispatchesLoading] = useState(true);
   const [dispatchesError, setDispatchesError] = useState("");
-  const [drawerDispatchId, setDrawerDispatchId] = useState(null);
   const [drawerTransferId, setDrawerTransferId] = useState(null);
 
   const [pendingPoRows, setPendingPoRows] = useState([]);
-  const [pendingPoLoading, setPendingPoLoading] = useState(true);
+  const [pendingPoLoading, setPendingPoLoading] = useState(false);
   const [pendingPoError, setPendingPoError] = useState("");
 
   const [locations, setLocations] = useState([]);
@@ -66,7 +68,11 @@ export default function StaffBranchInventoryReceivePage() {
   });
 
   const permissions = myAccess?.permissions ?? [];
-  const canReceive = permissions.includes(REQUIRED_PERM);
+  const isHub = useMemo(() => isWarehouseHubBranch(branch), [branch]);
+  const canViewShell = useMemo(() => canViewReceiveCenterPage(permissions, isHub), [permissions, isHub]);
+  const canReceive = useMemo(() => canReceiveStockAtBranch(permissions), [permissions]);
+  const readOnly = canViewShell && !canReceive;
+  const canPo = useMemo(() => canLoadPendingPoReceipts(permissions), [permissions]);
 
   useEffect(() => {
     if (errorCode === "unauthorized") router.replace("/staff/login");
@@ -88,16 +94,45 @@ export default function StaffBranchInventoryReceivePage() {
     setPendingPoError("");
     staffGetPendingPoReceipts(branchId)
       .then((list) => setPendingPoRows(Array.isArray(list) ? list : []))
-      .catch((e) => setPendingPoError(e?.message ?? "Failed to load pending PO receipts"))
+      .catch((e) => {
+        const msg = e?.message ?? "";
+        const forbidden = msg === "Forbidden" || msg.includes("403");
+        setPendingPoRows([]);
+        setPendingPoError(
+          forbidden
+            ? "Purchase order receipt list is not available for your role (API denied)."
+            : msg || "Failed to load pending PO receipts"
+        );
+      })
       .finally(() => setPendingPoLoading(false));
   };
 
   useEffect(() => {
-    if (branchId && canReceive) {
-      loadInbound();
-      loadPendingPoReceipts();
+    if (branchId && canViewShell) loadInbound();
+  }, [branchId, canViewShell]);
+
+  useEffect(() => {
+    if (!branchId || !canPo) {
+      setPendingPoRows([]);
+      setPendingPoError("");
+      setPendingPoLoading(false);
+      return;
     }
-  }, [branchId, canReceive]);
+    loadPendingPoReceipts();
+  }, [branchId, canPo]);
+
+  useEffect(() => {
+    const d = searchParams.get("dispatch");
+    const t = searchParams.get("transfer");
+    if (d && /^\d+$/.test(d)) {
+      router.replace(staffDispatchReceiveWorkspacePath(branchId, d), { scroll: false });
+      return;
+    }
+    if (t && /^\d+$/.test(t)) {
+      setDrawerTransferId(Number(t));
+      router.replace(staffReceiveCenterPath(branchId), { scroll: false });
+    }
+  }, [searchParams, branchId, router]);
 
   useEffect(() => {
     if (!branchId || !canReceive) return;
@@ -116,6 +151,10 @@ export default function StaffBranchInventoryReceivePage() {
       .finally(() => !cancelled && setLoading(false));
     return () => { cancelled = true; };
   }, [branchId, canReceive]);
+
+  useEffect(() => {
+    if (!canReceive && tab === "opening") setTab("incoming");
+  }, [canReceive, tab]);
 
   /** Defense in depth: stable dedupe for dropdown keys even if state ever contained duplicates. */
   const variantOptions = useMemo(() => getUniqueVariants(variants), [variants]);
@@ -146,13 +185,16 @@ export default function StaffBranchInventoryReceivePage() {
         });
       }
       setSuccess(true);
-      setTimeout(() => router.push(`/staff/branch/${branchId}/inventory`), 1500);
+      setTimeout(() => router.push(staffBranchInventoryPath(branchId)), 1500);
     } catch (err) {
       setError(err?.message ?? "Failed to record receive");
     } finally {
       setSubmitting(false);
     }
   };
+
+  const enterpriseRows = useMemo(() => inboundRows.filter((r) => r.kind === "DISPATCH"), [inboundRows]);
+  const legacyRows = useMemo(() => inboundRows.filter((r) => r.kind === "TRANSFER"), [inboundRows]);
 
   const receivableRows = inboundRows.filter((r) => r.receivable);
   const pendingCount = receivableRows.length;
@@ -177,9 +219,23 @@ export default function StaffBranchInventoryReceivePage() {
       </div>
     );
   }
-  if (errorCode === "forbidden" || !hasViewPermission || !canReceive) {
+  if (errorCode === "forbidden" || !hasViewPermission) {
     return (
-      <AccessDenied missingPerm={REQUIRED_PERM} onBack={() => router.push(`/staff/branch/${branchId}`)} />
+      <AccessDenied
+        title="Branch access required"
+        message="You cannot open this branch, or your membership is not active. Pick another branch or contact an administrator."
+        onBack={() => router.push(staffBranchPickerPath())}
+      />
+    );
+  }
+
+  if (!canViewShell) {
+    return (
+      <AccessDenied
+        title="Receive Center unavailable"
+        message="Your role does not include inbound visibility for this branch. Typical grants: inventory read, inbound read, dispatch view, or warehouse access at a hub branch."
+        onBack={() => router.push(staffBranchInventoryPath(branchId))}
+      />
     );
   }
 
@@ -187,17 +243,29 @@ export default function StaffBranchInventoryReceivePage() {
     <div className="container py-24">
       <BranchHeader branch={branch} myAccess={myAccess} branchId={branchId} />
 
+      {readOnly ? (
+        <div className="alert alert-light border small mb-16" role="status">
+          <strong>Read-only.</strong> You can review incoming shipments and open dispatch workspaces in view mode. Posting receipts, opening stock, and PO receive
+          actions require <span className="text-body">Receive stock</span> on your role.
+        </div>
+      ) : null}
+
       <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-24">
-        <div className="d-flex align-items-center gap-12">
-          <Link href={`/staff/branch/${branchId}/inventory`} className="btn btn-outline-secondary btn-sm">
+        <div className="d-flex align-items-center gap-12 flex-wrap">
+          <Link href={staffBranchInventoryPath(branchId)} className="btn btn-outline-secondary btn-sm">
             ← Back to Inventory
+          </Link>
+          <Link href={staffInboundTransfersPath(branchId)} className="btn btn-outline-secondary btn-sm">
+            Inbound transfers
           </Link>
           <h5 className="mb-0">Receive Center</h5>
         </div>
         {tab === "incoming" && (pendingCount > 0 || pendingPoRows.length > 0) && (
           <div className="d-flex gap-8 flex-wrap">
             {pendingCount > 0 && (
-              <span className="badge bg-info">{pendingCount} transfer(s) · {pendingQty} unit(s)</span>
+              <span className="badge bg-info">
+                {pendingCount} {canReceive ? "ready to receive" : "in queue (view)"} · {pendingQty} unit(s)
+              </span>
             )}
             {pendingPoRows.length > 0 && (
               <span className="badge bg-warning text-dark">{pendingPoRows.length} PO(s) · {totalPendingPoQty} unit(s) pending</span>
@@ -212,7 +280,9 @@ export default function StaffBranchInventoryReceivePage() {
             <Nav.Link eventKey="incoming" role="tab" aria-selected={tab === "incoming"}>Incoming shipments</Nav.Link>
           </Nav.Item>
           <Nav.Item>
-            <Nav.Link eventKey="opening" role="tab" aria-selected={tab === "opening"}>Opening stock</Nav.Link>
+            <Nav.Link eventKey="opening" role="tab" aria-selected={tab === "opening"} disabled={!canReceive} title={!canReceive ? "Requires Receive stock permission" : undefined}>
+              Opening stock
+            </Nav.Link>
           </Nav.Item>
         </Nav>
 
@@ -223,13 +293,18 @@ export default function StaffBranchInventoryReceivePage() {
             title="Vendor purchase orders — pending receipt"
             subtitle="Approved purchase orders assigned to this warehouse that have not been fully received. Click 'Receive PO' to open the GRN receiving form."
           >
+            {!canPo ? (
+              <p className="small text-muted mb-0">
+                PO receipt queue requires purchase/GRN receive permissions. You can still review dispatches and transfers below if your role includes inbound read.
+              </p>
+            ) : null}
             {pendingPoError && (
               <div className="alert alert-danger d-flex align-items-center justify-content-between">
                 <span>{pendingPoError}</span>
                 <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => setPendingPoError("")}>Dismiss</button>
               </div>
             )}
-            {pendingPoLoading ? (
+            {!canPo ? null : pendingPoLoading ? (
               <p className="text-secondary-light">Loading…</p>
             ) : pendingPoRows.length === 0 ? (
               <div className="text-center py-3">
@@ -254,7 +329,7 @@ export default function StaffBranchInventoryReceivePage() {
                   </thead>
                   <tbody>
                     {pendingPoRows.map((po) => {
-                      const receiveHref = `/staff/branch/${branchId}/warehouse/receive-po?purchaseOrderId=${po.id}${po.vendorId ? `&vendorId=${po.vendorId}` : ""}`;
+                      const receiveHref = staffWarehouseReceivePoQueryPath(branchId, { purchaseOrderId: po.id, vendorId: po.vendorId });
                       const isOverdue = po.expectedDeliveryDate && new Date(po.expectedDeliveryDate) < new Date();
                       return (
                         <tr key={`po-${po.id}`}>
@@ -288,9 +363,15 @@ export default function StaffBranchInventoryReceivePage() {
                             ) : "—"}
                           </td>
                           <td>
-                            <Link href={receiveHref} className="btn btn-primary btn-sm">
-                              Receive PO
-                            </Link>
+                            {canReceive ? (
+                              <Link href={receiveHref} className="btn btn-primary btn-sm">
+                                Receive PO
+                              </Link>
+                            ) : (
+                              <span className="btn btn-outline-secondary btn-sm disabled" title="Requires Receive stock">
+                                Receive PO
+                              </span>
+                            )}
                           </td>
                         </tr>
                       );
@@ -303,10 +384,9 @@ export default function StaffBranchInventoryReceivePage() {
 
           <div className="mb-24" />
 
-          {/* ── Transfers and dispatches ── */}
           <Card
-            title="Incoming shipments"
-            subtitle="Warehouse dispatches (challan) and stock-request transfers in transit or packed. Receive when status is in transit (or SENT for transfers). If you also manage transfers elsewhere, use Inventory → Transfers."
+            title="Incoming dispatches (enterprise)"
+            subtitle="StockDispatch from warehouse. Receive is enabled only when status is IN_TRANSIT (after warehouse Send dispatch). CREATED / PACKED rows show until the shipment is sent."
           >
             {dispatchesError && (
               <div className="alert alert-danger d-flex align-items-center justify-content-between">
@@ -316,15 +396,12 @@ export default function StaffBranchInventoryReceivePage() {
             )}
             {dispatchesLoading ? (
               <p className="text-secondary-light">Loading…</p>
-            ) : inboundRows.length === 0 ? (
-              <div className="text-center py-4">
-                <p className="text-secondary-light mb-2">No incoming shipments.</p>
+            ) : enterpriseRows.length === 0 ? (
+              <div className="text-center py-3">
+                <p className="text-secondary-light mb-1">No enterprise dispatches for this branch.</p>
                 <p className="small text-muted mb-0">
-                  Owner fulfillment from central warehouse usually creates an <strong>in-transit transfer</strong> (shown here).
-                  Dispatch challans appear after pick handoff or direct dispatch and are marked in transit when sent.{" "}
-                  <Link href={`/staff/branch/${branchId}/inventory/stock-requests`}>Stock Requests</Link>
-                  {" · "}
-                  <Link href={`/staff/branch/${branchId}/inventory/transfers`}>Transfers</Link>
+                  If warehouse already handed off a pick list, the dispatch should list here with status CREATED or PACKED until the warehouse sends it (then IN_TRANSIT).
+                  If nothing appears, confirm the dispatch <strong>toLocation</strong> matches this branch and check API logs.
                 </p>
               </div>
             ) : (
@@ -332,60 +409,62 @@ export default function StaffBranchInventoryReceivePage() {
                 <table className="table table-sm table-hover">
                   <thead>
                     <tr>
-                      <th>Type</th>
                       <th>ID</th>
-                      <th>From</th>
-                      <th>To</th>
+                      <th>Request</th>
+                      <th>Source</th>
+                      <th>Destination</th>
                       <th>Status</th>
+                      <th>Next</th>
                       <th>Items</th>
                       <th></th>
                     </tr>
                   </thead>
                   <tbody>
-                    {inboundRows.map((row) => {
-                      const fromName = row.fromLocation?.name ?? "—";
-                      const toName = row.toLocation?.name ?? "—";
+                    {enterpriseRows.map((row) => {
                       const itemCount = (row.items ?? []).length;
                       const totalQty = (row.items ?? []).reduce((s, i) => {
                         const q = i.quantity ?? i.quantityDispatched ?? 0;
                         return s + (typeof q === "number" ? q : 0);
                       }, 0);
-                      const isDispatch = row.kind === "DISPATCH";
-                      const key = `${row.kind}-${row.id}`;
-                      const openDrawer = () => {
-                        if (isDispatch) {
-                          setDrawerTransferId(null);
-                          setDrawerDispatchId(row.id);
-                        } else {
-                          setDrawerDispatchId(null);
-                          setDrawerTransferId(row.id);
-                        }
+                      const key = `DISPATCH-${row.id}`;
+                      const openEnterpriseReceive = () => {
+                        router.push(staffDispatchReceiveWorkspacePath(branchId, row.id));
                       };
                       return (
                         <tr key={key}>
                           <td>
-                            <span className="badge bg-light text-dark">{isDispatch ? "Dispatch" : "Transfer"}</span>
+                            <span className="badge bg-primary me-1">Dispatch</span>#{row.id}
                           </td>
-                          <td>#{row.id}</td>
-                          <td>{fromName}</td>
-                          <td>{toName}</td>
+                          <td className="small">{row.requestRef ?? "—"}</td>
+                          <td className="small">{row.sourceLabel ?? row.fromLocation?.name ?? "—"}</td>
+                          <td className="small">
+                            <div>{row.destinationBranchName ?? "—"}</div>
+                            <div className="text-muted">{row.toLocation?.name ?? ""}</div>
+                          </td>
                           <td>
-                            <span className={`badge ${statusBadge(row.status)}`}>{row.status}</span>
-                            {!row.receivable && (
-                              <span className="small text-muted ms-1 d-block">Not receivable yet</span>
-                            )}
+                            <span className={`badge ${dispatchStatusBadgeClass(row.status)}`}>{row.status}</span>
                           </td>
+                          <td className="small text-muted">{row.nextActionHint ?? "—"}</td>
                           <td>{itemCount} line(s), {totalQty} unit(s)</td>
                           <td>
-                            <button type="button" className="btn btn-outline-primary btn-sm me-1" onClick={openDrawer}>
+                            <Link
+                              href={staffDispatchReceiveWorkspacePath(branchId, row.id)}
+                              className="btn btn-outline-primary btn-sm me-1"
+                            >
                               View
-                            </button>
+                            </Link>
                             <button
                               type="button"
                               className="btn btn-primary btn-sm"
-                              disabled={!row.receivable}
-                              title={!row.receivable ? "Wait until dispatch is in transit (or transfer is sent)" : ""}
-                              onClick={openDrawer}
+                              disabled={!canReceive || !row.receivable}
+                              title={
+                                !canReceive
+                                  ? "Read-only: open View for dispatch workspace"
+                                  : !row.receivable
+                                    ? (row.nextActionHint || "Not receivable yet")
+                                    : "Open dispatch receive session"
+                              }
+                              onClick={openEnterpriseReceive}
                             >
                               Receive
                             </button>
@@ -398,6 +477,91 @@ export default function StaffBranchInventoryReceivePage() {
               </div>
             )}
           </Card>
+
+          <details className="mb-24 border rounded p-3 bg-light bg-opacity-25">
+            <summary className="fw-semibold text-secondary cursor-pointer" style={{ listStyle: "none" }}>
+              Legacy transfers (StockTransfer — not the primary enterprise flow)
+            </summary>
+            <p className="small text-muted mt-2 mb-3">
+              Older fulfillment path. New warehouse → branch inbound should use StockDispatch only (section above).
+            </p>
+            {dispatchesLoading ? (
+              <p className="text-secondary-light">Loading…</p>
+            ) : legacyRows.length === 0 ? (
+              <p className="text-secondary-light mb-0 small">No legacy transfers in queue.</p>
+            ) : (
+              <div className="table-responsive">
+                <table className="table table-sm table-hover">
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Request</th>
+                      <th>From</th>
+                      <th>To</th>
+                      <th>Status</th>
+                      <th>Next</th>
+                      <th>Items</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {legacyRows.map((row) => {
+                      const itemCount = (row.items ?? []).length;
+                      const totalQty = (row.items ?? []).reduce((s, i) => {
+                        const q = i.quantity ?? i.quantityDispatched ?? 0;
+                        return s + (typeof q === "number" ? q : 0);
+                      }, 0);
+                      const key = `TRANSFER-${row.id}`;
+                      const openDrawer = () => {
+                        setDrawerTransferId(row.id);
+                      };
+                      const openLegacyReceive = () => {
+                        router.push(staffReceiveCenterWithTransferPath(branchId, row.id));
+                      };
+                      return (
+                        <tr key={key}>
+                          <td>
+                            <span className="badge bg-secondary me-1">Transfer</span>#{row.id}
+                          </td>
+                          <td className="small">{row.requestRef ?? "—"}</td>
+                          <td className="small">{row.sourceLabel ?? row.fromLocation?.name ?? "—"}</td>
+                          <td className="small">
+                            <div>{row.destinationBranchName ?? "—"}</div>
+                            <div className="text-muted">{row.toLocation?.name ?? ""}</div>
+                          </td>
+                          <td>
+                            <span className={`badge ${dispatchStatusBadgeClass(row.status)}`}>{row.status}</span>
+                          </td>
+                          <td className="small text-muted">{row.nextActionHint ?? "—"}</td>
+                          <td>{itemCount} line(s), {totalQty} unit(s)</td>
+                          <td>
+                            <button type="button" className="btn btn-outline-primary btn-sm me-1" onClick={openDrawer}>
+                              View
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-primary btn-sm"
+                              disabled={!canReceive || !row.receivable}
+                              title={
+                                !canReceive
+                                  ? "Read-only: use View to inspect transfer"
+                                  : !row.receivable
+                                    ? (row.nextActionHint || "Not receivable yet")
+                                    : "Open legacy receive"
+                              }
+                              onClick={openLegacyReceive}
+                            >
+                              Receive
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </details>
         </Tab.Pane>
 
         <Tab.Pane eventKey="opening">
@@ -412,7 +576,7 @@ export default function StaffBranchInventoryReceivePage() {
             ) : locations.length === 0 ? (
               <p className="text-secondary-light mb-0">No inventory locations found for this branch.</p>
             ) : (
-              <form onSubmit={handleOpeningSubmit}>
+              <form onSubmit={handleOpeningSubmit} aria-disabled={!canReceive}>
                 <div className="row g-16 mb-16">
                   <div className="col-md-4">
                     <LkFormGroup label="Location" className="text-sm">
@@ -501,20 +665,29 @@ export default function StaffBranchInventoryReceivePage() {
         </Tab.Content>
       </Tab.Container>
 
-      <DispatchReceiveDrawer
-        show={drawerDispatchId != null}
-        onHide={() => setDrawerDispatchId(null)}
-        dispatchId={drawerDispatchId ?? 0}
-        branchId={branchId}
-        onSuccess={loadInbound}
-      />
       <TransferReceiveDrawer
         show={drawerTransferId != null}
         onHide={() => setDrawerTransferId(null)}
         transferId={drawerTransferId ?? 0}
         branchId={branchId}
         onSuccess={loadInbound}
+        allowReceiveSubmit={canReceive}
       />
     </div>
+  );
+}
+
+export default function StaffBranchInventoryReceivePage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="container py-40 text-center">
+          <div className="spinner-border text-primary" role="status" />
+          <p className="mt-16 text-secondary-light">Loading...</p>
+        </div>
+      }
+    >
+      <StaffBranchInventoryReceivePageInner />
+    </Suspense>
   );
 }

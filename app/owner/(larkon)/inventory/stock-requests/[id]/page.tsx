@@ -5,6 +5,7 @@ import { useParams } from "next/navigation";
 import Link from "next/link";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 import { ownerGet, ownerPatch, ownerPost } from "@/app/owner/_lib/ownerApi";
+import { resolveStockRequestDestinationOptions } from "@/app/owner/_lib/stockRequestDestinationResolver";
 
 function formatDate(d: string | null | undefined) {
   if (!d) return "—";
@@ -21,8 +22,10 @@ function statusClass(s: string) {
   const u = (s || "").toUpperCase();
   if (["DRAFT"].includes(u)) return "bg-secondary";
   if (["SUBMITTED", "OWNER_REVIEW"].includes(u)) return "bg-info";
+  if (["APPROVED", "PARTIALLY_DISPATCHED"].includes(u)) return "bg-warning text-dark";
   if (["FULFILLED_PARTIAL", "FULFILLED_FULL", "DISPATCHED"].includes(u)) return "bg-primary";
-  if (["RECEIVED_PARTIAL", "RECEIVED_FULL", "CLOSED"].includes(u)) return "bg-success";
+  if (["RECEIVED_PARTIAL", "RECEIVED_FULL", "PARTIALLY_RECEIVED", "RECEIVED", "CLOSED"].includes(u))
+    return "bg-success";
   if (["CANCELLED"].includes(u)) return "bg-danger";
   return "bg-light text-dark";
 }
@@ -53,6 +56,13 @@ function sortLocationsForDefaultSource(locs: any[]): any[] {
     const bn = `${b.branch?.name ?? ""} ${b.name ?? ""}`.trim();
     return an.localeCompare(bn);
   });
+}
+
+function parsePositiveInt(v: unknown): number | undefined {
+  if (v == null || v === "") return undefined;
+  const n = Number(v);
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return Math.trunc(n);
 }
 
 type ExtraLine = {
@@ -100,6 +110,8 @@ export default function OwnerStockRequestDetailPage() {
   } | null>(null);
   const [pickerMeta, setPickerMeta] = useState<{ candidateTruncated?: boolean } | null>(null);
   const [includeZeroStock, setIncludeZeroStock] = useState(false);
+  /** Legacy StockTransfer quick path — collapsed by default; canonical path is enterprise allocation. */
+  const [legacyQuickDispatchOpen, setLegacyQuickDispatchOpen] = useState(false);
   const [loading, setLoading] = useState(true);
   const [lotsLoading, setLotsLoading] = useState(false);
   const [submitting, setSubmitting] = useState(false);
@@ -230,8 +242,18 @@ export default function OwnerStockRequestDetailPage() {
     loadDetailWithLots(String(fromLocationId));
   }, [id, fromLocationId]);
 
-  const branchLocations = request?.branch?.inventoryLocations ?? [];
-  const toLocationId = branchLocations[0]?.id ?? "";
+  // Single source for disabled "To location" select and PATCH fulfill payload (must stay identical).
+  const { targetBranchId, destinationLocationOptions, canonicalToLocationIdStr } = useMemo(() => {
+    const resolved = resolveStockRequestDestinationOptions({
+      request,
+      orgLocations: locations,
+    });
+    return {
+      targetBranchId: resolved.targetBranchId,
+      destinationLocationOptions: resolved.options,
+      canonicalToLocationIdStr: resolved.canonicalToLocationIdStr,
+    };
+  }, [request, locations]);
 
   const requestedRows = useMemo(() => {
     const items = request?.items ?? [];
@@ -341,7 +363,7 @@ export default function OwnerStockRequestDetailPage() {
   const availabilityDiagnosticsByVariant = (request as any)?.availabilityDiagnosticsByVariant ?? {};
 
   const totalLotAvailable = (variantId: number) => {
-    const lots = mapByVariantId(lotsByVariant, variantId) ?? [];
+    const lots = (mapByVariantId(lotsByVariant, variantId) ?? []) as Array<{ onHandQty?: number }>;
     return lots.reduce((s: number, l: { onHandQty?: number }) => s + (l.onHandQty ?? 0), 0);
   };
 
@@ -374,7 +396,12 @@ export default function OwnerStockRequestDetailPage() {
     return ex.maxDispatchableHint ?? null;
   };
 
-  const canDispatch = ["SUBMITTED", "OWNER_REVIEW", "FULFILLED_PARTIAL"].includes(request?.status);
+  const allocationPlanBlocksLegacyFulfill = Boolean((request as any)?.allocationPlanBlocksLegacyFulfill);
+  const hideLegacyOwnerFulfillUi = Boolean((request as any)?.hideLegacyOwnerFulfillUi);
+  const canDispatch =
+    ["SUBMITTED", "OWNER_REVIEW", "FULFILLED_PARTIAL"].includes(request?.status) &&
+    !allocationPlanBlocksLegacyFulfill &&
+    !hideLegacyOwnerFulfillUi;
   const canDecline = ["SUBMITTED", "OWNER_REVIEW"].includes(request?.status);
 
   const handleDecline = async () => {
@@ -404,10 +431,22 @@ export default function OwnerStockRequestDetailPage() {
       setError("Request is not in a state that can be dispatched");
       return;
     }
-    const fromId = Number(fromLocationId);
-    const toId = Number(toLocationId);
-    if (!fromId || !toId) {
-      setError("Select from and to locations");
+    if (targetBranchId == null) {
+      setError(
+        "Cannot resolve destination: this stock request has no target branch id (branchId / branch.id missing from the loaded request)."
+      );
+      return;
+    }
+    const fromId = parsePositiveInt(fromLocationId);
+    if (fromId == null) {
+      setError("Select a source warehouse or hub location (from location is missing).");
+      return;
+    }
+    const toId = parsePositiveInt(canonicalToLocationIdStr);
+    if (toId == null) {
+      setError(
+        `Cannot resolve destination location for request branch #${targetBranchId}.`
+      );
       return;
     }
     const items = requestedRows
@@ -535,8 +574,17 @@ export default function OwnerStockRequestDetailPage() {
         ]}
       />
 
-      <div className="d-flex align-items-center gap-2 mb-3">
-        <span className={`badge ${statusClass(request.status)}`}>{request.status}</span>
+      <div className="d-flex align-items-center gap-2 mb-3 flex-wrap">
+        <span
+          className={`badge ${statusClass(request.derivedStatus || request.status)}`}
+          title={
+            request.derivedStatus && request.derivedStatus !== request.status
+              ? `DB status: ${request.status}`
+              : undefined
+          }
+        >
+          {request.derivedStatusDisplay?.label ?? request.derivedStatus ?? request.status}
+        </span>
         {request.requestIntent === "PROCUREMENT" ? (
           <span className="badge bg-warning text-dark">Procurement Request</span>
         ) : (
@@ -586,6 +634,69 @@ export default function OwnerStockRequestDetailPage() {
         </div>
       )}
 
+      {/* Allocation shortage → procurement demand (INTERNAL_TRANSFER) */}
+      {request.requestIntent === "INTERNAL_TRANSFER" &&
+        Array.isArray((request as any).procurementDemandLines) &&
+        (request as any).procurementDemandLines.length > 0 && (
+          <div className="card radius-12 mb-3 border-primary">
+            <div className="card-body">
+              <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                <div>
+                  <h6 className="mb-1 fw-semibold">Procurement demand (warehouse shortage)</h6>
+                  <p className="mb-0 small text-muted">
+                    Lines created when allocation was confirmed with unmet quantity. Link each line to a PO line, receive
+                    via GRN, then continue fulfillment (or enable <code>AUTO_PROCUREMENT_DEMAND_DISPATCH</code> on the
+                    API for optional auto-dispatch).
+                  </p>
+                </div>
+                <Link href="/owner/inventory/procurement-demand" className="btn btn-outline-primary btn-sm">
+                  Open demand queue
+                </Link>
+              </div>
+              <div className="table-responsive mt-2">
+                <table className="table table-sm mb-0 align-middle">
+                  <thead>
+                    <tr>
+                      <th>Line</th>
+                      <th>Variant</th>
+                      <th>Qty</th>
+                      <th>Fulfilled</th>
+                      <th>Status</th>
+                      <th>PO</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(request as any).procurementDemandLines.map((d: any) => {
+                      const item = request.items?.find((it: any) => it.id === d.stockRequestItemId);
+                      return (
+                        <tr key={d.id}>
+                          <td>#{d.id}</td>
+                          <td className="small">
+                            {item?.variant?.sku ?? d.variantId}
+                            <div className="text-muted">{item?.variant?.title ?? ""}</div>
+                          </td>
+                          <td>{d.demandQty}</td>
+                          <td>{d.fulfilledQty}</td>
+                          <td>
+                            <span className="badge bg-light text-dark">{d.status}</span>
+                          </td>
+                          <td>
+                            {d.purchaseOrderId != null ? (
+                              <Link href={`/owner/inventory/purchase-orders/${d.purchaseOrderId}`}>#{d.purchaseOrderId}</Link>
+                            ) : (
+                              "—"
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
       {error && <div className="alert alert-danger radius-12">{error}</div>}
       {success && <div className="alert alert-success radius-12">{success}</div>}
       {(request as any)?.fulfillmentSourceValidation &&
@@ -631,7 +742,31 @@ export default function OwnerStockRequestDetailPage() {
         </div>
       )}
 
-      <div className="card radius-12 mb-3 border-primary border-opacity-25">
+      {request.requestIntent === "INTERNAL_TRANSFER" && ["SUBMITTED", "OWNER_REVIEW", "APPROVED", "FULFILLED_PARTIAL"].includes(String(request?.status || "")) && (
+        <div className="alert alert-light border radius-12 mb-3 small" role="region" aria-label="Fulfillment guide">
+          <div className="fw-semibold mb-1">Recommended: enterprise fulfillment</div>
+          <ul className="mb-0 ps-3">
+            <li>
+              <strong>Stock covers the request at the selected source:</strong> start an allocation plan, confirm, then pick
+              and dispatch from the warehouse queue — branch receives via dispatch session (GRN).
+            </li>
+            <li>
+              <strong>Partial stock or shortage after confirm:</strong> procurement demand / backorder lines appear; link PO →
+              GRN, or resolve with a supplementary wave when implemented.
+            </li>
+            <li>
+              <strong>No stock at this source:</strong> pick another source location, or run allocation — shortage flows to
+              procurement demand. Use <strong>multi-source</strong> allocation when enabled on the API.
+            </li>
+            <li>
+              <strong>Legacy “Fulfill &amp; dispatch”</strong> below uses StockTransfer — audit differs; use only when you
+              understand the tradeoff.
+            </li>
+          </ul>
+        </div>
+      )}
+
+      <div className="card radius-12 mb-3 border-success border-opacity-50">
         <div className="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
           <h6 className="mb-0">Enterprise fulfillment (allocation → pick → dispatch)</h6>
           {enterpriseLoading && <span className="small text-muted">Loading…</span>}
@@ -646,10 +781,20 @@ export default function OwnerStockRequestDetailPage() {
                   : "—"}
               </p>
               <p className="mb-2">
-                <strong>Pick list:</strong>{" "}
-                {enterpriseFulfillment.allocationPlan?.pickList
-                  ? `#${enterpriseFulfillment.allocationPlan.pickList.id} (${enterpriseFulfillment.allocationPlan.pickList.status})`
-                  : "—"}
+                <strong>Pick lists:</strong>{" "}
+                {(() => {
+                  const ap = enterpriseFulfillment?.allocationPlan as
+                    | {
+                        pickLists?: Array<{ id: number; status?: string }>;
+                        pickList?: { id: number; status?: string };
+                      }
+                    | undefined;
+                  if (ap?.pickLists?.length) {
+                    return ap.pickLists.map((pl) => `#${pl.id} (${pl.status ?? "?"})`).join(", ");
+                  }
+                  if (ap?.pickList) return `#${ap.pickList.id} (${ap.pickList.status})`;
+                  return "—";
+                })()}
               </p>
               <p className="mb-2">
                 <strong>Dispatches:</strong>{" "}
@@ -664,7 +809,7 @@ export default function OwnerStockRequestDetailPage() {
           )}
           <button
             type="button"
-            className="btn btn-sm btn-outline-primary"
+            className="btn btn-sm btn-primary"
             disabled={enterpriseActionLoading || !fromLocationId || !request?.orgId}
             onClick={async () => {
               if (!fromLocationId || !request?.orgId || !id) return;
@@ -698,7 +843,7 @@ export default function OwnerStockRequestDetailPage() {
               }
             }}
           >
-            {enterpriseActionLoading ? "Starting…" : "Start allocation plan (draft)"}
+            {enterpriseActionLoading ? "Starting…" : "Start allocation plan (recommended)"}
           </button>
           {enterprisePlanHighlightId != null && (
             <div className="mt-2">
@@ -712,10 +857,30 @@ export default function OwnerStockRequestDetailPage() {
           )}
           <p className="text-muted mt-2 mb-0">
             Uses the selected source location. Staff complete FEFO run, confirm, pick, and dispatch in the warehouse
-            operations UI. Legacy “Fulfill & Dispatch” below remains available.
+            operations UI. Legacy “Fulfill &amp; Dispatch” is hidden while an allocation plan exists (cancel the plan to
+            re-enable legacy dispatch).
           </p>
         </div>
       </div>
+
+      {(allocationPlanBlocksLegacyFulfill || hideLegacyOwnerFulfillUi) &&
+        ["SUBMITTED", "OWNER_REVIEW", "FULFILLED_PARTIAL"].includes(String(request?.status || "")) && (
+          <div className="alert alert-info radius-12 mb-3" role="status">
+            {hideLegacyOwnerFulfillUi && !allocationPlanBlocksLegacyFulfill ? (
+              <>
+                Enterprise flow is active for this request (e.g. StockDispatch exists or legacy fulfill is disabled on
+                the API). Use allocation → pick → dispatch and branch receive — not legacy StockTransfer fulfill.
+              </>
+            ) : (
+              <>
+                An allocation plan is linked to this request. Use the enterprise path (allocation → pick → dispatch).
+                Legacy fulfill and allocation preview are disabled until the plan is cancelled (or set{" "}
+                <code className="small">ALLOW_LEGACY_FULFILL_WITH_ALLOCATION_DRAFT=true</code> on the API for a narrower
+                guard).
+              </>
+            )}
+          </div>
+        )}
 
       <div className="card radius-12 mb-3">
         <div className="card-body">
@@ -777,10 +942,30 @@ export default function OwnerStockRequestDetailPage() {
         </div>
       </div>
 
-      {canDispatch && (
-        <div className="card radius-12">
+      {canDispatch && !legacyQuickDispatchOpen && (
+        <div className="mb-3">
+          <button
+            type="button"
+            className="btn btn-outline-secondary btn-sm"
+            onClick={() => setLegacyQuickDispatchOpen(true)}
+          >
+            Show legacy quick dispatch (StockTransfer)
+          </button>
+          <span className="small text-muted ms-2">Not needed for normal enterprise flow.</span>
+        </div>
+      )}
+
+      {canDispatch && legacyQuickDispatchOpen && (
+        <div className="card radius-12 border-secondary">
           <div className="card-header d-flex flex-wrap align-items-center justify-content-between gap-2">
-            <h6 className="mb-0">Fulfill & Dispatch</h6>
+            <h6 className="mb-0">Legacy: Fulfill &amp; Dispatch (StockTransfer)</h6>
+            <button
+              type="button"
+              className="btn btn-sm btn-link text-muted"
+              onClick={() => setLegacyQuickDispatchOpen(false)}
+            >
+              Hide
+            </button>
             <div className="d-flex align-items-center gap-2 flex-wrap">
               <div className="form-check form-switch mb-0">
                 <input
@@ -824,11 +1009,40 @@ export default function OwnerStockRequestDetailPage() {
               </div>
               <div className="col-md-6">
                 <label className="form-label small">To location (branch)</label>
-                <select className="form-select form-select-sm" value={toLocationId} disabled aria-readonly>
-                  <option value={toLocationId}>{branchLocations[0]?.name ?? `Location ${toLocationId}`}</option>
+                <select
+                  className="form-select form-select-sm"
+                  value={canonicalToLocationIdStr}
+                  disabled
+                  aria-readonly
+                >
+                  {destinationLocationOptions.length === 0 ? (
+                    <option value="">—</option>
+                  ) : (
+                    destinationLocationOptions.map((opt: any) => (
+                      <option key={opt.value} value={opt.value}>
+                        {opt.label}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
             </div>
+
+            {!fromLocationId ? (
+              <p className="small text-warning mb-2">
+                Source location is required to load stock availability and dispatch this request.
+              </p>
+            ) : null}
+            {targetBranchId == null ? (
+              <p className="small text-warning mb-2">
+                Destination branch is missing from this request payload, so destination location cannot be resolved.
+              </p>
+            ) : destinationLocationOptions.length === 0 ? (
+              <p className="small text-warning mb-2">
+                No destination inventory location is available for branch #{targetBranchId}. Configure at least one active
+                inventory location on this branch.
+              </p>
+            ) : null}
 
             {fromLocationId && (
               <p className="small text-secondary mb-2">
@@ -873,11 +1087,11 @@ export default function OwnerStockRequestDetailPage() {
                     if (delta < 0) deltaClass = "text-danger";
                     else if (delta > 0) deltaClass = "text-success";
                     const lotAv = totalLotAvailable(row.variantId);
-                    const agg = mapByVariantId(aggregateByVariant, row.variantId) ?? 0;
+                    const agg = Number(mapByVariantId(aggregateByVariant, row.variantId)) || 0;
                     const maxDisp =
                       maxDispatchByItemId[itemId] ??
-                      mapByVariantId(maxDispatchByVariant, row.variantId) ??
-                      Math.max(lotAv, agg);
+                      (Number(mapByVariantId(maxDispatchByVariant, row.variantId)) ||
+                      Math.max(lotAv, agg));
                     const zeroHint = availabilityHintForVariant(row.variantId, maxDisp);
                     const noLotsButAgg = lotAv <= 0 && agg > 0;
                     return (
@@ -1106,13 +1320,15 @@ export default function OwnerStockRequestDetailPage() {
                           <tr key={ex.key}>
                             <td className="small">{ex.productName}</td>
                             <td className="small">{ex.variantLabel}</td>
-                            <td className="text-end small fw-semibold">{cap != null ? cap : "—"}</td>
+                            <td className="text-end small fw-semibold">
+                              {typeof cap === "number" && Number.isFinite(cap) ? cap : "—"}
+                            </td>
                             <td>
                               <input
                                 type="number"
                                 className="form-control form-control-sm"
                                 min={0}
-                                max={cap != null ? cap : undefined}
+                                max={typeof cap === "number" && Number.isFinite(cap) ? cap : undefined}
                                 value={ex.fulfillQty}
                                 onChange={(e) => setExtraQty(ex.key, parseInt(e.target.value, 10) || 0)}
                                 style={{ width: 88 }}

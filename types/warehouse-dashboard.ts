@@ -116,6 +116,8 @@ export interface RequestQueueItem {
     lineCount: number;
     dispatchCount: number;
   };
+  /** Set when loaded from warehouse operations dashboard (enterprise routing). */
+  warehouseAction?: { openHref: string; nextActionLabel: string } | null;
 }
 
 export interface TransferQueueItem {
@@ -220,7 +222,7 @@ export interface WarehouseStaffDashboardData {
   userContext: UserContext;
   kpis: KpiSummary;
   queues: {
-    myTasks: { items: MyTaskItem[]; total: number };
+    myTasks: { items: MyTaskItem[]; total: number; page?: number; pageSize?: number };
     pendingRequests: QueuePagination;
     transferQueue: QueuePagination;
     receivingQueue: QueuePagination;

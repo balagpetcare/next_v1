@@ -205,8 +205,10 @@ async function proxyRequest(request, context, method) {
     const headers = forwardHeaders(request);
     const opts = { method, headers, cache: "no-store" };
     if (method !== "GET" && method !== "HEAD") {
-      const body = await request.text();
-      if (body) opts.body = body;
+      // Use arrayBuffer to preserve binary payloads (e.g. multipart/form-data file uploads).
+      // request.text() re-encodes binary bytes as UTF-8 and silently corrupts JPEG/PNG/WebP data.
+      const bodyBuf = await request.arrayBuffer();
+      if (bodyBuf.byteLength > 0) opts.body = bodyBuf;
     }
     const res = await fetch(backendUrl, opts);
     const contentType = res.headers.get("content-type") || "";

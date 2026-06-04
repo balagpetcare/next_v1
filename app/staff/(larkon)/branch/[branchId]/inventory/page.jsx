@@ -16,6 +16,7 @@ import Card from "@/src/bpa/components/ui/Card";
 import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
 import { PaginationBar } from "@/src/components/common/PaginationBar";
+import { lotExpiryBadgeHint, retailSkuLooksLikeVaccine } from "@/app/_lib/vaccineInventoryUi";
 
 const REQUIRED_PERM = "inventory.read";
 const STATUS_OPTIONS = [
@@ -40,6 +41,21 @@ function getStatus(row, minQ) {
   return { label: "OK", class: "bg-success text-white" };
 }
 
+function getRowSellPrice(row) {
+  const candidates = [row?.effectiveSellPrice, row?.sellPrice, row?.price];
+  for (const candidate of candidates) {
+    if (candidate == null || candidate === "") continue;
+    const price = Number(candidate);
+    if (Number.isFinite(price) && price > 0) return price;
+  }
+  return null;
+}
+
+function formatPosPrice(value) {
+  const price = Number(value);
+  return Number.isFinite(price) ? `Tk ${price.toFixed(2)}` : "-";
+}
+
 export default function StaffBranchInventorySummaryPage() {
   const params = useParams();
   const router = useRouter();
@@ -55,6 +71,7 @@ export default function StaffBranchInventorySummaryPage() {
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
   const [sort, setSort] = useState("qty_asc");
+  const [vaccineStockFilter, setVaccineStockFilter] = useState("all");
   const [pagination, setPagination] = useState({ page: 1, limit: 50, total: 0, totalPages: 1 });
   const [drawerRow, setDrawerRow] = useState(null);
   const [ledgerEntries, setLedgerEntries] = useState([]);
@@ -122,7 +139,18 @@ export default function StaffBranchInventorySummaryPage() {
     return list;
   }, [items, sort]);
 
-  const totalAvailable = useMemo(() => sortedItems.reduce((s, r) => s + (r.availableQty ?? r.quantity ?? r.onHandQty ?? 0), 0), [sortedItems]);
+  const displayItems = useMemo(() => {
+    if (vaccineStockFilter !== "vaccine") return sortedItems;
+    return sortedItems.filter((r) => {
+      const pName = r.variant?.product?.name ?? r.productName ?? "";
+      const sku = r.variant?.sku ?? r.sku ?? "";
+      const title = r.variant?.title ?? "";
+      const cat = r.variant?.product?.category?.name ?? "";
+      return retailSkuLooksLikeVaccine(pName, sku, title, cat) || r.product?.isMedicine === true;
+    });
+  }, [sortedItems, vaccineStockFilter]);
+
+  const totalAvailable = useMemo(() => displayItems.reduce((s, r) => s + (r.availableQty ?? r.quantity ?? r.onHandQty ?? 0), 0), [displayItems]);
   const lowCount = useMemo(() => sortedItems.filter((r) => (r.quantity ?? r.onHandQty ?? 0) > 0 && (r.quantity ?? r.onHandQty ?? 0) <= (r.minStock ?? 10)).length, [sortedItems]);
   const outCount = useMemo(() => sortedItems.filter((r) => (r.quantity ?? r.onHandQty ?? 0) === 0).length, [sortedItems]);
 
@@ -205,6 +233,15 @@ export default function StaffBranchInventorySummaryPage() {
         <Link href={`/staff/branch/${branchId}/inventory/stock-requests`} className="btn btn-outline-secondary btn-sm radius-12">
           <i className="ri-file-list-3-line me-1" aria-hidden /> Stock Requests
         </Link>
+        <Link href={`/staff/branch/${branchId}/inventory/incoming`} className="btn btn-outline-secondary btn-sm radius-12">
+          <i className="ri-truck-line me-1" aria-hidden /> Incoming
+        </Link>
+        <Link href={`/staff/branch/${branchId}/clinic/vaccine-mappings`} className="btn btn-outline-info btn-sm radius-12">
+          <i className="ri-links-line me-1" aria-hidden /> Vaccine mapping
+        </Link>
+        <Link href={`/staff/branch/${branchId}/clinic/vaccinations`} className="btn btn-outline-info btn-sm radius-12">
+          <i className="ri-syringe-line me-1" aria-hidden /> Vaccinations
+        </Link>
       </div>
 
       {/* Expiry Alert Banner */}
@@ -274,7 +311,18 @@ export default function StaffBranchInventorySummaryPage() {
               </select>
             </div>
             <div className="col-auto">
-              <button type="button" className="btn btn-outline-secondary btn-sm radius-12" onClick={() => { setSearch(""); setStatusFilter(""); }}>
+              <label className="form-label small mb-0">SKU type</label>
+              <select
+                className="form-select form-select-sm radius-12"
+                value={vaccineStockFilter}
+                onChange={(e) => setVaccineStockFilter(e.target.value)}
+              >
+                <option value="all">All SKUs</option>
+                <option value="vaccine">Vaccine-like</option>
+              </select>
+            </div>
+            <div className="col-auto">
+              <button type="button" className="btn btn-outline-secondary btn-sm radius-12" onClick={() => { setSearch(""); setStatusFilter(""); setVaccineStockFilter("all"); }}>
                 Reset
               </button>
             </div>
@@ -294,7 +342,7 @@ export default function StaffBranchInventorySummaryPage() {
             <div className="card-body d-flex align-items-center justify-content-between py-3">
               <div>
                 <div className="small text-muted">Total Items</div>
-                <div className="fw-bold">{loading ? "—" : (dashboard?.totalSkus ?? sortedItems.length)}</div>
+                <div className="fw-bold">{loading ? "—" : (dashboard?.totalSkus ?? displayItems.length)}</div>
               </div>
               <i className="ri-box-3-line text-primary" style={{ fontSize: "1.5rem" }} aria-hidden />
             </div>
@@ -348,13 +396,20 @@ export default function StaffBranchInventorySummaryPage() {
       {/* Today's Tasks (compact) */}
       <div className="row">
         <div className="col-lg-9">
-          <Card title="Inventory" subtitle="Click row for ledger details. Adjust via request only.">
+          <Card title="Inventory" subtitle="Retail ledger stock — filter vaccine-like SKUs or open Vaccine mapping for clinical dosing.">
             {loading ? (
               <div className="text-center py-5">
                 <div className="spinner-border text-primary" role="status" />
                 <p className="mt-2 text-muted small">Loading...</p>
               </div>
-            ) : sortedItems.length === 0 ? (
+            ) : displayItems.length === 0 && vaccineStockFilter === "vaccine" && sortedItems.length > 0 ? (
+              <div className="text-center py-5 px-3">
+                <p className="text-muted small mb-2">No rows matched the vaccine-like filter.</p>
+                <button type="button" className="btn btn-outline-secondary btn-sm radius-12" onClick={() => setVaccineStockFilter("all")}>
+                  Show all SKUs
+                </button>
+              </div>
+            ) : displayItems.length === 0 ? (
               <div className="text-center py-5 px-3">
                 <div className="mb-3 text-muted">
                   <i className="ri-box-3-line display-4" aria-hidden />
@@ -378,6 +433,7 @@ export default function StaffBranchInventorySummaryPage() {
                       <tr>
                         <th>Product</th>
                         <th>SKU</th>
+                        <th className="text-end">POS price</th>
                         <th className="text-end">Available</th>
                         <th className="text-end">Reorder</th>
                         <th>Status</th>
@@ -386,13 +442,19 @@ export default function StaffBranchInventorySummaryPage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {sortedItems.map((row) => {
+                      {displayItems.map((row) => {
                         const qty = row.quantity ?? row.onHandQty ?? 0;
                         const minQ = row.minStock ?? 10;
                         const status = getStatus(row, minQ);
                         const name = row.variant?.product?.name ?? row.productName ?? row.variant?.title ?? "—";
                         const sku = row.variant?.sku ?? row.sku ?? "—";
                         const available = row.availableQty ?? qty;
+                        const posPrice = getRowSellPrice(row);
+                        const hasAvailableStock = Number(available) > 0;
+                        const priceMissing = hasAvailableStock && (row.priceMissing === true || posPrice == null);
+                        const catName = row.variant?.product?.category?.name ?? "";
+                        const looksVax = retailSkuLooksLikeVaccine(name, sku, row.variant?.title, catName);
+                        const expHint = lotExpiryBadgeHint(row.nearestExpiry);
                         return (
                           <tr
                             key={row.id ?? `${row.locationId}-${row.variantId}`}
@@ -402,11 +464,36 @@ export default function StaffBranchInventorySummaryPage() {
                           >
                             <td>
                               <span className="fw-semibold">{name}</span>
+                              {looksVax ? (
+                                <span className="badge bg-info-subtle text-info-emphasis border border-info-subtle small ms-1">Vaccine</span>
+                              ) : null}
                               {row.variant?.title && name !== row.variant?.title && (
                                 <span className="text-muted small d-block">{row.variant.title}</span>
                               )}
+                              {row.nearestExpiry ? (
+                                <span className={`small d-block ${expHint === "expired" ? "text-danger" : expHint === "soon" ? "text-warning" : "text-muted"}`}>
+                                  Expiry: {new Date(row.nearestExpiry).toLocaleDateString()}
+                                  {expHint === "expired" ? " (expired)" : expHint === "soon" ? " (≤30d)" : ""}
+                                </span>
+                              ) : null}
                             </td>
                             <td><span className="text-muted small">{sku}</span></td>
+                            <td className="text-end">
+                              {posPrice != null ? (
+                                <>
+                                  <span className="fw-semibold">{formatPosPrice(posPrice)}</span>
+                                  {row.priceSource ? (
+                                    <span className="text-muted small d-block">{row.priceSource}</span>
+                                  ) : null}
+                                </>
+                              ) : priceMissing ? (
+                                <span className="badge bg-warning-subtle text-warning border border-warning-subtle">
+                                  Missing price
+                                </span>
+                              ) : (
+                                <span className="text-muted small">-</span>
+                              )}
+                            </td>
                             <td className="text-end">{Number(available)}</td>
                             <td className="text-end">{Number(minQ)}</td>
                             <td>
@@ -483,6 +570,15 @@ export default function StaffBranchInventorySummaryPage() {
               <button type="button" className="btn btn-outline-warning btn-sm radius-12 text-start" onClick={() => applyCardFilter("low")}>
                 <i className="ri-error-warning-line me-2" aria-hidden /> Low stock ({lowCount})
               </button>
+              <Link href={`/staff/branch/${branchId}/clinic/vaccine-mappings`} className="btn btn-outline-info btn-sm radius-12 text-start">
+                <i className="ri-links-line me-2" aria-hidden /> Vaccine mapping
+              </Link>
+              <Link href={`/staff/branch/${branchId}/clinic/vaccinations`} className="btn btn-outline-info btn-sm radius-12 text-start">
+                <i className="ri-syringe-line me-2" aria-hidden /> Vaccination dashboard
+              </Link>
+              <Link href={`/staff/branch/${branchId}/inventory/incoming`} className="btn btn-outline-secondary btn-sm radius-12 text-start">
+                <i className="ri-truck-line me-2" aria-hidden /> Incoming shipments
+              </Link>
               <Link href={`/staff/branch/${branchId}/inventory/receive`} className="btn btn-outline-success btn-sm radius-12 text-start">
                 <i className="ri-download-cloud-2-line me-2" aria-hidden /> Receive
               </Link>

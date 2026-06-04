@@ -133,7 +133,7 @@ export default function WriteOffsPage() {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      params.append("orgId", orgId);
+      params.append("orgId", String(orgId));
       if (statusFilter && statusFilter !== STATUS_FILTER_ALL) {
         params.append("status", statusFilter);
       }

@@ -59,7 +59,7 @@ export default function BatchRecallPage() {
         type MeRes = { organizations?: { id: number }[]; data?: { organizations?: { id: number }[] } };
         const me = await ownerGet<MeRes>("/api/v1/owner/me").catch(() => ({}));
         if (cancelled) return;
-        const orgs = me?.organizations ?? me?.data?.organizations ?? [];
+        const orgs = (me && 'organizations' in me ? me.organizations : undefined) ?? (me && 'data' in me ? me.data?.organizations : undefined) ?? [];
         setOrgId(orgs[0]?.id ?? null);
       } finally {
         if (!cancelled) setOrgLoaded(true);

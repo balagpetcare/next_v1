@@ -4,6 +4,12 @@
  * Filter by requiredPerm and featureFlag (branch.type === "CLINIC" && branch.clinicEnabled).
  * Clinic section: shown only when branch is CLINIC, clinicEnabled true, and user has at least one
  * clinic.* permission; each item is gated by its own clinic.overview|appointments|queue|patients|visits.*
+ *
+ * Warehouse hub branches (WAREHOUSE_DC, WAREHOUSE, CENTRAL_WAREHOUSE, DISTRIBUTION_CENTER):
+ * - Dedicated workflow groups: Warehouse → Inventory Control → Reports → Advanced.
+ * - Generic Operations entries that duplicate that workflow (receive, stock requests, adjustments,
+ *   transfers, AI replenishment, reverse logistics) are hidden to avoid duplicate labels/paths.
+ * - Analytics "Reports" is hidden for hub branches because the same link appears under Warehouse Reports.
  */
 
 import {
@@ -34,14 +40,37 @@ export type BranchSidebarItem = {
   requiredPerm: string;
   /** If set, item is shown when user has requiredPerm OR any of these */
   anyPerms?: string[];
-  badgeKey?: "approvals" | "lowStock" | "clinicQueue" | "vendorReceipts";
+  badgeKey?: "approvals" | "lowStock" | "clinicQueue" | "vendorReceipts" | "warehouseRequests";
+  /** Hide this item when the branch is a warehouse hub (workflow lives in warehouse groups). */
+  hideForWarehouseBranch?: boolean;
+  /** Show only for warehouse hub branches (used sparingly; prefer group-level warehouseOnly). */
+  warehouseOnly?: boolean;
 };
 
 export type BranchSidebarGroup = {
   group: string;
-  featureFlag?: (branch: { type?: string; [k: string]: any }) => boolean;
+  featureFlag?: (branch: { type?: string; [k: string]: unknown }) => boolean;
+  /** Entire group only for warehouse hub branches. */
+  warehouseOnly?: boolean;
+  /** Entire group hidden for warehouse hub branches (e.g. duplicate Reports). */
+  hideForWarehouseBranch?: boolean;
   items: BranchSidebarItem[];
 };
+
+/** Hub / DC branch types that use the dedicated warehouse sidebar stack. */
+export function isWarehouseHubBranch(branch: { type?: string; types?: unknown[] } | null | undefined): boolean {
+  if (!branch) return false;
+  const codes = new Set<string>();
+  if (Array.isArray(branch.types)) {
+    branch.types.forEach((t: unknown) => {
+      const row = t as { type?: { code?: string }; branchType?: { code?: string }; code?: string };
+      const c = row?.type?.code ?? row?.branchType?.code ?? row?.code;
+      if (c) codes.add(String(c));
+    });
+  }
+  if (branch.type) codes.add(String(branch.type));
+  return ["WAREHOUSE_DC", "WAREHOUSE", "CENTRAL_WAREHOUSE", "DISTRIBUTION_CENTER"].some((c) => codes.has(c));
+}
 
 export const BRANCH_SIDEBAR: BranchSidebarGroup[] = [
   {
@@ -57,16 +86,90 @@ export const BRANCH_SIDEBAR: BranchSidebarGroup[] = [
     group: "Operations",
     items: [
       { key: "inventory", label: "Inventory", icon: "ri:archive-line", href: (id) => "/staff/branch/" + id + "/inventory", requiredPerm: "inventory.read", badgeKey: "lowStock" },
-      { key: "receive", label: "Receive Stock", icon: "ri:download-cloud-2-line", href: (id) => "/staff/branch/" + id + "/inventory/receive", requiredPerm: "inventory.receive" },
-      { key: "stock-requests", label: "Stock Requests", icon: "ri:file-list-2-line", href: (id) => "/staff/branch/" + id + "/inventory/stock-requests", requiredPerm: "inventory.read", anyPerms: ["inventory.request.create", "inventory.update"] },
-      { key: "adjustments", label: "Adjustments", icon: "ri:scales-3-line", href: (id) => "/staff/branch/" + id + "/inventory/adjustments", requiredPerm: "inventory.adjust" },
-      { key: "transfers", label: "Transfers (Legacy)", icon: "ri:swap-line", href: (id) => "/staff/branch/" + id + "/inventory/transfers", requiredPerm: "inventory.transfer", deprecated: true },
+      {
+        key: "receive",
+        label: "Receive Stock",
+        icon: "ri:download-cloud-2-line",
+        href: (id) => "/staff/branch/" + id + "/inventory/receive",
+        requiredPerm: "inventory.receive",
+        hideForWarehouseBranch: true,
+      },
+      {
+        key: "branch-incoming-shipments",
+        label: "Incoming shipments",
+        icon: "ri:truck-line",
+        href: (id) => "/staff/branch/" + id + "/inventory/incoming",
+        requiredPerm: "inventory.read",
+        anyPerms: ["inbound.read", "inventory.receive", "dispatch.view"],
+        hideForWarehouseBranch: true,
+      },
+      {
+        key: "branch-inbound-transfers",
+        label: "Inbound transfers",
+        icon: "ri:arrow-down-circle-line",
+        href: (id) => "/staff/branch/" + id + "/warehouse/inbound-transfers",
+        requiredPerm: "inventory.receive",
+        anyPerms: ["inbound.read", "inventory.read", "dispatch.view"],
+        hideForWarehouseBranch: true,
+      },
+      {
+        key: "stock-requests",
+        label: "Stock Requests",
+        icon: "ri:file-list-2-line",
+        href: (id) => "/staff/branch/" + id + "/inventory/stock-requests",
+        requiredPerm: "inventory.read",
+        anyPerms: ["inventory.request.create", "inventory.update"],
+        hideForWarehouseBranch: true,
+      },
+      {
+        key: "price-override-request",
+        label: "Price override request",
+        icon: "ri:price-tag-3-line",
+        href: (id) => "/staff/branch/" + id + "/inventory/price-override-request",
+        requiredPerm: "pricing.branch.override.request",
+        anyPerms: ["pricing.branch.override"],
+        hideForWarehouseBranch: true,
+      },
+      {
+        key: "batch-pricing",
+        label: "Batch pricing",
+        icon: "ri:stack-line",
+        href: (id) => "/staff/branch/" + id + "/inventory/batch-pricing",
+        requiredPerm: "inventory.batch.pricing",
+        hideForWarehouseBranch: true,
+      },
+      {
+        key: "barcode-printing",
+        label: "Barcode Printing",
+        icon: "ri:barcode-line",
+        href: (id) => "/staff/branch/" + id + "/inventory/barcode-printing",
+        requiredPerm: "inventory.read",
+        anyPerms: ["pos.view", "inventory.batch.pricing"],
+        hideForWarehouseBranch: true,
+      },
+      {
+        key: "adjustments",
+        label: "Adjustments",
+        icon: "ri:scales-3-line",
+        href: (id) => "/staff/branch/" + id + "/inventory/adjustments",
+        requiredPerm: "inventory.adjust",
+        hideForWarehouseBranch: true,
+      },
+      {
+        key: "transfers",
+        label: "Transfers (Legacy)",
+        icon: "ri:swap-line",
+        href: (id) => "/staff/branch/" + id + "/inventory/transfers",
+        requiredPerm: "inventory.transfer",
+        hideForWarehouseBranch: true,
+      },
       {
         key: "ai-replenishment",
         label: "AI replenishment",
         icon: "ri:sparkling-line",
         href: (id) => "/staff/branch/" + id + "/inventory/replenishment-suggestions",
         requiredPerm: "inventory.read",
+        hideForWarehouseBranch: true,
       },
       {
         key: "reverse-logistics",
@@ -74,9 +177,124 @@ export const BRANCH_SIDEBAR: BranchSidebarGroup[] = [
         icon: "ri:arrow-go-back-line",
         href: (id) => "/staff/branch/" + id + "/inventory/reverse-logistics",
         requiredPerm: "inventory.read",
+        hideForWarehouseBranch: true,
       },
       { key: "pos", label: "POS / Sales", icon: "ri:shopping-cart-2-line", href: (id) => "/staff/branch/" + id + "/pos", requiredPerm: "pos.view" },
       { key: "customers", label: "Customers", icon: "ri:user-3-line", href: (id) => "/staff/branch/" + id + "/customers", requiredPerm: "customers.view" },
+    ],
+  },
+  {
+    group: "Warehouse",
+    warehouseOnly: true,
+    items: [
+      { key: "warehouse-dashboard", label: "Dashboard", icon: "ri:dashboard-line", href: (id) => "/staff/branch/" + id + "/warehouse", requiredPerm: "warehouse.view", anyPerms: ["warehouse.dashboard.view"] },
+      {
+        key: "warehouse-fulfillment-requests",
+        label: "Fulfillment requests",
+        icon: "ri:file-list-3-line",
+        href: (id) => "/staff/branch/" + id + "/warehouse/requests",
+        requiredPerm: "warehouse.view",
+        anyPerms: ["warehouse.operations", "warehouse.pick.execute", "warehouse.manage", "outbound.read"],
+        badgeKey: "warehouseRequests",
+      },
+      {
+        key: "warehouse-vendor-receipts",
+        label: "Vendor Receipts",
+        icon: "ri:inbox-archive-line",
+        href: (id) => "/staff/branch/" + id + "/warehouse/vendor-receipts",
+        requiredPerm: "purchase.receive",
+        anyPerms: ["grn.post", "grn.create", "inbound.grn"],
+        badgeKey: "vendorReceipts",
+      },
+      {
+        key: "warehouse-inbound-transfers",
+        label: "Inbound transfers",
+        icon: "ri:arrow-down-circle-line",
+        href: (id) => "/staff/branch/" + id + "/warehouse/inbound-transfers",
+        requiredPerm: "inventory.receive",
+        anyPerms: ["inbound.read", "inventory.read", "dispatch.view", "warehouse.view", "warehouse.operations", "warehouse.manage"],
+      },
+      { key: "warehouse-putaway", label: "Putaway", icon: "ri:archive-line", href: (id) => "/staff/branch/" + id + "/warehouse/putaway", requiredPerm: "warehouse.operations", anyPerms: ["warehouse.dashboard.view", "inbound.read", "inbound.grn"] },
+      { key: "warehouse-pick-lists", label: "Pick Lists", icon: "ri:list-check-2", href: (id) => "/staff/branch/" + id + "/warehouse/pick-lists", requiredPerm: "warehouse.pick", anyPerms: ["warehouse.pick.execute", "outbound.read"] },
+      { key: "warehouse-qc", label: "QC Queue", icon: "ri:shield-check-line", href: (id) => "/staff/branch/" + id + "/warehouse/qc", requiredPerm: "warehouse.qc", anyPerms: ["qc.view", "qc.inspect"] },
+      { key: "warehouse-deliveries", label: "My Deliveries", icon: "ri:truck-line", href: (id) => "/staff/branch/" + id + "/warehouse?tab=deliveries", requiredPerm: "delivery.view", anyPerms: ["delivery.read", "delivery.manage"] },
+    ],
+  },
+  {
+    group: "Inventory Control",
+    warehouseOnly: true,
+    items: [
+      {
+        key: "wh-inventory-stock-requests",
+        label: "Stock Requests",
+        icon: "ri:file-list-2-line",
+        href: (id) => "/staff/branch/" + id + "/inventory/stock-requests",
+        requiredPerm: "inventory.read",
+        anyPerms: ["inventory.request.create", "inventory.update"],
+      },
+      {
+        key: "wh-inventory-procurement-requests",
+        label: "Procurement Requests",
+        icon: "ri:shopping-bag-line",
+        href: (id) => "/staff/branch/" + id + "/inventory/stock-requests?intent=PROCUREMENT",
+        requiredPerm: "warehouse.operations",
+        anyPerms: ["warehouse.request.create", "procurement.po.view"],
+      },
+      {
+        key: "wh-inventory-barcode-printing",
+        label: "Barcode Printing",
+        icon: "ri:barcode-line",
+        href: (id) => "/staff/branch/" + id + "/inventory/barcode-printing",
+        requiredPerm: "inventory.read",
+        anyPerms: ["pos.view", "inventory.batch.pricing"],
+      },
+      {
+        key: "wh-inventory-adjustments",
+        label: "Adjustments",
+        icon: "ri:scales-3-line",
+        href: (id) => "/staff/branch/" + id + "/inventory/adjustments",
+        requiredPerm: "inventory.adjust",
+      },
+    ],
+  },
+  {
+    group: "Reports",
+    warehouseOnly: true,
+    items: [{ key: "wh-reports", label: "Reports", icon: "ri:bar-chart-2-line", href: (id) => "/staff/branch/" + id + "/reports", requiredPerm: "reports.view" }],
+  },
+  {
+    group: "Advanced",
+    warehouseOnly: true,
+    items: [
+      {
+        key: "wh-adv-reverse-logistics",
+        label: "Reverse Logistics",
+        icon: "ri:arrow-go-back-line",
+        href: (id) => "/staff/branch/" + id + "/inventory/reverse-logistics",
+        requiredPerm: "inventory.read",
+      },
+      {
+        key: "wh-adv-ai-replenishment",
+        label: "AI Replenishment",
+        icon: "ri:sparkling-line",
+        href: (id) => "/staff/branch/" + id + "/inventory/replenishment-suggestions",
+        requiredPerm: "inventory.read",
+      },
+      {
+        key: "wh-adv-operations-hub",
+        label: "Operations hub",
+        icon: "ri:stack-line",
+        href: (id) => "/staff/branch/" + id + "/warehouse/operations",
+        requiredPerm: "warehouse.operations",
+        anyPerms: ["warehouse.dashboard.view", "inbound.read", "warehouse.manage"],
+      },
+      {
+        key: "wh-adv-transfers-legacy",
+        label: "Transfers (Legacy)",
+        icon: "ri:swap-line",
+        href: (id) => "/staff/branch/" + id + "/inventory/transfers",
+        requiredPerm: "inventory.transfer",
+      },
     ],
   },
   {
@@ -84,20 +302,6 @@ export const BRANCH_SIDEBAR: BranchSidebarGroup[] = [
     items: [
       { key: "pharmacy-dashboard", label: "Dashboard", icon: "ri:dashboard-line", href: (id) => "/staff/branch/" + id + "/pharmacy", requiredPerm: "inventory.read", anyPerms: ["pharmacy.requisition.create", "pharmacy.requisition.read"] },
       { key: "pharmacy-requisitions", label: "Requisitions", icon: "ri:medicine-bottle-line", href: (id) => "/staff/branch/" + id + "/pharmacy/requisitions", requiredPerm: "inventory.read", anyPerms: ["pharmacy.requisition.create", "pharmacy.requisition.read"] },
-    ],
-  },
-  {
-    group: "Warehouse",
-    items: [
-      { key: "warehouse-dashboard", label: "Dashboard", icon: "ri:dashboard-line", href: (id) => "/staff/branch/" + id + "/warehouse", requiredPerm: "warehouse.view", anyPerms: ["warehouse.dashboard.view"] },
-      { key: "warehouse-operations", label: "Operations hub", icon: "ri:stack-line", href: (id) => "/staff/branch/" + id + "/warehouse/operations", requiredPerm: "warehouse.operations", anyPerms: ["warehouse.dashboard.view", "inbound.read", "warehouse.manage"] },
-      { key: "warehouse-pick-lists", label: "Pick lists", icon: "ri:list-check-2", href: (id) => "/staff/branch/" + id + "/warehouse/pick-lists", requiredPerm: "warehouse.pick", anyPerms: ["warehouse.pick.execute", "outbound.read"] },
-      { key: "warehouse-qc", label: "QC queue", icon: "ri:shield-check-line", href: (id) => "/staff/branch/" + id + "/warehouse/qc", requiredPerm: "warehouse.qc", anyPerms: ["qc.view", "qc.inspect"] },
-      { key: "warehouse-putaway", label: "Putaway", icon: "ri:archive-line", href: (id) => "/staff/branch/" + id + "/warehouse/putaway", requiredPerm: "warehouse.operations", anyPerms: ["warehouse.dashboard.view", "inbound.read", "inbound.grn"] },
-      { key: "warehouse-deliveries", label: "My Deliveries", icon: "ri:truck-line", href: (id) => "/staff/branch/" + id + "/warehouse?tab=deliveries", requiredPerm: "delivery.view", anyPerms: ["delivery.read", "delivery.manage"] },
-      { key: "warehouse-receive", label: "Receive stock", icon: "ri:download-cloud-2-line", href: (id) => "/staff/branch/" + id + "/inventory/receive", requiredPerm: "inventory.receive", anyPerms: ["inbound.receive"] },
-      { key: "warehouse-vendor-receipts", label: "Vendor receipts", icon: "ri:inbox-archive-line", href: (id) => "/staff/branch/" + id + "/warehouse/receive-po", requiredPerm: "purchase.receive", anyPerms: ["grn.post", "grn.create", "inbound.grn"], badgeKey: "vendorReceipts" },
-      { key: "warehouse-procurement-requests", label: "Procurement requests", icon: "ri:shopping-bag-line", href: (id) => "/staff/branch/" + id + "/inventory/stock-requests?intent=PROCUREMENT", requiredPerm: "warehouse.operations", anyPerms: ["warehouse.request.create", "procurement.po.view"] },
     ],
   },
   {
@@ -112,6 +316,8 @@ export const BRANCH_SIDEBAR: BranchSidebarGroup[] = [
       { key: "clinic-schedule-board", label: "Schedule board", icon: "ri:calendar-line", href: (id) => "/staff/branch/" + id + "/clinic/schedule-board", requiredPerm: "clinic.rooms.view_schedule", anyPerms: ["clinic.rooms.view", "clinic.rooms.manage"] },
       { key: "clinic-patients", label: "Patients", icon: "ri:user-heart-line", href: (id) => staffClinicPatientsPath(String(id)), requiredPerm: "clinic.patients.read", anyPerms: ["clinic.patients.manage"] },
       { key: "clinic-visits", label: "Visits", icon: "ri:file-list-3-line", href: (id) => "/staff/branch/" + id + "/clinic/visits", requiredPerm: "clinic.visits.read", anyPerms: ["clinic.visits.manage"] },
+      { key: "clinic-vaccinations", label: "Vaccination", icon: "ri:syringe-line", href: (id) => "/staff/branch/" + id + "/clinic/vaccinations", requiredPerm: "clinic.patients.read", anyPerms: ["clinic.emr.read", "clinic.emr.write"] },
+      { key: "clinic-vaccine-mappings", label: "Vaccine Mapping", icon: "ri:links-line", href: (id) => "/staff/branch/" + id + "/clinic/vaccine-mappings", requiredPerm: "clinic.emr.write" },
       { key: "clinic-surgeries", label: "Surgeries", icon: "ri:scissors-cut-line", href: (id) => "/staff/branch/" + id + "/clinic/surgeries", requiredPerm: "clinic.surgery.read", anyPerms: ["clinic.surgery.create", "clinic.surgery.manage"] },
       { key: "clinic-cases", label: "Cases", icon: "ri:folder-open-line", href: (id) => "/staff/branch/" + id + "/clinic/cases", requiredPerm: "clinic.cases.read", anyPerms: ["clinic.cases.write"] },
       { key: "clinic-items", label: "Clinic items", icon: "ri:box-3-line", href: (id) => "/staff/branch/" + id + "/clinic/items", requiredPerm: "clinic.items.read", anyPerms: ["clinic.stock.read"] },
@@ -235,6 +441,7 @@ export const BRANCH_SIDEBAR: BranchSidebarGroup[] = [
   },
   {
     group: "Analytics",
+    hideForWarehouseBranch: true,
     items: [
       { key: "reports", label: "Reports", icon: "ri:bar-chart-2-line", href: (id) => "/staff/branch/" + id + "/reports", requiredPerm: "reports.view" },
     ],
@@ -247,20 +454,36 @@ export type BranchSummaryCounts = {
   clinicQueue?: number;
   /** AWAITING_CONFIRMATION vendor GRNs for this branch (warehouse queue). */
   vendorReceipts?: number;
+  /** Pending org stock requests in warehouse requisition queue (dashboard KPI). */
+  warehouseRequests?: number;
 };
+
+function branchSidebarItemVisible(it: BranchSidebarItem, isWarehouseHub: boolean): boolean {
+  if (it.warehouseOnly && !isWarehouseHub) return false;
+  if (it.hideForWarehouseBranch && isWarehouseHub) return false;
+  return true;
+}
+
+function branchSidebarGroupVisible(g: BranchSidebarGroup, isWarehouseHub: boolean): boolean {
+  if (g.warehouseOnly && !isWarehouseHub) return false;
+  if (g.hideForWarehouseBranch && isWarehouseHub) return false;
+  return true;
+}
 
 /** Filter groups/items by permissions and branch type; optionally attach badge counts. */
 export function getFilteredBranchSidebar(
   branchId: string,
-  branch: { type?: string; [k: string]: any } | null,
+  branch: { type?: string; [k: string]: unknown } | null,
   permissions: string[],
   counts?: BranchSummaryCounts | null
 ): { group: string; items: { key: string; label: string; icon: string; href: string; badge?: number }[] }[] {
   const perms = Array.isArray(permissions) ? permissions : [];
+  const isWh = isWarehouseHubBranch(branch);
   const result: { group: string; items: { key: string; label: string; icon: string; href: string; badge?: number }[] }[] = [];
 
   const mapItems = (g: (typeof BRANCH_SIDEBAR)[number]) =>
     g.items
+      .filter((it) => branchSidebarItemVisible(it, isWh))
       .filter((it) => {
         if (perms.includes(it.requiredPerm)) return true;
         if (it.anyPerms && it.anyPerms.some((p) => perms.includes(p))) return true;
@@ -273,6 +496,7 @@ export function getFilteredBranchSidebar(
           else if (it.badgeKey === "lowStock") badge = counts.lowStock;
           else if (it.badgeKey === "clinicQueue") badge = counts.clinicQueue;
           else if (it.badgeKey === "vendorReceipts") badge = counts.vendorReceipts;
+          else if (it.badgeKey === "warehouseRequests") badge = counts.warehouseRequests;
         }
         return {
           key: it.key,
@@ -284,8 +508,12 @@ export function getFilteredBranchSidebar(
       });
 
   for (const g of BRANCH_SIDEBAR) {
-    if (g.group === "Warehouse") {
-      const items = mapItems(g);
+    if (!branchSidebarGroupVisible(g, isWh)) continue;
+    if (g.featureFlag && !g.featureFlag(branch ?? {})) continue;
+
+    const items = mapItems(g);
+
+    if (g.group === "Warehouse" && g.warehouseOnly) {
       if (items.length > 0) {
         result.push({ group: g.group, items });
       } else {
@@ -304,8 +532,6 @@ export function getFilteredBranchSidebar(
       continue;
     }
 
-    if (g.featureFlag && !g.featureFlag(branch ?? {})) continue;
-    const items = mapItems(g);
     if (items.length > 0) result.push({ group: g.group, items });
   }
   return result;

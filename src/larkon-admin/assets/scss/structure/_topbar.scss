@@ -6,7 +6,12 @@
      top: 0;
      z-index: 1005;
      position: sticky;
-     transition: all 0.3s ease-in-out;
+     // Avoid `transition: all`: sticky + layout reflow when dropdowns open can animate
+     // `top`/transform-like values and make the whole bar (or items) appear to jump.
+     transition: padding 0.3s ease-in-out,
+          padding-left 0.3s ease-in-out,
+          padding-right 0.3s ease-in-out,
+          background-color 0.3s ease-in-out;
      height: $topbar-height;
      background-color: $topbar-bg;
      padding-left: $main-nav-width;
@@ -139,5 +144,93 @@ html[data-menu-size="hidden"] {
                     width: 100%;
                }
           }
+
+          // Profile (Larkon: `.dropdown.topbar-item`): keep positioning context so Popper does not
+          // reflow the topbar; overrides `position: static` above for this dropdown only.
+          .topbar-item.dropdown {
+               position: relative !important;
+          }
+
+          // Full-width mobile menus are for other topbar dropdowns; profile menu stays compact.
+          .topbar-item.dropdown .dropdown-menu.profile-dropdown-menu {
+               width: auto !important;
+               min-width: 12rem;
+          }
+     }
+}
+
+// Profile dropdown (Larkon: root is `.dropdown.topbar-item`): no slide animation (avoids translateY jank).
+.topbar .topbar-item.dropdown .dropdown-menu.profile-dropdown-menu {
+     animation: none !important;
+     max-width: min(100vw - 2rem, 22rem);
+     overflow-wrap: anywhere;
+}
+
+// Profile wrapper + toggle: stable metrics for .dropdown vs .dropdown.show; neutralize caret / flex reflow.
+.topbar .topbar-item.dropdown,
+.topbar .topbar-item.dropdown.show {
+     flex-shrink: 0;
+     position: relative;
+     display: flex;
+     align-items: center;
+     justify-content: center;
+     align-self: center;
+     height: $topbar-height;
+     min-height: $topbar-height;
+     max-height: $topbar-height;
+     margin: 0;
+     padding: 0;
+     transform: none !important;
+     top: auto !important;
+     bottom: auto !important;
+}
+
+// Profile toggle: avoid `transition: all` from `.topbar-item .topbar-button` when `.show` toggles
+// (animating "all" can interpolate layout-affecting values and cause visible shift).
+.topbar .topbar-item.dropdown .topbar-button.profile-dropdown-toggle {
+     transition: color 0.2s ease !important;
+
+     &,
+     &.show,
+     &:focus,
+     &:focus-visible,
+     &:active {
+          transform: none !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          line-height: 0 !important;
+          border-width: 0 !important;
+          width: 2.5rem;
+          height: 2.5rem;
+          min-width: 2.5rem;
+          min-height: 2.5rem;
+          max-width: 2.5rem;
+          max-height: 2.5rem;
+          box-sizing: border-box;
+          align-self: center;
+          vertical-align: middle;
+     }
+
+     // Focus/keyboard: outline only — no box-shadow ring that changes perceived button size.
+     &:focus {
+          box-shadow: none !important;
+     }
+
+     &:focus-visible {
+          outline: 2px solid var(--bs-primary, #0d6efd);
+          outline-offset: 2px;
+          box-shadow: none !important;
+     }
+
+     // Bootstrap caret + Larkon boxicons override: ensure no pseudo-element affects box metrics.
+     &.dropdown-toggle::before,
+     &.dropdown-toggle::after {
+          display: none !important;
+          content: none !important;
+          margin: 0 !important;
+          padding: 0 !important;
+          border: 0 !important;
+          width: 0 !important;
+          height: 0 !important;
      }
 }

@@ -52,6 +52,14 @@ type PlanEvent = {
   performedBy?: { profile?: { displayName?: string | null } | null } | null;
 };
 
+type PickListSummary = {
+  id: number;
+  status?: string;
+  lines?: PickLine[];
+  dispatch?: { id: number; status?: string } | null;
+  stockDispatchId?: number | null;
+};
+
 type AllocationPlanDetail = {
   id: number;
   orgId?: number;
@@ -72,15 +80,24 @@ type AllocationPlanDetail = {
     branch?: { name?: string | null } | null;
   } | null;
   lines?: AllocLine[];
-  pickList?: {
-    id: number;
-    status?: string;
-    lines?: PickLine[];
-    dispatch?: { id: number; status?: string } | null;
-    stockDispatchId?: number | null;
-  } | null;
+  /** All pick waves for this plan (newest first from API). */
+  pickLists?: PickListSummary[];
+  /** @deprecated Prefer pickLists */
+  pickList?: PickListSummary | null;
   events?: PlanEvent[];
 };
+
+function selectPrimaryPickListForPlan(pickLists: PickListSummary[] | null | undefined): PickListSummary | null {
+  if (!pickLists?.length) return null;
+  const list = [...pickLists].sort((a, b) => b.id - a.id);
+  const open = list.filter((p) => ["DRAFT", "IN_PROGRESS"].includes((p.status || "").toUpperCase()));
+  if (open.length) return open[0];
+  const completedNoDispatch = list.filter(
+    (p) => (p.status || "").toUpperCase() === "COMPLETED" && p.stockDispatchId == null && !p.dispatch
+  );
+  if (completedNoDispatch.length) return completedNoDispatch[0];
+  return list[0];
+}
 
 const PRE_CONFIRM = new Set(["DRAFT", "ALLOCATED", "PARTIALLY_ALLOCATED", "FAILED"]);
 
@@ -93,6 +110,7 @@ function statusBadgeClass(status: string): string {
   if (s === "PARTIALLY_ALLOCATED" || s === "PICKING" || s === "ON_HOLD") return "bg-warning text-dark";
   if (s === "FAILED" || s === "CANCELLED") return "bg-danger";
   if (s === "DISPATCHED") return "bg-primary";
+  if (s === "PARTIALLY_DISPATCHED") return "bg-info text-dark";
   return "bg-secondary";
 }
 
@@ -167,8 +185,23 @@ export default function OwnerAllocationPlanDetailPage() {
   }
 
   const st = (plan.status || "").toUpperCase();
-  const pick = plan.pickList;
+  const pickListsRaw = plan.pickLists?.length
+    ? plan.pickLists
+    : plan.pickList
+      ? [plan.pickList]
+      : [];
+  const pick = selectPrimaryPickListForPlan(pickListsRaw);
   const pickSt = pick ? (pick.status || "").toUpperCase() : "";
+  const blockingOpenPick = pickListsRaw.some((p) => ["DRAFT", "IN_PROGRESS"].includes((p.status || "").toUpperCase()));
+  const blockingCompletedNoDispatch = pickListsRaw.some(
+    (p) =>
+      (p.status || "").toUpperCase() === "COMPLETED" && p.stockDispatchId == null && p.dispatch == null
+  );
+  const canGeneratePickList =
+    ["CONFIRMED", "PICKING", "PICKED", "PARTIALLY_DISPATCHED"].includes(st) &&
+    !blockingOpenPick &&
+    !blockingCompletedNoDispatch &&
+    !["CANCELLED", "DISPATCHED"].includes(st);
   const canPreConfirm = PRE_CONFIRM.has(st);
   const shortage = plan.shortageQty ?? 0;
   const hasShortage = shortage > 0;
@@ -316,18 +349,23 @@ export default function OwnerAllocationPlanDetailPage() {
             </>
           )}
 
-          {st === "CONFIRMED" && !pick && (
+          {canGeneratePickList && (
             <button
               className="btn btn-sm btn-primary"
               disabled={acting}
               type="button"
+              title={
+                pickListsRaw.length
+                  ? "Creates the next pick wave for any remaining allocated quantity (after prior pick lists are handed off)."
+                  : "Creates the first pick list from the confirmed allocation."
+              }
               onClick={() =>
                 runAction(async () => {
                   await pickListFromPlan(id);
                 })
               }
             >
-              Generate pick list
+              {pickListsRaw.length ? "Generate next pick list (wave)" : "Generate pick list"}
             </button>
           )}
 
@@ -579,12 +617,37 @@ export default function OwnerAllocationPlanDetailPage() {
 
         <div className="col-lg-5">
           <div className="card border mb-3">
-            <div className="card-header py-2">Pick list</div>
+            <div className="card-header py-2">Pick lists</div>
             <div className="card-body">
+              {pickListsRaw.length > 1 && (
+                <div className="table-responsive mb-2">
+                  <table className="table table-sm mb-0">
+                    <thead className="table-light">
+                      <tr>
+                        <th>Pick #</th>
+                        <th>Status</th>
+                        <th>Dispatch</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {pickListsRaw.map((pl) => (
+                        <tr key={pl.id}>
+                          <td className="small">{pl.id}</td>
+                          <td className="small">{pl.status ?? "—"}</td>
+                          <td className="small">
+                            {pl.dispatch ? `#${pl.dispatch.id}` : pl.stockDispatchId ? `#${pl.stockDispatchId}` : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
               {!pick ? (
                 <p className="text-muted small mb-0">No pick list yet. Confirm the plan, then generate a pick list.</p>
               ) : (
                 <>
+                  <p className="small mb-1 text-muted">Primary (active) pick for actions:</p>
                   <p className="small mb-2">
                     Pick #{pick.id} — <span className="badge bg-secondary">{pick.status}</span>
                   </p>

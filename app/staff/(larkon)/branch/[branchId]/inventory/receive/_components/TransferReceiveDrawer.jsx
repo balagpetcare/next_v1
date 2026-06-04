@@ -13,7 +13,15 @@ function statusBadge(status) {
   return "bg-secondary";
 }
 
-export default function TransferReceiveDrawer({ show, onHide, transferId, branchId: _branchId, onSuccess }) {
+export default function TransferReceiveDrawer({
+  show,
+  onHide,
+  transferId,
+  branchId: _branchId,
+  onSuccess,
+  /** When false, show transfer context read-only (no confirm receive). */
+  allowReceiveSubmit = true,
+}) {
   const toast = useToast();
   const [transfer, setTransfer] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -108,11 +116,19 @@ export default function TransferReceiveDrawer({ show, onHide, transferId, branch
         {!loading && transfer && canReceive(transfer) && (
           <>
             {error && <div className="alert alert-danger small py-2">{error}</div>}
+            {!allowReceiveSubmit ? (
+              <div className="alert alert-light border small mb-16" role="status">
+                <strong>Read-only.</strong> You can review this transfer. Posting receipts requires{" "}
+                <span className="text-body">Receive stock</span> on your role.
+              </div>
+            ) : null}
             <p className="text-secondary small mb-16">
               From <strong>{transfer.fromLocation?.name ?? "—"}</strong> → To{" "}
               <strong>{transfer.toLocation?.name ?? "—"}</strong>
             </p>
-            <p className="text-secondary small mb-16">Enter received / damaged / expired quantities per line.</p>
+            <p className="text-secondary small mb-16">
+              {allowReceiveSubmit ? "Enter received / damaged / expired quantities per line." : "Line quantities (read-only)."}
+            </p>
             <div className="table-responsive">
               <table className="table table-sm">
                 <thead>
@@ -137,7 +153,7 @@ export default function TransferReceiveDrawer({ show, onHide, transferId, branch
                           className="radius-12"
                           value={line.quantityReceivedInput}
                           onChange={(e) => updateLine(idx, "quantityReceivedInput", e.target.value)}
-                          disabled={receiveSuccess}
+                          disabled={receiveSuccess || !allowReceiveSubmit}
                         />
                       </td>
                       <td>
@@ -148,7 +164,7 @@ export default function TransferReceiveDrawer({ show, onHide, transferId, branch
                           className="radius-12"
                           value={line.quantityDamaged}
                           onChange={(e) => updateLine(idx, "quantityDamaged", e.target.value)}
-                          disabled={receiveSuccess}
+                          disabled={receiveSuccess || !allowReceiveSubmit}
                         />
                       </td>
                       <td>
@@ -159,7 +175,7 @@ export default function TransferReceiveDrawer({ show, onHide, transferId, branch
                           className="radius-12"
                           value={line.quantityExpired}
                           onChange={(e) => updateLine(idx, "quantityExpired", e.target.value)}
-                          disabled={receiveSuccess}
+                          disabled={receiveSuccess || !allowReceiveSubmit}
                         />
                       </td>
                     </tr>
@@ -168,14 +184,16 @@ export default function TransferReceiveDrawer({ show, onHide, transferId, branch
               </table>
             </div>
             <div className="d-flex gap-8 mt-24">
-              <button
-                type="button"
-                className="btn btn-primary btn-sm"
-                disabled={submitting || receiveSuccess}
-                onClick={handleReceiveSubmit}
-              >
-                {receiveSuccess ? "Received" : submitting ? "Receiving…" : "Confirm receive"}
-              </button>
+              {allowReceiveSubmit ? (
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={submitting || receiveSuccess}
+                  onClick={handleReceiveSubmit}
+                >
+                  {receiveSuccess ? "Received" : submitting ? "Receiving…" : "Confirm receive"}
+                </button>
+              ) : null}
               <button type="button" className="btn btn-outline-secondary btn-sm" onClick={onHide}>
                 Close
               </button>

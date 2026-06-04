@@ -450,6 +450,15 @@ export default function StaffBranchClinicPatientDetailPage() {
         )}
 
         {tab === "vaccines" && (
+          <>
+            <div className="d-flex flex-wrap justify-content-end gap-2 mb-16">
+              <Link href={`/staff/branch/${branchId}/clinic/patients/${patientId}/vaccination`} className="btn btn-sm btn-primary">
+                Open vaccination workspace
+              </Link>
+              <Link href={`/staff/branch/${branchId}/clinic/patients/${patientId}/vaccination`} className="btn btn-sm btn-outline-primary">
+                Administer vaccine
+              </Link>
+            </div>
           <div className="row g-3">
             <div className="col-md-6">
               <Card title="Recent vaccinations">
@@ -484,6 +493,7 @@ export default function StaffBranchClinicPatientDetailPage() {
               </Card>
             </div>
           </div>
+          </>
         )}
 
         {tab === "billing" && (

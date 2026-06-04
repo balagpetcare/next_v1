@@ -2,9 +2,8 @@ import { notFound } from "next/navigation";
 import StaffStockRequestDetailClient from "../../_components/StaffStockRequestDetailClient";
 
 /**
- * Nested detail route — kept for backward compatibility.
- * Prefer linking to .../inventory/stock-request-detail/[id] (see staffInventoryRoutes).
- * Requests to .../stock-requests/[id] are redirected to stock-request-detail by next.config + proxy.
+ * Nested detail route — fallback if redirects are bypassed; prefer canonical URL (see staffInventoryRoutes).
+ * Normal requests to .../stock-requests/[id] are redirected to .../stock-request-detail/[id] (next.config + proxy.ts).
  */
 export default async function StaffStockRequestDetailPageNested({
   params,

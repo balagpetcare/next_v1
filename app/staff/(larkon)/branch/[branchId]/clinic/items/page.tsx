@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import {
@@ -15,6 +15,7 @@ import {
   staffClinicInstrumentIssueLogCreate,
   staffClinicInstrumentIssueLogReturn,
 } from "@/lib/api";
+import { clinicalItemLooksLikeVaccine } from "@/app/_lib/vaccineInventoryUi";
 
 type StockRow = {
   id: number;
@@ -23,7 +24,12 @@ type StockRow = {
   currentQty?: number;
   availableQty?: number;
   reorderLevel?: number;
-  item?: { name: string; itemCode: string };
+  item?: {
+    name: string;
+    itemCode?: string;
+    domainType?: string;
+    category?: { name?: string };
+  };
   variant?: { variantName: string; sku?: string };
 };
 
@@ -58,7 +64,12 @@ export default function StaffClinicItemsPage() {
   const [consumptionData, setConsumptionData] = useState<{ items: unknown[]; total: number }>({ items: [], total: 0 });
   const [ledgerLoading, setLedgerLoading] = useState(false);
   const [consumptionLoading, setConsumptionLoading] = useState(false);
+  const [vaccineStockFilter, setVaccineStockFilter] = useState<"all" | "vaccine">("all");
 
+  const displayedStock = useMemo(() => {
+    if (vaccineStockFilter !== "vaccine") return stock;
+    return stock.filter((r) => clinicalItemLooksLikeVaccine(r.item ?? null));
+  }, [stock, vaccineStockFilter]);
   const loadLedger = useCallback(async () => {
     if (!branchId) return;
     try {
@@ -305,11 +316,20 @@ export default function StaffClinicItemsPage() {
             <i className="ri-edit-line me-1" /> Adjust
           </button>
           <Link href={`/staff/branch/${branchId}/clinic`} className="btn btn-outline-secondary btn-sm radius-8">Back to clinic</Link>
+          <Link href={`/staff/branch/${branchId}/clinic/vaccine-mappings`} className="btn btn-outline-info btn-sm radius-8">Vaccine mapping</Link>
+          <Link href={`/staff/branch/${branchId}/clinic/vaccinations`} className="btn btn-outline-info btn-sm radius-8">Vaccinations</Link>
+          <Link href={`/staff/branch/${branchId}/inventory/incoming`} className="btn btn-outline-secondary btn-sm radius-8">Incoming</Link>
         </div>
       </div>
 
       {error && <div className="alert alert-danger radius-12 mb-3">{error}</div>}
       {success && <div className="alert alert-success radius-12 mb-3">{success}</div>}
+
+      <div className="alert alert-light border small mb-3 d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <span className="small mb-0">
+          Retail vaccine lots sync into clinical batches after hub dispatch receive. Use <strong>Vaccine mapping</strong> before administering from patient vaccination.
+        </span>
+      </div>
 
       <div className="d-flex gap-2 mb-3">
         <button type="button" className={`btn radius-8 ${activeTab === "stock" ? "btn-primary" : "btn-outline-primary"}`} onClick={() => setActiveTab("stock")}>Stock</button>
@@ -396,14 +416,22 @@ export default function StaffClinicItemsPage() {
               <table className="table table-sm table-hover mb-0">
                 <thead className="table-light"><tr><th>Item</th><th>Variant</th><th>Available</th><th>Reorder level</th></tr></thead>
                 <tbody>
-                  {alerts.map((r) => (
+                  {alerts.map((r) => {
+                    const vax = clinicalItemLooksLikeVaccine(r.item ?? null);
+                    return (
                     <tr key={r.id}>
-                      <td>{r.item?.name ?? r.itemId}</td>
+                      <td>
+                        {r.item?.name ?? r.itemId}
+                        {vax ? (
+                          <span className="badge bg-info-subtle text-info-emphasis border border-info-subtle small ms-1">Vaccine</span>
+                        ) : null}
+                      </td>
                       <td>{r.variant?.variantName ?? r.variantId}</td>
                       <td>{r.availableQty ?? r.currentQty ?? "—"}</td>
                       <td>{r.reorderLevel ?? "—"}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
@@ -412,12 +440,28 @@ export default function StaffClinicItemsPage() {
       )}
 
       <div className="card radius-12">
-        <div className="card-header bg-transparent p-24"><h6 className="mb-0 fw-semibold">Branch item stock</h6></div>
+        <div className="card-header bg-transparent p-24 d-flex flex-wrap justify-content-between align-items-center gap-2">
+          <h6 className="mb-0 fw-semibold">Branch item stock</h6>
+          <div className="d-flex align-items-center gap-2">
+            <label className="small text-muted mb-0 me-1">Show</label>
+            <select
+              className="form-select form-select-sm radius-8"
+              style={{ width: "auto" }}
+              value={vaccineStockFilter}
+              onChange={(e) => setVaccineStockFilter(e.target.value as "all" | "vaccine")}
+            >
+              <option value="all">All clinical items</option>
+              <option value="vaccine">Vaccine-like only</option>
+            </select>
+          </div>
+        </div>
         <div className="card-body p-24">
           {loading ? (
             <div className="text-center py-4"><div className="spinner-border text-primary" /><p className="text-muted mt-2 mb-0">Loading…</p></div>
           ) : stock.length === 0 ? (
             <p className="text-muted mb-0">No clinical item stock recorded for this branch.</p>
+          ) : displayedStock.length === 0 ? (
+            <p className="text-muted mb-0">No rows match the vaccine filter.</p>
           ) : (
             <div className="table-responsive">
               <table className="table table-sm table-hover mb-0">
@@ -425,15 +469,23 @@ export default function StaffClinicItemsPage() {
                   <tr><th>Item</th><th>Variant</th><th>Current</th><th>Available</th><th>Reorder</th></tr>
                 </thead>
                 <tbody>
-                  {stock.map((r) => (
+                  {displayedStock.map((r) => {
+                    const vax = clinicalItemLooksLikeVaccine(r.item ?? null);
+                    return (
                     <tr key={r.id}>
-                      <td>{r.item?.name ?? r.itemId} {r.item?.itemCode && <code className="small ms-1">{r.item.itemCode}</code>}</td>
+                      <td>
+                        {r.item?.name ?? r.itemId} {r.item?.itemCode && <code className="small ms-1">{r.item.itemCode}</code>}
+                        {vax ? (
+                          <span className="badge bg-info-subtle text-info-emphasis border border-info-subtle small ms-1">Vaccine</span>
+                        ) : null}
+                      </td>
                       <td>{r.variant?.variantName ?? r.variantId}</td>
                       <td>{r.currentQty ?? "—"}</td>
                       <td>{r.availableQty ?? "—"}</td>
                       <td>{r.reorderLevel ?? "—"}</td>
                     </tr>
-                  ))}
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

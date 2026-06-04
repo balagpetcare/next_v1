@@ -27,7 +27,11 @@ export default function StaffPickListsPage() {
     let c = false;
     (async () => {
       try {
-        const res = await pickListsList({ mine: true });
+        const bid = parseInt(branchId, 10);
+        const res = await pickListsList({
+          workQueue: true,
+          branchId: Number.isFinite(bid) ? bid : undefined,
+        });
         if (!c) setItems(res.items || []);
       } catch (e: any) {
         if (!c) setError(e?.message || "Failed to load");
@@ -38,7 +42,7 @@ export default function StaffPickListsPage() {
     return () => {
       c = true;
     };
-  }, [caps.canViewPickLists]);
+  }, [caps.canViewPickLists, branchId]);
 
   return (
     <StaffBranchLayout branchId={branchId} requiredPermission={null}>
@@ -61,8 +65,8 @@ export default function StaffPickListsPage() {
               <li className="breadcrumb-item active">Pick Lists</li>
             </ol>
           </nav>
-          <h5 className="mb-1 fw-semibold">My Pick Lists</h5>
-          <p className="text-muted small mb-0">Pick lists assigned to you for fulfillment.</p>
+          <h5 className="mb-1 fw-semibold">Pick lists</h5>
+          <p className="text-muted small mb-0">Unclaimed pick lists and picks assigned to you for this branch.</p>
         </div>
       </div>
       {error && (
@@ -77,7 +81,7 @@ export default function StaffPickListsPage() {
           <p className="mt-2 text-muted">Loading pick lists...</p>
         </div>
       ) : items.length === 0 ? (
-        <div className="alert alert-info radius-12 mb-3">No pick lists assigned to you.</div>
+        <div className="alert alert-info radius-12 mb-3">No pick lists in your queue for this branch.</div>
       ) : (
         <div className="card radius-12 border">
           <div className="table-responsive">

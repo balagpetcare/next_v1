@@ -8,9 +8,10 @@ import { usePathname } from 'next/navigation'
 import { Fragment, KeyboardEvent, MouseEvent, useCallback, useEffect, useRef, useState } from 'react'
 import { Collapse } from 'react-bootstrap'
 
+/** Only top-level sidebar rows show icons; nested submenu links do not. */
 const shouldRenderItemIcon = (item: MenuItemType, depth: number) => {
   if (!item.icon) return false
-  return depth === 0 || item.showIcon === true
+  return depth === 0
 }
 
 const MenuItemWithChildren = ({ item, className, linkClassName, subMenuClassName, activeMenuItems, toggleMenu, depth = 0 }: SubMenus) => {

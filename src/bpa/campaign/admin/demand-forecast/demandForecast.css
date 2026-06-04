@@ -1,0 +1,80 @@
+.demand-forecast {
+  --df-primary: #0b5c5c;
+  --df-primary-light: #e8f4f4;
+  --df-accent: #405189;
+  --df-warn: #f7b84b;
+  --df-danger: #f06548;
+  --df-surface: #f8fafb;
+  --df-card: #ffffff;
+  --df-border: rgba(11, 92, 92, 0.12);
+}
+
+.demand-forecast__hero {
+  background: linear-gradient(135deg, #0b5c5c 0%, #064e4e 45%, #405189 100%);
+  border-radius: 16px;
+  color: #fff;
+  padding: 1.5rem 1.75rem;
+  margin-bottom: 1.5rem;
+}
+
+.demand-forecast__kpi {
+  background: var(--df-card);
+  border: 1px solid var(--df-border);
+  border-radius: 12px;
+  padding: 1rem 1.15rem;
+  height: 100%;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+}
+
+.demand-forecast__kpi-value {
+  font-size: 1.65rem;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--df-accent);
+}
+
+.demand-forecast__section {
+  background: var(--df-card);
+  border: 1px solid var(--df-border);
+  border-radius: 14px;
+  margin-bottom: 1.25rem;
+  overflow: hidden;
+}
+
+.demand-forecast__section-head {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--df-border);
+  background: var(--df-surface);
+}
+
+.demand-forecast__section-body {
+  padding: 1.15rem 1.25rem;
+}
+
+.demand-forecast__heatmap-cell {
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  min-height: 52px;
+  border: 1px solid var(--df-border);
+  transition: transform 0.15s ease;
+}
+
+.demand-forecast__heatmap-cell:hover {
+  transform: translateY(-2px);
+}
+
+.demand-forecast__rec-card {
+  border-left: 4px solid var(--df-primary);
+  background: var(--df-surface);
+  border-radius: 0 10px 10px 0;
+  padding: 0.85rem 1rem;
+  margin-bottom: 0.65rem;
+}
+
+.demand-forecast__rec-card--critical {
+  border-left-color: var(--df-danger);
+}
+
+.demand-forecast__rec-card--high {
+  border-left-color: var(--df-warn);
+}

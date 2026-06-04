@@ -44,7 +44,7 @@ export default function StaffPutawayTaskDetailPage() {
     let c = false;
     (async () => {
       const list = await warehouseAccessible().catch(() => []);
-      const arr = Array.isArray(list) ? list : [];
+      const arr = (Array.isArray(list) ? list : []) as Array<{ id: number; name?: string; orgId?: number }>;
       if (c) return;
       setWarehouses(arr);
       const fromQ = whQ ? Number(whQ) : null;
@@ -140,7 +140,11 @@ export default function StaffPutawayTaskDetailPage() {
   if (!canOps) {
     return (
       <StaffBranchLayout branchId={branchId} requiredPermission={null}>
-        <WarehouseAccessFallback title="Putaway" message="You do not have warehouse operations access for this branch." />
+        <WarehouseAccessFallback
+          branchId={branchId}
+          title="Putaway"
+          message="You do not have warehouse operations access for this branch."
+        />
       </StaffBranchLayout>
     );
   }

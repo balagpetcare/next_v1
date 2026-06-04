@@ -4,12 +4,22 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { useParams, useSearchParams } from "next/navigation";
 import { dispatchPrintUrl } from "@/lib/api";
+import { staffDispatchPrintPath, staffDispatchReceiveWorkspacePath } from "@/lib/staffInventoryRoutes";
 
-type DocKind = "challan" | "branch-confirmation" | "discrepancy";
+type DocKind =
+  | "challan"
+  | "delivery-note"
+  | "branch-receiving-record"
+  | "branch-worksheet"
+  | "branch-confirmation"
+  | "discrepancy";
 
 function normalizeDoc(raw: string | null): DocKind {
   if (raw === "branch" || raw === "branch-confirmation") return "branch-confirmation";
   if (raw === "discrepancy") return "discrepancy";
+  if (raw === "delivery-note" || raw === "carrier") return "delivery-note";
+  if (raw === "branch-receiving-record" || raw === "branch-record") return "branch-receiving-record";
+  if (raw === "branch-worksheet" || raw === "worksheet") return "branch-worksheet";
   return "challan";
 }
 
@@ -25,27 +35,50 @@ export default function DispatchPrintPreviewPage() {
     [dispatchId, doc]
   );
 
-  const base = `/staff/branch/${branchId}/inventory/dispatch-print/${dispatchIdRaw}`;
-
   return (
     <div className="container-fluid py-3">
-      <h5 className="mb-2">Print — Dispatch #{Number.isFinite(dispatchId) ? dispatchId : "—"}</h5>
+      <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
+        <h5 className="mb-0">Print — Dispatch #{Number.isFinite(dispatchId) ? dispatchId : "—"}</h5>
+        {branchId && Number.isFinite(dispatchId) && dispatchId > 0 ? (
+          <Link href={staffDispatchReceiveWorkspacePath(branchId, dispatchId)} className="btn btn-sm btn-outline-secondary">
+            Back to receive dispatch
+          </Link>
+        ) : null}
+      </div>
       <p className="text-muted small mb-3">A4-friendly. Use Ctrl+P to print.</p>
       <div className="d-flex flex-wrap gap-2 mb-3">
         <Link
-          href={`${base}?doc=challan`}
+          href={staffDispatchPrintPath(branchId, dispatchIdRaw, "challan")}
           className={`btn btn-sm ${doc === "challan" ? "btn-primary" : "btn-outline-primary"}`}
         >
           Challan
         </Link>
         <Link
-          href={`${base}?doc=branch-confirmation`}
+          href={staffDispatchPrintPath(branchId, dispatchIdRaw, "delivery-note")}
+          className={`btn btn-sm ${doc === "delivery-note" ? "btn-primary" : "btn-outline-primary"}`}
+        >
+          Delivery note
+        </Link>
+        <Link
+          href={staffDispatchPrintPath(branchId, dispatchIdRaw, "branch-receiving-record")}
+          className={`btn btn-sm ${doc === "branch-receiving-record" ? "btn-primary" : "btn-outline-primary"}`}
+        >
+          Branch file copy
+        </Link>
+        <Link
+          href={staffDispatchPrintPath(branchId, dispatchIdRaw, "branch-worksheet")}
+          className={`btn btn-sm ${doc === "branch-worksheet" ? "btn-primary" : "btn-outline-primary"}`}
+        >
+          Worksheet
+        </Link>
+        <Link
+          href={staffDispatchPrintPath(branchId, dispatchIdRaw, "branch-confirmation")}
           className={`btn btn-sm ${doc === "branch-confirmation" ? "btn-primary" : "btn-outline-primary"}`}
         >
           Branch receive
         </Link>
         <Link
-          href={`${base}?doc=discrepancy`}
+          href={staffDispatchPrintPath(branchId, dispatchIdRaw, "discrepancy")}
           className={`btn btn-sm ${doc === "discrepancy" ? "btn-primary" : "btn-outline-primary"}`}
         >
           Discrepancy
@@ -62,7 +95,7 @@ export default function DispatchPrintPreviewPage() {
           style={{ minHeight: "70vh" }}
         />
       ) : (
-        <p className="text-danger">Invalid dispatch id</p>
+        <p className="text-danger mb-0">Invalid dispatch ID.</p>
       )}
     </div>
   );

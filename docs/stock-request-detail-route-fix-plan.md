@@ -50,7 +50,7 @@ Browser address bar and all `href`s continue to use this path.
 
 - `app/staff/(larkon)/branch/[branchId]/inventory/stock-request-detail/[requestId]/page.tsx`
 
-Public URL and filesystem path align; **no** `beforeFiles` rewrite for this segment (owner dev uses `--webpack`; if Turbopack-only dev ever 404s here, reintroduce the `stock-request-detail-page` + rewrite pattern).
+Public URL and filesystem path align under `inventory/stock-request-detail/[requestId]` — **no** `beforeFiles` rewrite (rewrites were removed after canonical URLs still 404’d; see `docs/STAFF_INVENTORY_CANONICAL_DETAIL_ROUTES_STABLE_PHYSICAL.md`).
 
 ## Rewrites: remove / keep / replace
 
@@ -78,7 +78,7 @@ Public URL and filesystem path align; **no** `beforeFiles` rewrite for this segm
 ## Risks / regressions
 
 - **Params name:** Dynamic segment `[requestId]`; client reads `requestId` (and `id` fallback) from `useParams()`.
-- **Turbopack-only dev:** If this segment 404s without `--webpack`, restore `stock-request-detail-page` + `beforeFiles` rewrite.
+- **If this segment 404s:** Prefer fixing route registration / cache first; avoid reintroducing `stock-request-detail-page` + rewrite unless there is no other option (that pattern failed for canonical URLs in production-like dev).
 
 ## Verification checklist
 

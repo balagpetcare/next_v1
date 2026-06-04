@@ -93,6 +93,12 @@ declare module "@/lib/useBranchContext" {
     isLoading: boolean;
     kpis: Record<string, unknown>;
     todayBoard: Record<string, unknown>;
+    alerts: Record<string, unknown>;
+    activity: unknown[];
+    error: string;
+    errorCode: string | null;
+    refetch: () => Promise<void>;
+    hasViewPermission: boolean;
   };
 }
 

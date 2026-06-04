@@ -4,6 +4,9 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 import { ownerGet } from "@/app/owner/_lib/ownerApi";
+import BarcodePrintButton from "@/app/_components/barcode/BarcodePrintButton";
+import { saveBulkLabelSession } from "@/lib/barcodeLabelsApi";
+import { lotExpiryBadgeHint, retailSkuLooksLikeVaccine } from "@/app/_lib/vaccineInventoryUi";
 
 type Location = { id: number; name: string; branch?: { id: number; name: string; orgId?: number } };
 type ProductRef = { id: number; name: string; slug?: string | null };
@@ -81,6 +84,8 @@ export default function OwnerInventoryBatchesPage() {
   const [error, setError] = useState("");
   const [hideZeroQty, setHideZeroQty] = useState(true);
   const [productFilter, setProductFilter] = useState("");
+  const [vaccineSkuFilter, setVaccineSkuFilter] = useState<"all" | "vaccine">("all");
+  const [selectedLotIds, setSelectedLotIds] = useState<Set<number>>(new Set());
 
   const loadLocations = useCallback(async () => {
     setLoading(true);
@@ -122,7 +127,8 @@ export default function OwnerInventoryBatchesPage() {
       .then(([lotsRes, expRes]) => {
         if (cancelled) return;
         setLots(Array.isArray(lotsRes?.data) ? lotsRes.data : []);
-        setSummary(lotsRes?.meta?.summary ?? null);
+        const meta = lotsRes?.meta;
+        setSummary((meta && 'summary' in meta ? meta.summary : null) ?? null);
         setExpiring(Array.isArray(expRes?.data) ? expRes.data : []);
       })
       .finally(() => {
@@ -132,6 +138,16 @@ export default function OwnerInventoryBatchesPage() {
       cancelled = true;
     };
   }, [locationId, hideZeroQty]);
+
+  const branchIdForLabels = useMemo(() => {
+    const loc = locations.find((l) => String(l.id) === locationId);
+    const bid = loc?.branch?.id;
+    return bid != null && Number.isFinite(Number(bid)) ? Number(bid) : null;
+  }, [locations, locationId]);
+
+  useEffect(() => {
+    setSelectedLotIds(new Set());
+  }, [locationId]);
 
   const filteredLots = useMemo(() => {
     const q = productFilter.trim().toLowerCase();
@@ -143,6 +159,18 @@ export default function OwnerInventoryBatchesPage() {
       return pn.includes(q) || vt.includes(q) || sku.includes(q);
     });
   }, [lots, productFilter]);
+
+  const displayLots = useMemo(() => {
+    if (vaccineSkuFilter !== "vaccine") return filteredLots;
+    return filteredLots.filter((row) =>
+      retailSkuLooksLikeVaccine(
+        row.product?.name ?? "",
+        row.variant?.sku ?? "",
+        row.variant?.title ?? "",
+        undefined
+      )
+    );
+  }, [filteredLots, vaccineSkuFilter]);
 
   function formatDate(d: string | null | undefined) {
     if (!d) return "—";
@@ -197,8 +225,20 @@ export default function OwnerInventoryBatchesPage() {
                 disabled={!locationId || dataLoading}
               />
             </div>
-            <div className="col-12 col-md-3">
-              <div className="form-check">
+            <div className="col-12 col-md-2">
+              <label className="form-label small text-muted">SKU type</label>
+              <select
+                className="form-select form-select-sm"
+                value={vaccineSkuFilter}
+                onChange={(e) => setVaccineSkuFilter(e.target.value as "all" | "vaccine")}
+                disabled={!locationId || dataLoading}
+              >
+                <option value="all">All products</option>
+                <option value="vaccine">Vaccine-like lots</option>
+              </select>
+            </div>
+            <div className="col-12 col-md-2">
+              <div className="form-check mt-4 pt-1">
                 <input
                   id="hideZeroQty"
                   className="form-check-input"
@@ -212,7 +252,7 @@ export default function OwnerInventoryBatchesPage() {
                 </label>
               </div>
             </div>
-            <div className="col-12 col-md-3 d-flex justify-content-md-end">
+            <div className="col-12 col-md-2 d-flex justify-content-md-end align-items-end">
               <button type="button" className="btn btn-outline-primary btn-sm" onClick={loadLocations} disabled={loading}>
                 {loading ? "Loading…" : "Refresh"}
               </button>
@@ -275,16 +315,63 @@ export default function OwnerInventoryBatchesPage() {
           <div className="card radius-12 mb-3">
             <div className="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
               <h6 className="mb-0">Lots at location</h6>
-              <span className="small text-muted">{filteredLots.length} row(s)</span>
+              <div className="d-flex align-items-center gap-2 flex-wrap">
+                {branchIdForLabels ? (
+                  <Link
+                    href={`/owner/clinic/${branchIdForLabels}/catalog/vaccine-mappings`}
+                    className="btn btn-sm btn-outline-info"
+                  >
+                    Vaccine mapping (branch)
+                  </Link>
+                ) : null}
+                {branchIdForLabels && selectedLotIds.size > 0 ? (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-primary"
+                    onClick={() => {
+                      saveBulkLabelSession({
+                        branchId: branchIdForLabels,
+                        items: [...selectedLotIds].map((lotId) => ({ type: "BATCH", lotId, copies: 1 })),
+                      });
+                      window.open("/owner/inventory/labels/bulk", "_blank", "noopener,noreferrer");
+                    }}
+                  >
+                    Print selected ({selectedLotIds.size})
+                  </button>
+                ) : null}
+                <span className="small text-muted">{displayLots.length} row(s)</span>
+              </div>
             </div>
             <div className="card-body p-0">
               {filteredLots.length === 0 ? (
                 <div className="p-24 text-center text-muted">No lots match this view.</div>
+              ) : displayLots.length === 0 ? (
+                <div className="p-24 text-center text-muted">No vaccine-like lots match the SKU filter. Clear SKU type or adjust search.</div>
               ) : (
                 <div className="table-responsive">
                   <table className="table table-hover align-middle mb-0">
                     <thead>
                       <tr>
+                        <th style={{ width: 36 }}>
+                          {branchIdForLabels ? (
+                            <input
+                              type="checkbox"
+                              className="form-check-input"
+                              aria-label="Select all"
+                              checked={
+                                displayLots.length > 0 &&
+                                displayLots.every((r) => selectedLotIds.has(r.lotId))
+                              }
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedLotIds(new Set(displayLots.map((r) => r.lotId)));
+                                } else {
+                                  setSelectedLotIds(new Set());
+                                }
+                              }}
+                            />
+                          ) : null}
+                        </th>
                         <th>Lot</th>
                         <th>Product</th>
                         <th>Variant</th>
@@ -293,13 +380,45 @@ export default function OwnerInventoryBatchesPage() {
                         <th>Status</th>
                         <th>Mfg</th>
                         <th>Expiry</th>
+                        <th className="text-end">Label</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {filteredLots.map((row) => (
+                      {displayLots.map((row) => {
+                        const isVac = retailSkuLooksLikeVaccine(
+                          row.product?.name ?? "",
+                          row.variant?.sku ?? "",
+                          row.variant?.title ?? "",
+                          undefined
+                        );
+                        const expIso = row.expDate ?? row.expiryDate;
+                        const expHint = lotExpiryBadgeHint(expIso);
+                        return (
                         <tr key={row.lotId}>
+                          <td>
+                            {branchIdForLabels ? (
+                              <input
+                                type="checkbox"
+                                className="form-check-input"
+                                checked={selectedLotIds.has(row.lotId)}
+                                onChange={(e) => {
+                                  setSelectedLotIds((prev) => {
+                                    const next = new Set(prev);
+                                    if (e.target.checked) next.add(row.lotId);
+                                    else next.delete(row.lotId);
+                                    return next;
+                                  });
+                                }}
+                              />
+                            ) : null}
+                          </td>
                           <td>{row.lotCode ?? row.lotId}</td>
-                          <td className="small">{row.product?.name ?? "—"}</td>
+                          <td className="small">
+                            {row.product?.name ?? "—"}
+                            {isVac ? (
+                              <span className="badge bg-info-subtle text-info-emphasis border border-info-subtle ms-1 small">Vaccine</span>
+                            ) : null}
+                          </td>
                           <td className="small">{row.variant?.title ?? row.variant?.sku ?? "—"}</td>
                           <td>{row.quantity ?? row.onHandQty ?? 0}</td>
                           <td>{row.availableQty ?? row.quantity ?? 0}</td>
@@ -309,9 +428,25 @@ export default function OwnerInventoryBatchesPage() {
                             </span>
                           </td>
                           <td className="text-muted small">{formatDate(row.mfgDate)}</td>
-                          <td className="text-muted small">{formatDate(row.expDate ?? row.expiryDate)}</td>
+                          <td className={`text-muted small ${expHint === "expired" ? "text-danger fw-semibold" : expHint === "soon" ? "text-warning fw-semibold" : ""}`}>
+                            {formatDate(row.expDate ?? row.expiryDate)}
+                            {expHint === "expired" ? " · expired" : expHint === "soon" ? " · ≤30d" : ""}
+                          </td>
+                          <td className="text-end">
+                            {branchIdForLabels ? (
+                              <BarcodePrintButton
+                                href={`/owner/inventory/labels/batch/${row.lotId}/print?branchId=${branchIdForLabels}`}
+                                className="btn btn-sm btn-outline-secondary"
+                              >
+                                Batch
+                              </BarcodePrintButton>
+                            ) : (
+                              <span className="text-muted small">—</span>
+                            )}
+                          </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 </div>

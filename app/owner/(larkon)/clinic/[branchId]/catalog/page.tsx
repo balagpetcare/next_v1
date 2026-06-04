@@ -422,7 +422,15 @@ export default function ClinicCatalogPage() {
       {activeTab === "linkages" && (
         <div className="card radius-12">
           <div className="card-body">
-            <p className="text-muted small mb-3">Items and where they are used (packages).</p>
+            <div className="d-flex align-items-center justify-content-between flex-wrap gap-2 mb-3">
+              <div>
+                <p className="text-muted small mb-1">Items and where they are used (packages).</p>
+                <p className="text-muted small mb-0">Vaccine inventory mappings are managed from a dedicated mapping page.</p>
+              </div>
+              <Link href={`/owner/clinic/${branchId}/catalog/vaccine-mappings`} className="btn btn-sm btn-outline-primary radius-8">
+                Open Vaccine Mappings
+              </Link>
+            </div>
             {loading ? (
               <div className="text-center py-4 text-muted small">Loading…</div>
             ) : (

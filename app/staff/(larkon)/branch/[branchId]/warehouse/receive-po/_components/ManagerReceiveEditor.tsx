@@ -2,7 +2,7 @@
 
 import { Fragment, useMemo, useState, useEffect, useCallback } from "react";
 import { Dropdown } from "react-bootstrap";
-import { grnConfirm, grnPrintUrl, grnSaveVendorReceiveDraft } from "@/lib/api";
+import { grnConfirm, grnPrintUrl, grnSaveVendorReceiveDraft, vendorReceiptPrintUrl } from "@/lib/api";
 import { useToast } from "@/src/hooks/useToast";
 import { getMessageFromApiError } from "@/src/lib/apiErrorToMessage";
 import type { LineQtyField } from "@/src/lib/warehouseReceiveReconcile";
@@ -153,10 +153,13 @@ export function ManagerReceiveEditor({
   grn,
   onDone,
   onDraftSaved,
+  suppressSuccessToast,
 }: {
   grn: any;
   onDone: () => void;
   onDraftSaved?: () => void;
+  /** When true, parent handles success toast (e.g. vendor receipts detail + redirect). */
+  suppressSuccessToast?: boolean;
 }) {
   const toast = useToast();
   const [lines, setLines] = useState<ManagerLineState[]>(() => buildInitialLines(grn));
@@ -370,7 +373,7 @@ export function ManagerReceiveEditor({
         })),
       });
       setShowConfirmModal(false);
-      toast.success("GRN confirmed and stock posted.");
+      if (!suppressSuccessToast) toast.success("GRN confirmed and stock posted.");
       onDone();
     } catch (e: unknown) {
       setShowConfirmModal(false);
@@ -687,13 +690,22 @@ export function ManagerReceiveEditor({
             </button>
             <div className="ms-auto d-flex flex-wrap gap-2">
               <a
-                href={grnPrintUrl(grnId, "grn")}
+                href={vendorReceiptPrintUrl(grnId, "grn")}
                 target="_blank"
                 rel="noopener noreferrer"
                 className="btn btn-sm btn-outline-secondary"
               >
                 <i className="ri-printer-line me-1" />
-                Print receive copy
+                Print GRN
+              </a>
+              <a
+                href={vendorReceiptPrintUrl(grnId, "delivery-note")}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-sm btn-outline-secondary"
+              >
+                <i className="ri-truck-line me-1" />
+                Print delivery note
               </a>
               <a
                 href={`/api/v1/grn/${grnId}/print/worksheet`}

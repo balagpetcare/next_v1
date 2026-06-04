@@ -34,23 +34,44 @@ export const findAllParent = (menuItems: MenuItemType[], menuItem: MenuItemType)
   return parents
 }
 
+function collectLeafMenuItems(menuItems: MenuItemType[]): MenuItemType[] {
+  const out: MenuItemType[] = []
+  for (const n of menuItems) {
+    if (n.children?.length) out.push(...collectLeafMenuItems(n.children))
+    else if (n.url) out.push(n)
+  }
+  return out
+}
+
+function normalizeMenuPath(path: string | undefined): string {
+  const t = String(path || '').replace(/\/$/, '')
+  return t || '/'
+}
+
+/**
+ * Resolve the active sidebar leaf using longest URL prefix among leaves.
+ * - Exact match wins among same length.
+ * - `/owner/inventory/stock-requests/12` matches `/owner/inventory/stock-requests` over `/owner/inventory`.
+ */
 export const getMenuItemFromURL = (items: MenuItemType | MenuItemType[], url: string): MenuItemType | undefined => {
-  if (items instanceof Array) {
-    for (const item of items) {
-      const foundItem = getMenuItemFromURL(item, url)
-      if (foundItem) {
-        return foundItem
-      }
-    }
-  } else {
-    if (items.url == url) return items
-    if (items.children != null) {
-      for (const item of items.children) {
-        const found = getMenuItemFromURL(item, url)
-        if (found) return found
+  const roots = items instanceof Array ? items : [items]
+  const trimmed = normalizeMenuPath(url)
+  const leaves = collectLeafMenuItems(roots).sort(
+    (a, b) => normalizeMenuPath(b.url).length - normalizeMenuPath(a.url).length,
+  )
+  let best: MenuItemType | undefined
+  let bestLen = -1
+  for (const leaf of leaves) {
+    const u = normalizeMenuPath(leaf.url)
+    if (!u) continue
+    if (trimmed === u || (u !== '/' && trimmed.startsWith(`${u}/`))) {
+      if (u.length > bestLen) {
+        bestLen = u.length
+        best = leaf
       }
     }
   }
+  return best
 }
 
 export const findMenuItem = (menuItems: MenuItemType[] | undefined, menuItemKey: MenuItemType['key'] | undefined): MenuItemType | null => {

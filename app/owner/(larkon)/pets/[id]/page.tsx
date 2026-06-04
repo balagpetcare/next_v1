@@ -71,6 +71,11 @@ export default function OwnerPetDetailPage() {
         <div className="text-secondary">
           {(formatPetTaxonomyLine(pet) || pet.animalType?.name) ?? "—"}
         </div>
+        <div className="mt-3">
+          <Link href={`/owner/pets/${pet.id}/vaccination-card`} className="btn btn-outline-primary btn-sm">
+            View vaccination card
+          </Link>
+        </div>
       </header>
 
       <div className="card">
@@ -117,6 +122,9 @@ export default function OwnerPetDetailPage() {
       </div>
 
       <div className="mt-3">
+        <Link href={`/owner/pets/${pet.id}/vaccination-card`} className="btn btn-primary me-2">
+          Vaccination Card
+        </Link>
         <Link href="/owner/pets" className="btn btn-outline-secondary">
           ← Back to My Pets
         </Link>

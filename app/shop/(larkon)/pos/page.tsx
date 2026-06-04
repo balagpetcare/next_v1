@@ -163,6 +163,16 @@ export default function ShopPOSPage() {
 
   return (
     <div className="dashboard-main-body">
+      {/*
+        Legacy /shop/pos — not the canonical POS. Staff branch POS is supported:
+        /staff/branch/[branchId]/pos. Keep this route only for temporary compatibility; do not add features here.
+      */}
+      <div className="alert alert-warning d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3" role="status">
+        <span className="small mb-0">
+          This page is <strong>deprecated</strong>. Use <strong>Staff → your branch → POS</strong> for supported checkout, server carts, invoices, and permissions.
+        </span>
+        <a href="/staff" className="btn btn-sm btn-primary text-nowrap">Open Staff workspace</a>
+      </div>
       <div className="row g-3">
         {/* Products List */}
         <div className="col-lg-8">

@@ -45,9 +45,10 @@ export default function OwnerPharmacyDashboardPage() {
       setError(null);
       try {
         type MeRes = { organizations?: { id: number }[]; data?: { organizations?: { id: number }[] } };
-        const me = await ownerGet<MeRes>("/api/v1/owner/me").catch(() => ({}));
+        const meRaw = await ownerGet<MeRes>("/api/v1/owner/me").catch(() => null);
+        const me = (meRaw ?? {}) as MeRes;
         if (cancelled) return;
-        const orgs = me?.organizations ?? me?.data?.organizations ?? [];
+        const orgs = me.organizations ?? me.data?.organizations ?? [];
         const orgId = orgs[0]?.id;
 
         const qs = buildMedicineRequisitionSummaryParams({});

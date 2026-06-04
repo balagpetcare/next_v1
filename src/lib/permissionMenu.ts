@@ -1,5 +1,7 @@
 "use client";
 
+import { OWNER_PRICING_NAV, OWNER_PRICING_SECTION_PERMISSIONS } from "./ownerPricingNav";
+
 export type AppKey = "owner" | "admin" | "shop" | "clinic" | "mother" | "producer" | "country" | "staff" | "doctor";
 
 export type MenuItem = {
@@ -15,6 +17,7 @@ export type MenuItem = {
   badgeType?: "count" | "status"; // Badge display type
   /** Phase 5: when set (e.g. DONATION, ADS), layout hides item when policy disables feature */
   policyFeature?: string;
+  deprecated?: boolean;
 };
 
 export type BuildMenuOptions = {
@@ -31,13 +34,23 @@ function hasAny(perms: Set<string>, required?: string[]) {
   return false;
 }
 
+/**
+ * Permission-filter menu tree.
+ * - Branch nodes: shown only if at least one child remains (prevents empty Pricing / Inventory sections).
+ * - Leaves: shown if `required` is empty or the user has any listed permission.
+ */
 function filterTree(items: MenuItem[], perms: Set<string>): MenuItem[] {
   const out: MenuItem[] = [];
   for (const it of items) {
-    const kids = it.children ? filterTree(it.children, perms) : undefined;
-    const ok = hasAny(perms, it.required) || (kids && kids.length > 0);
-    if (!ok) continue;
-    out.push({ ...it, children: kids });
+    if (it.children && it.children.length > 0) {
+      if (!hasAny(perms, it.required)) continue;
+      const kids = filterTree(it.children, perms);
+      if (kids.length === 0) continue;
+      out.push({ ...it, children: kids });
+    } else {
+      if (!hasAny(perms, it.required)) continue;
+      out.push({ ...it });
+    }
   }
   return out;
 }
@@ -86,6 +99,9 @@ const CORE_OWNER_FALLBACK: MenuItem[] = [
       { id: "owner.clinic.doctorPerformance", label: "Doctor Performance", href: "/owner/clinic?view=doctor-performance", required: [] },
       { id: "owner.clinic.doctorAudit", label: "Doctor Audit", href: "/owner/clinic?view=doctor-audit", required: [] },
       { id: "owner.clinic.services", label: "Services", href: "/owner/clinic?view=services", required: [] },
+      { id: "owner.clinic.catalog", label: "Clinic Catalog", href: "/owner/clinic?view=catalog", required: [] },
+      { id: "owner.clinic.inventory", label: "Clinic Inventory", href: "/owner/clinic?view=inventory", required: [] },
+      { id: "owner.clinic.vaccineMapping", label: "Vaccine Mapping", href: "/owner/clinic?view=catalog", required: [] },
       { id: "owner.clinic.packages", label: "Packages", href: "/owner/clinic?view=packages", required: [] },
       { id: "owner.clinic.schedule", label: "Schedule", href: "/owner/clinic?view=schedule", required: [] },
       { id: "owner.clinic.reports", label: "Reports", href: "/owner/clinic?view=reports", required: [] },
@@ -175,32 +191,170 @@ const CORE_OWNER_FALLBACK: MenuItem[] = [
     required: [],
     children: [
       { id: "owner.inventory.overview", label: "Stock", href: "/owner/inventory", required: [] },
-      {
-        id: "owner.inventory.pricingGovernance",
-        label: "Pricing governance",
-        href: "/owner/inventory/pricing-governance",
-        required: ["pricing.audit.view"],
-      },
       { id: "owner.inventory.vendors", label: "Vendors", href: "/owner/vendors", required: [] },
-      { id: "owner.inventory.warehouse", label: "Warehouse", href: "/owner/inventory/warehouse", required: [] },
-      { id: "owner.inventory.stockRequests", label: "Stock Requests", href: "/owner/inventory/stock-requests", required: [] },
-      { id: "owner.inventory.transfers", label: "Inventory Transfers (Legacy)", href: "/owner/inventory/transfers", required: [], deprecated: true },
+      {
+        id: "owner.inventory.warehouse",
+        label: "Warehouse",
+        href: "/owner/inventory/warehouse",
+        required: [],
+      },
+      {
+        id: "owner.inventory.stockRequests",
+        label: "Stock Requests",
+        href: "/owner/inventory/stock-requests",
+        required: [],
+      },
+      {
+        id: "owner.inventory.transfers",
+        label: "Inventory Transfers (Legacy)",
+        href: "/owner/inventory/transfers",
+        required: [],
+        deprecated: true,
+      },
       { id: "owner.inventory.receipts", label: "Receipts", href: "/owner/inventory/receipts", required: [] },
-      { id: "owner.inventory.purchaseOrders", label: "Purchase orders", href: "/owner/inventory/purchase-orders", required: [] },
-      { id: "owner.inventory.allocation", label: "Allocation & picking", href: "/owner/inventory/allocation", required: [] },
+      {
+        id: "owner.inventory.purchaseOrders",
+        label: "Purchase Orders",
+        href: "/owner/inventory/purchase-orders",
+        required: [],
+      },
+      {
+        id: "owner.inventory.procurementDemand",
+        label: "Procurement Demand",
+        href: "/owner/inventory/procurement-demand",
+        required: ["procurement.demand.view", "procurement.po.manage", "inventory.read"],
+      },
+      {
+        id: "owner.inventory.allocation",
+        label: "Allocation & Picking",
+        href: "/owner/inventory/allocation",
+        required: [],
+      },
+      {
+        id: "owner.inventory.warehouseFulfillment",
+        label: "Warehouse Fulfillment Queue",
+        href: "/owner/inventory/warehouse-fulfillment",
+        required: [],
+      },
       { id: "owner.inventory.locations", label: "Locations", href: "/owner/inventory/locations", required: [] },
-      { id: "owner.inventory.adjustments", label: "Adjustments", href: "/owner/inventory/adjustments", required: [] },
+      {
+        id: "owner.inventory.adjustments",
+        label: "Adjustments",
+        href: "/owner/inventory/adjustments",
+        required: [],
+      },
       { id: "owner.inventory.batches", label: "Batches", href: "/owner/inventory/batches", required: [] },
-      { id: "owner.inventory.writeOffs", label: "Write-Offs", href: "/owner/inventory/write-offs", required: [] },
-      { id: "owner.inventory.vendorReturns", label: "Vendor Returns", href: "/owner/inventory/vendor-returns", required: [] },
-      { id: "owner.inventory.warehouseTransfers", label: "Warehouse Transfers (Legacy)", href: "/owner/inventory/warehouse-transfers", required: [], deprecated: true },
-      { id: "owner.inventory.networkBalance", label: "Network balance", href: "/owner/inventory/network-balance", required: [] },
-      { id: "owner.inventory.reverseLogistics", label: "Reverse logistics", href: "/owner/inventory/reverse-logistics", required: [] },
-      { id: "owner.inventory.quarantine", label: "Quarantine stock", href: "/owner/inventory/quarantine", required: [] },
-      { id: "owner.inventory.analytics", label: "Analytics", href: "/owner/inventory/analytics", required: [] },
-      { id: "owner.inventory.controlTower", label: "Control tower", href: "/owner/inventory/control-tower", required: [] },
-      { id: "owner.inventory.procurementAi", label: "Procurement intelligence", href: "/owner/inventory/procurement-intelligence", required: [] },
-      { id: "owner.inventory.reconciliation", label: "Reconciliation", href: "/owner/inventory/reconciliation", required: [] },
+      {
+        id: "owner.inventory.barcodePrinting",
+        label: "Barcode Printing",
+        href: "/owner/inventory/barcode-printing",
+        required: [],
+      },
+      {
+        id: "owner.inventory.writeOffs",
+        label: "Write-Offs",
+        href: "/owner/inventory/write-offs",
+        required: [],
+      },
+      {
+        id: "owner.inventory.vendorReturns",
+        label: "Vendor Returns",
+        href: "/owner/inventory/vendor-returns",
+        required: [],
+      },
+      {
+        id: "owner.inventory.warehouseTransfers",
+        label: "Warehouse Transfers (Legacy)",
+        href: "/owner/inventory/warehouse-transfers",
+        required: [],
+        deprecated: true,
+      },
+      {
+        id: "owner.inventory.networkBalance",
+        label: "Network Balance",
+        href: "/owner/inventory/network-balance",
+        required: [],
+      },
+      {
+        id: "owner.inventory.reverseLogistics",
+        label: "Reverse Logistics",
+        href: "/owner/inventory/reverse-logistics",
+        required: [],
+      },
+      {
+        id: "owner.inventory.quarantine",
+        label: "Quarantine Stock",
+        href: "/owner/inventory/quarantine",
+        required: [],
+      },
+      {
+        id: "owner.inventory.analytics",
+        label: "Analytics",
+        href: "/owner/inventory/analytics",
+        required: [],
+      },
+      {
+        id: "owner.inventory.controlTower",
+        label: "Control Tower",
+        href: "/owner/inventory/control-tower",
+        required: [],
+      },
+      {
+        id: "owner.inventory.procurementAi",
+        label: "Procurement Intelligence",
+        href: "/owner/inventory/procurement-intelligence",
+        required: [],
+      },
+      {
+        id: "owner.inventory.reconciliation",
+        label: "Reconciliation",
+        href: "/owner/inventory/reconciliation",
+        required: [],
+      },
+    ],
+  },
+  {
+    id: "owner.pricing",
+    label: "Pricing",
+    icon: "solar:tag-price-outline",
+    required: [...OWNER_PRICING_SECTION_PERMISSIONS],
+    children: [
+      {
+        id: "owner.pricing.governance",
+        label: "Pricing Governance",
+        href: OWNER_PRICING_NAV.governance,
+        required: ["pricing.central.read", "pricing.audit.view", "org.read"],
+      },
+      {
+        id: "owner.pricing.priceMaster",
+        label: "Price Master",
+        href: OWNER_PRICING_NAV.priceMaster,
+        required: ["pricing.central.write", "pricing.bulk.import"],
+      },
+      {
+        id: "owner.pricing.discountRules",
+        label: "Discount Rules",
+        href: OWNER_PRICING_NAV.discountRules,
+        required: ["pricing.retail.rule.manage"],
+      },
+      {
+        id: "owner.pricing.membership",
+        label: "Membership Pricing",
+        href: OWNER_PRICING_NAV.membership,
+        required: ["pricing.membership.manage"],
+      },
+      {
+        id: "owner.pricing.campaigns",
+        label: "Campaigns",
+        href: OWNER_PRICING_NAV.campaigns,
+        required: ["pricing.campaign.manage"],
+      },
+      {
+        id: "owner.pricing.analytics",
+        label: "Pricing Analytics",
+        href: OWNER_PRICING_NAV.analytics,
+        required: ["pricing.analytics.view"],
+      },
     ],
   },
   {
@@ -218,7 +372,7 @@ const CORE_OWNER_FALLBACK: MenuItem[] = [
   {
     id: "owner.warehouse",
     label: "Warehouse",
-    icon: "solar:box-outline",
+    icon: "solar:database-outline",
     required: [],
     children: [
       { id: "owner.warehouse.list", label: "Warehouses", href: "/owner/warehouse", required: [] },
@@ -298,6 +452,9 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
         { id: "owner.clinic.doctorPerformance", label: "Doctor Performance", href: "/owner/clinic?view=doctor-performance", required: ["clinic.staff.manage"] },
         { id: "owner.clinic.doctorAudit", label: "Doctor Audit", href: "/owner/clinic?view=doctor-audit", required: ["clinic.staff.manage"] },
         { id: "owner.clinic.services", label: "Services", href: "/owner/clinic?view=services", required: ["clinic.services.manage"] },
+        { id: "owner.clinic.catalog", label: "Clinic Catalog", href: "/owner/clinic?view=catalog", required: ["clinic.services.manage"] },
+        { id: "owner.clinic.inventory", label: "Clinic Inventory", href: "/owner/clinic?view=inventory", required: ["clinic.services.manage"] },
+        { id: "owner.clinic.vaccineMapping", label: "Vaccine Mapping", href: "/owner/clinic?view=catalog", required: ["clinic.services.manage"] },
         { id: "owner.clinic.packages", label: "Packages", href: "/owner/clinic?view=packages", required: ["clinic.services.manage"] },
         { id: "owner.clinic.schedule", label: "Schedule", href: "/owner/clinic?view=schedule", required: ["clinic.schedule.manage"] },
         { id: "owner.clinic.reports", label: "Reports", href: "/owner/clinic?view=reports", required: ["clinic.settings.read"] },
@@ -398,25 +555,184 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
       children: [
         { id: "owner.inventory.overview", label: "Stock", href: "/owner/inventory", required: ["inventory.read"] },
         { id: "owner.inventory.vendors", label: "Vendors", href: "/owner/vendors", required: ["inventory.read"] },
-        { id: "owner.inventory.warehouse", label: "Warehouse", href: "/owner/inventory/warehouse", required: ["inventory.read"] },
-        { id: "owner.inventory.stockRequests", label: "Stock Requests", href: "/owner/inventory/stock-requests", required: ["inventory.read"] },
-        { id: "owner.inventory.transfers", label: "Inventory Transfers (Legacy)", href: "/owner/inventory/transfers", required: ["inventory.read"], deprecated: true },
-        { id: "owner.inventory.receipts", label: "Receipts", href: "/owner/inventory/receipts", required: ["inventory.read"] },
-        { id: "owner.inventory.purchaseOrders", label: "Purchase orders", href: "/owner/inventory/purchase-orders", required: ["inventory.read"] },
-        { id: "owner.inventory.allocation", label: "Allocation & picking", href: "/owner/inventory/allocation", required: ["inventory.read"] },
-        { id: "owner.inventory.locations", label: "Locations", href: "/owner/inventory/locations", required: ["inventory.read"] },
-        { id: "owner.inventory.adjustments", label: "Adjustments", href: "/owner/inventory/adjustments", required: ["inventory.read"] },
-        { id: "owner.inventory.batches", label: "Batches", href: "/owner/inventory/batches", required: ["inventory.read"] },
-        { id: "owner.inventory.writeOffs", label: "Write-Offs", href: "/owner/inventory/write-offs", required: ["inventory.read"] },
-        { id: "owner.inventory.vendorReturns", label: "Vendor Returns", href: "/owner/inventory/vendor-returns", required: ["inventory.read"] },
-        { id: "owner.inventory.warehouseTransfers", label: "Warehouse Transfers (Legacy)", href: "/owner/inventory/warehouse-transfers", required: ["inventory.read"], deprecated: true },
-        { id: "owner.inventory.networkBalance", label: "Network balance", href: "/owner/inventory/network-balance", required: ["inventory.read"] },
-        { id: "owner.inventory.reverseLogistics", label: "Reverse logistics", href: "/owner/inventory/reverse-logistics", required: ["inventory.read"] },
-        { id: "owner.inventory.quarantine", label: "Quarantine stock", href: "/owner/inventory/quarantine", required: ["inventory.read"] },
-        { id: "owner.inventory.analytics", label: "Analytics", href: "/owner/inventory/analytics", required: ["inventory.read"] },
-        { id: "owner.inventory.controlTower", label: "Control tower", href: "/owner/inventory/control-tower", required: ["inventory.read"] },
-        { id: "owner.inventory.procurementAi", label: "Procurement intelligence", href: "/owner/inventory/procurement-intelligence", required: ["inventory.read"] },
-        { id: "owner.inventory.reconciliation", label: "Reconciliation", href: "/owner/inventory/reconciliation", required: ["inventory.read"] },
+        {
+          id: "owner.inventory.warehouse",
+          label: "Warehouse",
+          href: "/owner/inventory/warehouse",
+          required: ["inventory.read"],
+        },
+        {
+          id: "owner.inventory.stockRequests",
+          label: "Stock Requests",
+          href: "/owner/inventory/stock-requests",
+          required: ["inventory.read"],
+        },
+        {
+          id: "owner.inventory.transfers",
+          label: "Inventory Transfers (Legacy)",
+          href: "/owner/inventory/transfers",
+          required: ["inventory.read"],
+          deprecated: true,
+        },
+        {
+          id: "owner.inventory.receipts",
+          label: "Receipts",
+          href: "/owner/inventory/receipts",
+          required: ["inventory.read"],
+        },
+        {
+          id: "owner.inventory.purchaseOrders",
+          label: "Purchase Orders",
+          href: "/owner/inventory/purchase-orders",
+          required: ["inventory.read"],
+        },
+        {
+          id: "owner.inventory.procurementDemand",
+          label: "Procurement Demand",
+          href: "/owner/inventory/procurement-demand",
+          required: ["procurement.demand.view", "procurement.po.manage", "inventory.read"],
+        },
+        {
+          id: "owner.inventory.allocation",
+          label: "Allocation & Picking",
+          href: "/owner/inventory/allocation",
+          required: ["inventory.read"],
+        },
+        {
+          id: "owner.inventory.warehouseFulfillment",
+          label: "Warehouse Fulfillment Queue",
+          href: "/owner/inventory/warehouse-fulfillment",
+          required: ["inventory.read"],
+        },
+        {
+          id: "owner.inventory.locations",
+          label: "Locations",
+          href: "/owner/inventory/locations",
+          required: ["inventory.read"],
+        },
+        {
+          id: "owner.inventory.adjustments",
+          label: "Adjustments",
+          href: "/owner/inventory/adjustments",
+          required: ["inventory.read"],
+        },
+        {
+          id: "owner.inventory.batches",
+          label: "Batches",
+          href: "/owner/inventory/batches",
+          required: ["inventory.read"],
+        },
+        {
+          id: "owner.inventory.barcodePrinting",
+          label: "Barcode Printing",
+          href: "/owner/inventory/barcode-printing",
+          required: ["inventory.read"],
+        },
+        {
+          id: "owner.inventory.writeOffs",
+          label: "Write-Offs",
+          href: "/owner/inventory/write-offs",
+          required: ["inventory.read"],
+        },
+        {
+          id: "owner.inventory.vendorReturns",
+          label: "Vendor Returns",
+          href: "/owner/inventory/vendor-returns",
+          required: ["inventory.read"],
+        },
+        {
+          id: "owner.inventory.warehouseTransfers",
+          label: "Warehouse Transfers (Legacy)",
+          href: "/owner/inventory/warehouse-transfers",
+          required: ["inventory.read"],
+          deprecated: true,
+        },
+        {
+          id: "owner.inventory.networkBalance",
+          label: "Network Balance",
+          href: "/owner/inventory/network-balance",
+          required: ["inventory.read"],
+        },
+        {
+          id: "owner.inventory.reverseLogistics",
+          label: "Reverse Logistics",
+          href: "/owner/inventory/reverse-logistics",
+          required: ["inventory.read"],
+        },
+        {
+          id: "owner.inventory.quarantine",
+          label: "Quarantine Stock",
+          href: "/owner/inventory/quarantine",
+          required: ["inventory.read"],
+        },
+        {
+          id: "owner.inventory.analytics",
+          label: "Analytics",
+          href: "/owner/inventory/analytics",
+          required: ["inventory.read"],
+        },
+        {
+          id: "owner.inventory.controlTower",
+          label: "Control Tower",
+          href: "/owner/inventory/control-tower",
+          required: ["inventory.read"],
+        },
+        {
+          id: "owner.inventory.procurementAi",
+          label: "Procurement Intelligence",
+          href: "/owner/inventory/procurement-intelligence",
+          required: ["inventory.read"],
+        },
+        {
+          id: "owner.inventory.reconciliation",
+          label: "Reconciliation",
+          href: "/owner/inventory/reconciliation",
+          required: ["inventory.read"],
+        },
+      ],
+    },
+    {
+      id: "owner.pricing",
+      label: "Pricing",
+      icon: "solar:tag-price-outline",
+      required: [...OWNER_PRICING_SECTION_PERMISSIONS],
+      children: [
+        {
+          id: "owner.pricing.governance",
+          label: "Pricing Governance",
+          href: OWNER_PRICING_NAV.governance,
+          required: ["pricing.central.read", "pricing.audit.view", "org.read"],
+        },
+        {
+          id: "owner.pricing.priceMaster",
+          label: "Price Master",
+          href: OWNER_PRICING_NAV.priceMaster,
+          required: ["pricing.central.write", "pricing.bulk.import"],
+        },
+        {
+          id: "owner.pricing.discountRules",
+          label: "Discount Rules",
+          href: OWNER_PRICING_NAV.discountRules,
+          required: ["pricing.retail.rule.manage"],
+        },
+        {
+          id: "owner.pricing.membership",
+          label: "Membership Pricing",
+          href: OWNER_PRICING_NAV.membership,
+          required: ["pricing.membership.manage"],
+        },
+        {
+          id: "owner.pricing.campaigns",
+          label: "Campaigns",
+          href: OWNER_PRICING_NAV.campaigns,
+          required: ["pricing.campaign.manage"],
+        },
+        {
+          id: "owner.pricing.analytics",
+          label: "Pricing Analytics",
+          href: OWNER_PRICING_NAV.analytics,
+          required: ["pricing.analytics.view"],
+        },
       ],
     },
     {
@@ -434,7 +750,7 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
     {
       id: "owner.warehouse",
       label: "Warehouse",
-      icon: "solar:box-outline",
+      icon: "solar:database-outline",
       required: ["warehouse.view", "inventory.read"],
       children: [
         { id: "owner.warehouse.list", label: "Warehouses", href: "/owner/warehouse", required: ["warehouse.view", "inventory.read"] },
@@ -489,7 +805,8 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
   ],
   shop: [
     { id: "shop.dashboard", label: "Dashboard", href: "/shop", icon: "solar:home-smile-outline", required: [] },
-    { id: "shop.pos", label: "POS", href: "/shop/pos", icon: "solar:cart-large-outline", required: ["orders.create"] },
+    // Legacy route only; canonical POS is staff branch workspace — see app/shop/(larkon)/pos/page.tsx banner.
+    { id: "shop.pos", label: "POS (legacy)", href: "/shop/pos", icon: "solar:cart-large-outline", required: ["orders.create"] },
     { id: "shop.sellerDash", label: "Seller Dashboard", href: "/shop/dashboards/seller", icon: "solar:chart-2-outline", required: ["orders.read"] },
     { id: "shop.orders", label: "Orders", href: "/shop/orders", icon: "solar:bag-check-outline", required: ["orders.read"] },
     { id: "shop.inventory", label: "Inventory", href: "/shop/inventory", icon: "solar:box-outline", required: ["inventory.read"] },
@@ -696,6 +1013,30 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
         { id: "admin.fundraising", label: "Fundraising", href: "/admin/fundraising", required: [], policyFeature: "DONATION" },
         { id: "admin.pos", label: "POS Transactions", href: "/admin/pos/transactions", required: [] },
         { id: "admin.transfers", label: "Transfers", href: "/admin/transfers", required: [] },
+      ],
+    },
+
+    // ============================================
+    // SECTION 6.5: Vaccination Campaign 2026
+    // ============================================
+    {
+      id: "admin.section.vaccinationCampaign",
+      label: "Vaccination Campaign",
+      icon: "ri:syringe-line",
+      required: [],
+      children: [
+        {
+          id: "admin.campaigns",
+          label: "Campaigns",
+          href: "/admin/campaigns",
+          required: [],
+        },
+        {
+          id: "admin.campaigns.new",
+          label: "Create campaign",
+          href: "/admin/campaigns/new",
+          required: [],
+        },
       ],
     },
 
@@ -933,6 +1274,13 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
   // Branch-scoped clinic items (Patients, Appointments, etc.) come from branchSidebarConfig when inside /staff/branch/[branchId]; keep this list minimal.
   staff: [
     { id: "staff.dashboard", label: "Branches", href: "/staff/branch", icon: "solar:home-smile-outline", required: [] },
+    {
+      id: "staff.vaccinationCampaign",
+      label: "Vaccination Campaign",
+      href: "/staff/campaign",
+      icon: "ri:syringe-line",
+      required: [],
+    },
     { id: "staff.warehouse", label: "Warehouse Ops", href: "/staff/warehouse", icon: "solar:box-outline", required: ["warehouse.view"] },
     { id: "staff.workspace", label: "Workspace", href: "/staff/workspace", icon: "solar:widget-5-outline", required: [] },
   ],
@@ -986,12 +1334,19 @@ export function buildMenu(app: AppKey, permissions: string[] | Set<string>, opti
       const merged: MenuItem[] = [...filtered];
       for (const it of CORE_OWNER_FALLBACK) {
         const idx = merged.findIndex((m) => m.id === it.id);
-        if (idx === -1) merged.push(it);
-        else {
-          // If existing item is missing children, prefer fallback's children.
+        const mergedKids =
+          it.children && it.children.length > 0 ? filterTree(it.children, perms) : undefined;
+        const candidate: MenuItem =
+          mergedKids != null ? { ...it, children: mergedKids } : it;
+        if (idx === -1) {
+          if (it.children?.length && (!mergedKids || mergedKids.length === 0)) continue;
+          merged.push(candidate);
+        } else {
           const existing = merged[idx];
           if (it.children?.length && (!existing.children || existing.children.length === 0)) {
-            merged[idx] = { ...existing, children: it.children };
+            if (mergedKids && mergedKids.length > 0) {
+              merged[idx] = { ...existing, children: mergedKids };
+            }
           }
         }
       }

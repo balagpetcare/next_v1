@@ -27,6 +27,9 @@ export function useStaffBranchMenuItems(basePath: string): MenuItemType[] | null
       approvals: typeof approvalsLen === "number" ? approvalsLen : (typeof kpis?.approvalsPending === "number" ? kpis.approvalsPending : undefined),
       lowStock: typeof kpis?.lowStockCount === "number" ? kpis.lowStockCount : undefined,
       clinicQueue: typeof clinicLen === "number" ? clinicLen : undefined,
+      vendorReceipts: typeof kpis?.vendorReceivePendingCount === "number" ? kpis.vendorReceivePendingCount : undefined,
+      warehouseRequests:
+        typeof kpis?.pendingWarehouseFulfillmentCount === "number" ? kpis.pendingWarehouseFulfillmentCount : undefined,
     };
 
     const groups = getFilteredBranchSidebar(branchId, branch as { type?: string; [k: string]: any } | null, permissions, counts);

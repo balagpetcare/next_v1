@@ -1,45 +1,44 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import Link from "next/link";
 import LkFormGroup from "@larkon-ui/components/LkFormGroup";
 import LkInput from "@larkon-ui/components/LkInput";
 import LkSelect from "@larkon-ui/components/LkSelect";
 import LkTextarea from "@larkon-ui/components/LkTextarea";
 import { useBranchContext } from "@/lib/useBranchContext";
 import {
-  staffPosProducts,
-  staffPosBarcodeLookup,
-  staffPosSale,
-  staffPosReceipt,
-  staffPosInvoice,
-  staffPosReturn,
   staffOrdersList,
   staffOrderGet,
-  staffOrderCancel,
+  staffPosReturn,
+  staffPosCancelOrder,
+  staffPosGetCurrentShift,
+  staffPosOpenShift,
+  staffPosCloseShift,
+  staffPosGetZReport,
 } from "@/lib/api";
 import Card from "@/src/bpa/components/ui/Card";
-import BranchHeader from "@/src/components/branch/BranchHeader";
 import AccessDenied from "@/src/components/branch/AccessDenied";
-import PermissionGate from "@/src/components/branch/PermissionGate";
+import PosSaleWorkspace from "./_components/PosSaleWorkspace";
 
 const REQUIRED_PERM = "pos.view";
-const PAYMENT_METHODS = [
-  { value: "CASH", label: "Cash" },
-  { value: "CARD", label: "Card" },
-  { value: "MOBILE", label: "Mobile wallet" },
-  { value: "ONLINE", label: "Online" },
+const RETURN_REASONS = [
+  { value: "customer_request", label: "Customer request" },
+  { value: "defective", label: "Defective" },
+  { value: "wrong_item", label: "Wrong item" },
 ];
-const DISCOUNT_PRESETS = [0, 5, 10, 15, 20];
 
 export default function StaffBranchPosPage() {
   const params = useParams();
   const router = useRouter();
   const branchId = useMemo(() => String(params?.branchId ?? ""), [params]);
+  const bidNum = useMemo(() => {
+    const parsed = parseInt(branchId, 10);
+    return Number.isFinite(parsed) ? parsed : 0;
+  }, [branchId]);
   const { branch, myAccess, isLoading: ctxLoading, errorCode, hasViewPermission } = useBranchContext(branchId);
 
-  const [activeTab, setActiveTab] = useState("sale"); // sale | history | refunds | drawer
+  const [activeTab, setActiveTab] = useState("sale");
   const permissions = myAccess?.permissions ?? [];
   const canView = permissions.includes(REQUIRED_PERM);
   const canSell = permissions.includes("pos.sell");
@@ -48,214 +47,117 @@ export default function StaffBranchPosPage() {
   const canCashOpen = permissions.includes("cashdrawer.open");
   const canCashClose = permissions.includes("cashdrawer.close");
 
-  // New Sale state
-  const [products, setProducts] = useState([]);
-  const [productSearch, setProductSearch] = useState("");
-  const [cart, setCart] = useState([]); // { productId, variantId?, productName, variantName?, sku, quantity, price, key }
-  const [customerId, setCustomerId] = useState(""); // optional
-  const [discountPreset, setDiscountPreset] = useState(0);
-  const [discountCustom, setDiscountCustom] = useState(""); // only if canDiscountOverride
-  const [paymentMethod, setPaymentMethod] = useState("CASH");
-  const [notes, setNotes] = useState("");
-  const [saleLoading, setSaleLoading] = useState(false);
-  const [saleError, setSaleError] = useState("");
-  const [saleSuccess, setSaleSuccess] = useState(null); // { orderNumber, orderId }
-  const [receiptData, setReceiptData] = useState(null);
-  const [receiptLoading, setReceiptLoading] = useState(false);
-  const [barcodeInput, setBarcodeInput] = useState("");
-  const [barcodeLoading, setBarcodeLoading] = useState(false);
-  const [invoiceData, setInvoiceData] = useState(null);
-  const [invoiceLoading, setInvoiceLoading] = useState(false);
-
-  // Sales History state
   const [orders, setOrders] = useState([]);
   const [ordersLoading, setOrdersLoading] = useState(false);
   const [ordersError, setOrdersError] = useState("");
   const [orderStatusFilter, setOrderStatusFilter] = useState("");
   const [orderSearch, setOrderSearch] = useState("");
-  const [orderDetail, setOrderDetail] = useState(null);
+  const [orderDetail, setOrderDetail] = useState(undefined);
   const [orderDetailLoading, setOrderDetailLoading] = useState(false);
 
-  // Refund state (full-order cancel)
   const [refundOrderId, setRefundOrderId] = useState(null);
   const [refundReason, setRefundReason] = useState("");
   const [refundSubmitting, setRefundSubmitting] = useState(false);
   const [refundError, setRefundError] = useState("");
-  // Line-item return state
   const [returnOrderDetail, setReturnOrderDetail] = useState(null);
-  const [returnLines, setReturnLines] = useState([]); // [{ variantId, maxQty, productName, variantName, qtyToReturn, reason }]
+  const [returnLines, setReturnLines] = useState([]);
   const [returnSubmitting, setReturnSubmitting] = useState(false);
   const [returnSuccess, setReturnSuccess] = useState(null);
 
+  const [currentShift, setCurrentShift] = useState(null);
+  const [shiftLoading, setShiftLoading] = useState(false);
+  const [shiftError, setShiftError] = useState("");
+  const [startingCash, setStartingCash] = useState("");
+  const [closingCash, setClosingCash] = useState("");
+  const [managerOverrideReason, setManagerOverrideReason] = useState("");
+  const [zReport, setZReport] = useState(null);
+  const [zReportLoading, setZReportLoading] = useState(false);
+
   useEffect(() => {
-    if (errorCode === "unauthorized") router.replace("/staff/login");
+    if (errorCode === "unauthorized") {
+      router.replace("/staff/login");
+    }
   }, [errorCode, router]);
 
-  // Load products for New Sale
-  useEffect(() => {
-    if (!branchId || !canView) return;
-    let cancelled = false;
-    staffPosProducts(branchId)
-      .then((data) => { if (!cancelled) setProducts(Array.isArray(data) ? data : []); })
-      .catch(() => {});
-    return () => { cancelled = true; };
-  }, [branchId, canView]);
+  const reloadOrders = async () => {
+    if (!branchId || !canView) return [];
+    try {
+      const response = await staffOrdersList(branchId, {
+        limit: 100,
+        status: orderStatusFilter || undefined,
+      });
+      const items = response?.items ?? [];
+      setOrders(items);
+      return items;
+    } catch (error) {
+      setOrdersError(error?.message ?? "Failed to load orders");
+      return [];
+    }
+  };
 
-  // Load orders for History / Refunds
   useEffect(() => {
     if (!branchId || !canView) return;
     let cancelled = false;
     setOrdersLoading(true);
     setOrdersError("");
+
     staffOrdersList(branchId, { limit: 100, status: orderStatusFilter || undefined })
-      .then((res) => { if (!cancelled) setOrders(res.items ?? []); })
-      .catch((e) => { if (!cancelled) setOrdersError(e?.message ?? "Failed to load orders"); })
-      .finally(() => { if (!cancelled) setOrdersLoading(false); });
-    return () => { cancelled = true; };
+      .then((response) => {
+        if (!cancelled) setOrders(response?.items ?? []);
+      })
+      .catch((error) => {
+        if (!cancelled) setOrdersError(error?.message ?? "Failed to load orders");
+      })
+      .finally(() => {
+        if (!cancelled) setOrdersLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [branchId, canView, orderStatusFilter]);
 
-  const flattenProducts = useMemo(() => {
-    const out = [];
-    (products || []).forEach((p) => {
-      const name = p.name ?? "";
-      if ((p.variants || []).length === 0) {
-        const stock = p.baseStock ?? 0;
-        if (stock > 0) out.push({ productId: p.id, variantId: null, name, sku: p.sku ?? p.id, title: "Standard", stock, product: p });
-      } else {
-        (p.variants || []).forEach((v) => {
-          const stock = v.stock ?? 0;
-          if (stock > 0) out.push({ productId: p.id, variantId: v.id, name, sku: v.sku ?? v.id, title: v.title ?? "", stock, product: p, variant: v });
-        });
-      }
-    });
-    return out;
-  }, [products]);
+  useEffect(() => {
+    if (!branchId || !canView) return;
+    let cancelled = false;
+    setShiftLoading(true);
+    setShiftError("");
 
-  const searchFiltered = useMemo(() => {
-    const q = (productSearch || "").toLowerCase().trim();
-    if (!q) return flattenProducts.slice(0, 30);
-    return flattenProducts.filter(
-      (x) =>
-        (x.name || "").toLowerCase().includes(q) ||
-        (x.sku || "").toLowerCase().includes(q) ||
-        (x.title || "").toLowerCase().includes(q)
-    ).slice(0, 30);
-  }, [flattenProducts, productSearch]);
-
-  const subtotal = useMemo(() => cart.reduce((s, l) => s + (Number(l.price) || 0) * (Number(l.quantity) || 0), 0), [cart]);
-  const discountPercent = canDiscountOverride && discountCustom !== "" ? parseFloat(discountCustom) : discountPreset;
-  const discountAmount = (subtotal * (discountPercent / 100)) || 0;
-  const taxPercent = 0;
-  const taxAmount = (subtotal - discountAmount) * (taxPercent / 100) || 0;
-  const grandTotal = Math.max(0, subtotal - discountAmount + taxAmount);
-
-  const addToCart = (item, unitPrice) => {
-    const price = unitPrice !== undefined ? unitPrice : (item.variant?.price ?? item.price ?? 0);
-    const key = `${item.productId}-${item.variantId ?? "b"}-${Date.now()}`;
-    setCart((prev) => [...prev, {
-      key,
-      productId: item.productId,
-      variantId: item.variantId ?? undefined,
-      productName: item.name,
-      variantName: item.title,
-      sku: item.sku,
-      quantity: 1,
-      price: Number(price) || 0,
-    }]);
-  };
-
-  const handleBarcodeSubmit = async () => {
-    const code = (barcodeInput || "").trim();
-    if (!code || !canSell) return;
-    setBarcodeLoading(true);
-    try {
-      const result = await staffPosBarcodeLookup(branchId, code);
-      if (result && result.productId) {
-        const item = {
-          productId: result.productId,
-          variantId: result.variantId,
-          name: result.product?.name ?? "",
-          title: result.variant?.title ?? "Standard",
-          sku: result.variant?.sku ?? result.variantId,
-          stock: result.stock ?? 0,
-          price: result.price,
-        };
-        if (item.stock > 0) addToCart(item, result.price);
-      }
-      setBarcodeInput("");
-    } catch {
-      setBarcodeInput("");
-    } finally {
-      setBarcodeLoading(false);
-    }
-  };
-
-  const updateCartLine = (key, field, value) => {
-    setCart((prev) => prev.map((l) => (l.key === key ? { ...l, [field]: value } : l)));
-  };
-
-  const removeCartLine = (key) => setCart((prev) => prev.filter((l) => l.key !== key));
-
-  const handleSaleSubmit = async (e) => {
-    e.preventDefault();
-    if (!canSell) return;
-    if (cart.length === 0) { setSaleError("Add at least one item."); return; }
-    const bid = parseInt(branchId, 10);
-    if (!bid) { setSaleError("Invalid branch."); return; }
-    const items = cart.map((l) => ({
-      productId: l.productId,
-      variantId: l.variantId || undefined,
-      quantity: parseInt(String(l.quantity), 10) || 1,
-      price: Math.round((Number(l.price) || 0) * 100) / 100,
-    }));
-    if (items.some((i) => !i.productId || i.quantity < 1)) { setSaleError("Invalid cart."); return; }
-    setSaleLoading(true);
-    setSaleError("");
-    try {
-      const res = await staffPosSale({
-        branchId: bid,
-        items,
-        paymentMethod,
-        discountPercent: discountPercent || 0,
-        taxPercent: taxPercent || 0,
-        customerId: customerId ? parseInt(customerId, 10) : undefined,
-        notes: notes || "POS Sale",
+    staffPosGetCurrentShift(branchId)
+      .then((data) => {
+        if (!cancelled) setCurrentShift(data);
+      })
+      .catch((error) => {
+        if (!cancelled) setShiftError(error?.message ?? "Failed to load shift");
+      })
+      .finally(() => {
+        if (!cancelled) setShiftLoading(false);
       });
-      const order = res?.data ?? res;
-      setSaleSuccess({ orderNumber: order?.orderNumber ?? order?.id, orderId: order?.id });
-      setCart([]);
-      setNotes("");
-      setDiscountPreset(0);
-      setDiscountCustom("");
-      setTimeout(() => setSaleSuccess(null), 8000);
-      const listRes = await staffOrdersList(branchId, { limit: 100 });
-      setOrders(listRes.items ?? []);
-    } catch (err) {
-      setSaleError(err?.message ?? "Failed to complete sale");
-    } finally {
-      setSaleLoading(false);
-    }
-  };
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, branchId, canView]);
 
   const filteredOrders = useMemo(() => {
     let list = orders;
-    const q = (orderSearch || "").toLowerCase().trim();
-    if (q) {
+    const query = String(orderSearch || "").toLowerCase().trim();
+    if (query) {
       list = list.filter(
-        (o) =>
-          (o.orderNumber || "").toLowerCase().includes(q) ||
-          (o.customer?.profile?.displayName || "").toLowerCase().includes(q)
+        (order) =>
+          String(order.orderNumber || "").toLowerCase().includes(query) ||
+          String(order.customer?.profile?.displayName || "").toLowerCase().includes(query)
       );
     }
     return list;
-  }, [orders, orderSearch]);
+  }, [orderSearch, orders]);
 
   const openOrderDetail = async (id) => {
     setOrderDetail(null);
     setOrderDetailLoading(true);
     try {
-      const o = await staffOrderGet(id);
-      setOrderDetail(o);
+      const order = await staffOrderGet(id);
+      setOrderDetail(order);
     } catch {
       setOrderDetail(null);
     } finally {
@@ -265,19 +167,21 @@ export default function StaffBranchPosPage() {
 
   const handleRefundSubmit = async () => {
     if (!refundOrderId || !canRefund) return;
-    if (!refundReason.trim()) { setRefundError("Reason is required."); return; }
+    if (!refundReason.trim()) {
+      setRefundError("Reason is required.");
+      return;
+    }
     setRefundSubmitting(true);
     setRefundError("");
     try {
-      await staffOrderCancel(refundOrderId, refundReason.trim());
+      await staffPosCancelOrder(refundOrderId, refundReason.trim());
       setRefundOrderId(null);
       setRefundReason("");
       setReturnOrderDetail(null);
       setReturnLines([]);
-      const res = await staffOrdersList(branchId, { limit: 100 });
-      setOrders(res.items ?? []);
-    } catch (err) {
-      setRefundError(err?.message ?? "Failed to process refund");
+      await reloadOrders();
+    } catch (error) {
+      setRefundError(error?.message ?? "Failed to process refund");
     } finally {
       setRefundSubmitting(false);
     }
@@ -288,60 +192,141 @@ export default function StaffBranchPosPage() {
     setReturnOrderDetail(null);
     setReturnLines([]);
     try {
-      const o = await staffOrderGet(order.id);
-      if (!o?.items?.length) return;
-      setReturnOrderDetail(o);
-      setReturnLines(o.items.filter((i) => i.variantId).map((i) => ({
-        variantId: i.variantId,
-        maxQty: i.quantity,
-        productName: i.product?.name,
-        variantName: i.variant?.title,
-        qtyToReturn: 0,
-        reason: "customer_request",
-      })));
+      const detail = await staffOrderGet(order.id);
+      if (!detail?.items?.length) return;
+      setReturnOrderDetail(detail);
+      setReturnLines(
+        detail.items
+          .filter((item) => item.variantId)
+          .map((item) => ({
+            variantId: item.variantId,
+            maxQty: item.quantity,
+            productName: item.product?.name,
+            variantName: item.variant?.title,
+            qtyToReturn: 0,
+            reason: "customer_request",
+          }))
+      );
     } catch {
       setReturnOrderDetail(null);
     }
   };
 
   const updateReturnLine = (variantId, field, value) => {
-    setReturnLines((prev) => prev.map((l) => (l.variantId === variantId ? { ...l, [field]: value } : l)));
+    setReturnLines((prev) =>
+      prev.map((line) => (line.variantId === variantId ? { ...line, [field]: value } : line))
+    );
   };
 
   const handleLineItemReturnSubmit = async () => {
-    const items = returnLines.filter((l) => (l.qtyToReturn || 0) > 0).map((l) => ({
-      variantId: l.variantId,
-      quantity: Math.min(Number(l.qtyToReturn) || 0, l.maxQty),
-      reason: l.reason,
-    }));
-    if (items.length === 0) { setRefundError("Select at least one item and quantity to return."); return; }
+    const items = returnLines
+      .filter((line) => (line.qtyToReturn || 0) > 0)
+      .map((line) => ({
+        variantId: line.variantId,
+        quantity: Math.min(Number(line.qtyToReturn) || 0, line.maxQty),
+        reason: line.reason,
+      }));
+
+    if (items.length === 0) {
+      setRefundError("Select at least one item and quantity to return.");
+      return;
+    }
+
     setReturnSubmitting(true);
     setRefundError("");
     try {
-      const res = await staffPosReturn({
-        branchId: parseInt(branchId, 10),
+      const response = await staffPosReturn({
+        branchId: bidNum,
         orderId: returnOrderDetail.id,
         items,
       });
-      const data = res?.data ?? res;
-      setReturnSuccess({ creditNumber: data?.posCreditNote?.creditNumber ?? data?.creditNumber, returnId: data?.id });
+      const data = response?.data ?? response;
+      setReturnSuccess({
+        creditNumber: data?.posCreditNote?.creditNumber ?? data?.creditNumber,
+        returnId: data?.id,
+      });
       setReturnOrderDetail(null);
       setReturnLines([]);
-      const listRes = await staffOrdersList(branchId, { limit: 100 });
-      setOrders(listRes.items ?? []);
+      await reloadOrders();
       setTimeout(() => setReturnSuccess(null), 8000);
-    } catch (err) {
-      setRefundError(err?.message ?? "Failed to process return");
+    } catch (error) {
+      setRefundError(error?.message ?? "Failed to process return");
     } finally {
       setReturnSubmitting(false);
     }
   };
 
-  const RETURN_REASONS = [
-    { value: "customer_request", label: "Customer request" },
-    { value: "defective", label: "Defective" },
-    { value: "wrong_item", label: "Wrong item" },
-  ];
+  const handleOpenShift = async () => {
+    if (!canCashOpen) return;
+    const amount = parseFloat(startingCash);
+    if (Number.isNaN(amount) || amount < 0) {
+      setShiftError("Starting cash must be a valid number");
+      return;
+    }
+
+    setShiftLoading(true);
+    setShiftError("");
+    try {
+      const response = await staffPosOpenShift({ branchId: bidNum, startingCash: amount });
+      if (response?.success && response?.data) {
+        setCurrentShift(response.data);
+        setStartingCash("");
+      } else {
+        setShiftError(response?.message ?? "Failed to open shift");
+      }
+    } catch (error) {
+      setShiftError(error?.message ?? "Failed to open shift");
+    } finally {
+      setShiftLoading(false);
+    }
+  };
+
+  const loadZReport = async (shiftId) => {
+    setZReportLoading(true);
+    try {
+      const data = await staffPosGetZReport(shiftId);
+      setZReport(data);
+    } catch (error) {
+      console.error("Failed to load Z-report:", error);
+    } finally {
+      setZReportLoading(false);
+    }
+  };
+
+  const handleCloseShift = async () => {
+    if (!canCashClose || !currentShift) return;
+    const amount = parseFloat(closingCash);
+    if (Number.isNaN(amount) || amount < 0) {
+      setShiftError("Closing cash must be a valid number");
+      return;
+    }
+
+    setShiftLoading(true);
+    setShiftError("");
+    try {
+      const response = await staffPosCloseShift(currentShift.id, {
+        closingCash: amount,
+        managerOverrideReason: managerOverrideReason || undefined,
+      });
+      if (response?.success && response?.data) {
+        setCurrentShift(null);
+        setClosingCash("");
+        setManagerOverrideReason("");
+        loadZReport(response.data.id);
+      } else {
+        setShiftError(response?.message ?? "Failed to close shift");
+      }
+    } catch (error) {
+      setShiftError(error?.message ?? "Failed to close shift");
+    } finally {
+      setShiftLoading(false);
+    }
+  };
+
+  const formatCurrency = (value) => {
+    if (value == null) return "-";
+    return Number(value).toFixed(2);
+  };
 
   if (ctxLoading) {
     return (
@@ -351,6 +336,7 @@ export default function StaffBranchPosPage() {
       </div>
     );
   }
+
   if (errorCode === "forbidden" || !hasViewPermission || !canView) {
     return (
       <AccessDenied missingPerm={REQUIRED_PERM} onBack={() => router.push(`/staff/branch/${branchId}`)} />
@@ -358,368 +344,100 @@ export default function StaffBranchPosPage() {
   }
 
   return (
-    <div className="container py-24">
-      <style dangerouslySetInnerHTML={{ __html: `@media print { body * { visibility: hidden; } .pos-invoice-print, .pos-invoice-print * { visibility: visible; } .pos-invoice-print { position: absolute; left: 0; top: 0; width: 100%; background: white; padding: 16px; } }` }} />
-      <BranchHeader branch={branch} myAccess={myAccess} branchId={branchId} />
+    <div
+      className={`container-fluid staff-pos-page-root ${
+        activeTab === "sale" ? "staff-pos-page-root--sale" : "staff-pos-page-root--support"
+      }`}
+    >
+      <style
+        dangerouslySetInnerHTML={{
+          __html: [
+            "@media print { body * { visibility: hidden; } .pos-invoice-print, .pos-invoice-print * { visibility: visible; } .pos-invoice-print { position: absolute; left: 0; top: 0; width: 100%; background: white; padding: 16px; } }",
+            ".staff-pos-page-root{width:100%;max-width:none;margin:0;padding:0 !important;}",
+            ".staff-pos-page-header{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap;margin-bottom:6px;padding-top:2px;}",
+            ".staff-pos-page-header__meta{min-width:0;}",
+            ".staff-pos-page-title{font-size:0.95rem;line-height:1.15;}",
+            ".staff-pos-page-branch{font-size:11px;line-height:1.2;}",
+            ".staff-pos-page-tabs{display:flex;align-items:center;gap:5px;flex-wrap:wrap;margin-bottom:6px;}",
+            ".staff-pos-page-tabs .btn{min-height:26px;padding:2px 9px;font-size:11px;border-radius:7px;box-shadow:none;}",
+            ".staff-pos-page-root--sale{display:flex;flex-direction:column;flex:1 1 auto;min-height:0;padding:0 0 4px !important;overflow:visible;}",
+            ".staff-pos-page-root--sale .staff-pos-page-header{padding:0;flex-shrink:0;}",
+            ".staff-pos-page-root--sale .staff-pos-page-tabs{margin-bottom:6px;flex-shrink:0;}",
+            ".staff-pos-page-root--sale .staff-pos-sale-body{--staff-pos-workspace-height:calc(100dvh - var(--bs-topbar-height, 100px) - 62px);flex:1 1 auto;height:max(480px, var(--staff-pos-workspace-height));min-height:0;overflow:visible;}",
+            ".staff-pos-page-root--sale .pos-reference-workspace{flex:1 1 auto;min-height:0;overflow:visible;}",
+            ".staff-pos-page-root--support{padding:4px 0 12px !important;overflow:visible;}",
+            ".staff-pos-page-root--support .staff-pos-page-header{padding-top:4px;}",
+            "@media (max-height: 680px){.staff-pos-page-root--sale .staff-pos-sale-body{height:max(430px, calc(100dvh - var(--bs-topbar-height, 100px) - 54px));}}",
+            "@media (max-width: 991.98px){.staff-pos-page-root--sale .staff-pos-sale-body{height:auto;min-height:0;}}",
+          ]
+            .filter(Boolean)
+            .join(""),
+        }}
+      />
 
-      <div className="d-flex align-items-center gap-12 mb-24">
-        <Link href={`/staff/branch/${branchId}`} className="btn btn-outline-secondary btn-sm">
-          ← Branch
-        </Link>
-        <h5 className="mb-0">POS / Sales</h5>
+      <div className="staff-pos-page-header">
+        <div className="staff-pos-page-header__meta">
+          <div className="d-flex align-items-center gap-8 mb-1">
+            <h5 className="mb-0 fw-semibold staff-pos-page-title">POS / Sales</h5>
+            <span className="badge rounded-pill bg-success-subtle text-success">
+              {activeTab === "sale" ? "New Sale" : "Active"}
+            </span>
+          </div>
+          <p className="mb-0 text-secondary-light d-flex align-items-center gap-6 staff-pos-page-branch">
+            <i className="ri-store-2-line" />
+            <span>{branch?.name ?? "Branch POS"}</span>
+          </p>
+        </div>
       </div>
 
-      <ul className="nav nav-tabs mb-16">
-        <li className="nav-item">
-          <button type="button" className={`nav-link ${activeTab === "sale" ? "active" : ""}`} onClick={() => setActiveTab("sale")}>
-            New Sale
+      <div className="staff-pos-page-tabs">
+        <button
+          type="button"
+          className={`btn btn-sm ${activeTab === "sale" ? "btn-primary" : "btn-light border"}`}
+          onClick={() => setActiveTab("sale")}
+        >
+          New Sale
+        </button>
+        <button
+          type="button"
+          className={`btn btn-sm ${activeTab === "history" ? "btn-primary" : "btn-light border"}`}
+          onClick={() => setActiveTab("history")}
+        >
+          Sales History
+        </button>
+        {canRefund ? (
+          <button
+            type="button"
+            className={`btn btn-sm ${activeTab === "refunds" ? "btn-primary" : "btn-light border"}`}
+            onClick={() => setActiveTab("refunds")}
+          >
+            Refunds
           </button>
-        </li>
-        <li className="nav-item">
-          <button type="button" className={`nav-link ${activeTab === "history" ? "active" : ""}`} onClick={() => setActiveTab("history")}>
-            Sales History
-          </button>
-        </li>
-        {canRefund && (
-          <li className="nav-item">
-            <button type="button" className={`nav-link ${activeTab === "refunds" ? "active" : ""}`} onClick={() => setActiveTab("refunds")}>
-              Refunds
-            </button>
-          </li>
-        )}
-        <li className="nav-item">
-          <button type="button" className={`nav-link ${activeTab === "drawer" ? "active" : ""}`} onClick={() => setActiveTab("drawer")}>
-            Cash Drawer
-          </button>
-        </li>
-      </ul>
+        ) : null}
+        <button
+          type="button"
+          className={`btn btn-sm ${activeTab === "drawer" ? "btn-primary" : "btn-light border"}`}
+          onClick={() => setActiveTab("drawer")}
+        >
+          Cash Drawer
+        </button>
+      </div>
 
-      {activeTab === "sale" && (
-        <>
-          {saleSuccess && (
-            <div className="alert alert-success d-flex align-items-center justify-content-between flex-wrap gap-8">
-              <span>Sale completed. Order #{saleSuccess.orderNumber}</span>
-              <div className="d-flex gap-8">
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-success"
-                  onClick={async () => {
-                    if (!saleSuccess?.orderId) return;
-                    setInvoiceLoading(true);
-                    setInvoiceData(null);
-                    try {
-                      const inv = await staffPosInvoice(saleSuccess.orderId);
-                      setInvoiceData(inv || false);
-                    } catch {
-                      setInvoiceData(false);
-                    } finally {
-                      setInvoiceLoading(false);
-                    }
-                  }}
-                >
-                  {invoiceLoading ? "Loading..." : "Print invoice"}
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-outline-success"
-                  onClick={async () => {
-                    if (!saleSuccess?.orderId) return;
-                    setReceiptLoading(true);
-                    setReceiptData(null);
-                    try {
-                      const r = await staffPosReceipt(saleSuccess.orderId);
-                      setReceiptData(r);
-                    } catch {
-                      setReceiptData(false);
-                    } finally {
-                      setReceiptLoading(false);
-                    }
-                  }}
-                >
-                  {receiptLoading ? "Loading..." : "View receipt"}
-                </button>
-                <button type="button" className="btn btn-sm btn-outline-success" onClick={() => setSaleSuccess(null)}>Dismiss</button>
-              </div>
-            </div>
-          )}
-          {invoiceData !== null && invoiceData !== undefined && (
-            <div className="modal show d-block" style={{ background: "rgba(0,0,0,0.5)" }} aria-modal="true">
-              <div className="modal-dialog modal-lg">
-                <div className="modal-content">
-                  <div className="modal-header d-print-none">
-                    <h6 className="modal-title">Invoice</h6>
-                    <div className="d-flex gap-8">
-                      <button type="button" className="btn btn-sm btn-primary" onClick={() => window.print()}>
-                        Print
-                      </button>
-                      <button type="button" className="btn-close" onClick={() => { setInvoiceData(null); }} aria-label="Close" />
-                    </div>
-                  </div>
-                  <div className="modal-body">
-                    {invoiceData === false ? (
-                      <p className="text-secondary-light mb-0">Invoice not available.</p>
-                    ) : (
-                      <div className="small pos-invoice-print">
-                        <p className="fw-semibold">Invoice #{invoiceData?.invoiceNumber ?? "—"}</p>
-                        <p>Order #{invoiceData?.orderNumber ?? "—"}</p>
-                        <p className="text-secondary-light">{invoiceData?.date ? new Date(invoiceData.date).toLocaleString() : ""}</p>
-                        <p>{invoiceData?.branch?.name ?? "Branch"}</p>
-                        <table className="table table-sm mt-12">
-                          <thead><tr><th>Item</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
-                          <tbody>
-                            {(invoiceData?.items || []).map((item, i) => (
-                              <tr key={i}><td>{item.product} {item.variant ? `· ${item.variant}` : ""}</td><td>{item.quantity}</td><td>{Number(item.price || 0).toFixed(2)}</td><td>{Number(item.total || 0).toFixed(2)}</td></tr>
-                            ))}
-                          </tbody>
-                        </table>
-                        <p>Subtotal: {Number(invoiceData?.subtotal ?? 0).toFixed(2)}</p>
-                        {Number(invoiceData?.discountAmt ?? 0) > 0 && <p>Discount: -{Number(invoiceData?.discountAmt ?? 0).toFixed(2)}</p>}
-                        {Number(invoiceData?.taxAmt ?? 0) > 0 && <p>Tax: {Number(invoiceData?.taxAmt ?? 0).toFixed(2)}</p>}
-                        <p className="fw-semibold">Total: {Number(invoiceData?.grandTotal ?? 0).toFixed(2)} · {invoiceData?.paymentMethod ?? ""}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          {receiptData !== null && receiptData !== undefined && (
-            <div className="modal show d-block" style={{ background: "rgba(0,0,0,0.5)" }} aria-modal="true">
-              <div className="modal-dialog">
-                <div className="modal-content">
-                  <div className="modal-header">
-                    <h6 className="modal-title">Receipt</h6>
-                    <button type="button" className="btn-close" onClick={() => { setReceiptData(null); }} aria-label="Close" />
-                  </div>
-                  <div className="modal-body">
-                    {receiptData === false ? (
-                      <p className="text-secondary-light mb-0">Receipt not available.</p>
-                    ) : (
-                      <div className="small">
-                        <p className="fw-semibold">#{receiptData?.orderNumber ?? "—"}</p>
-                        <p className="text-secondary-light">{receiptData?.date ? new Date(receiptData.date).toLocaleString() : ""}</p>
-                        <p>Total: {Number(receiptData?.total ?? 0).toFixed(2)} · {receiptData?.paymentMethod ?? ""}</p>
-                        <ul className="list-unstyled mb-0">
-                          {(receiptData?.items || []).map((item, i) => (
-                            <li key={i}>{item.product} × {item.quantity} @ {Number(item.price || 0).toFixed(2)}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
-          {saleError && (
-            <div className="alert alert-danger d-flex align-items-center justify-content-between">
-              <span>{saleError}</span>
-              <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => setSaleError("")}>Dismiss</button>
-            </div>
-          )}
+      {activeTab === "sale" ? (
+        <div className="staff-pos-sale-body">
+          <PosSaleWorkspace
+            branchId={branchId}
+            bidNum={bidNum}
+            canView={canView}
+            canSell={canSell}
+            canDiscountOverride={canDiscountOverride}
+            onOrdersMutated={reloadOrders}
+          />
+        </div>
+      ) : null}
 
-          <div className="row g-20">
-            <div className="col-lg-7">
-              <Card title="Products" subtitle="Search by name or SKU, or scan barcode">
-                <div className="d-flex gap-8 mb-16 flex-wrap align-items-center">
-                  <LkInput
-                    type="text"
-                    size="sm"
-                    className="radius-12 flex-grow-1"
-                    style={{ maxWidth: 220 }}
-                    placeholder="Barcode (scan or type, then Enter)"
-                    value={barcodeInput}
-                    onChange={(e) => setBarcodeInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); handleBarcodeSubmit(); } }}
-                    disabled={!canSell || barcodeLoading}
-                  />
-                  <button type="button" className="btn btn-sm btn-outline-primary" onClick={handleBarcodeSubmit} disabled={!barcodeInput?.trim() || barcodeLoading || !canSell}>
-                    {barcodeLoading ? "..." : "Add by barcode"}
-                  </button>
-                </div>
-                <LkInput
-                  type="search"
-                  size="sm"
-                  className="radius-12 mb-16"
-                  placeholder="Search product / SKU..."
-                  value={productSearch}
-                  onChange={(e) => setProductSearch(e.target.value)}
-                />
-                {searchFiltered.length === 0 ? (
-                  <p className="text-secondary-light mb-0">No products with stock found. Try another search.</p>
-                ) : (
-                  <div className="table-responsive">
-                    <table className="table table-sm">
-                      <thead>
-                        <tr>
-                          <th>Product / SKU</th>
-                          <th>Stock</th>
-                          <th></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {searchFiltered.slice(0, 15).map((item) => (
-                          <tr key={`${item.productId}-${item.variantId ?? "b"}`}>
-                            <td>
-                              <span className="fw-semibold">{item.name}</span>
-                              <span className="text-secondary-light text-sm d-block">{item.sku} {item.title ? `· ${item.title}` : ""}</span>
-                            </td>
-                            <td>{item.stock}</td>
-                            <td>
-                              <PermissionGate requiredPerm="pos.sell" mode="disable" permissions={permissions}>
-                                <button type="button" className="btn btn-sm btn-primary" onClick={() => addToCart(item)}>
-                                  Add
-                                </button>
-                              </PermissionGate>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </Card>
-
-              <Card title="Cart" subtitle="Adjust qty and unit price; remove if needed">
-                {cart.length === 0 ? (
-                  <p className="text-secondary-light mb-0">Cart is empty. Add products above.</p>
-                ) : (
-                  <div className="table-responsive">
-                    <table className="table table-sm">
-                      <thead>
-                        <tr>
-                          <th>Item</th>
-                          <th>Qty</th>
-                          <th>Unit price</th>
-                          <th>Total</th>
-                          <th></th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {cart.map((l) => (
-                          <tr key={l.key}>
-                            <td><span className="fw-semibold">{l.productName}</span>{l.variantName ? ` · ${l.variantName}` : ""}</td>
-                            <td>
-                              <LkInput
-                                type="number"
-                                min={1}
-                                size="sm"
-                                className="radius-12"
-                                style={{ width: 70 }}
-                                value={l.quantity}
-                                onChange={(e) => updateCartLine(l.key, "quantity", e.target.value)}
-                              />
-                            </td>
-                            <td>
-                              <LkInput
-                                type="number"
-                                min={0}
-                                step="0.01"
-                                size="sm"
-                                className="radius-12"
-                                style={{ width: 90 }}
-                                value={l.price}
-                                onChange={(e) => updateCartLine(l.key, "price", e.target.value)}
-                              />
-                            </td>
-                            <td>{((Number(l.price) || 0) * (Number(l.quantity) || 0)).toFixed(2)}</td>
-                            <td>
-                              <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => removeCartLine(l.key)}>×</button>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </Card>
-            </div>
-
-            <div className="col-lg-5">
-              <Card title="Checkout" subtitle="Discount and payment">
-                <form onSubmit={handleSaleSubmit}>
-                  <LkFormGroup label="Customer (optional)" className="text-sm mb-16">
-                    <LkInput
-                      type="text"
-                      size="sm"
-                      className="radius-12"
-                      placeholder="Customer ID or leave blank"
-                      value={customerId}
-                      onChange={(e) => setCustomerId(e.target.value)}
-                    />
-                  </LkFormGroup>
-                  <div className="mb-16">
-                    <label className="form-label text-sm">Discount</label>
-                    <div className="d-flex flex-wrap gap-8 mb-8">
-                      {DISCOUNT_PRESETS.map((pct) => (
-                        <button
-                          key={pct}
-                          type="button"
-                          className={`btn btn-sm ${discountPreset === pct && !(canDiscountOverride && discountCustom !== "") ? "btn-primary" : "btn-outline-secondary"}`}
-                          onClick={() => { setDiscountPreset(pct); setDiscountCustom(""); }}
-                        >
-                          {pct}%
-                        </button>
-                      ))}
-                    </div>
-                    {canDiscountOverride ? (
-                      <LkInput
-                        type="number"
-                        min={0}
-                        max={100}
-                        step="0.5"
-                        size="sm"
-                        className="radius-12"
-                        placeholder="Custom %"
-                        value={discountCustom}
-                        onChange={(e) => setDiscountCustom(e.target.value)}
-                      />
-                    ) : (
-                      <p className="text-secondary-light small mb-0">Custom discount requires pos.discount.override.</p>
-                    )}
-                  </div>
-                  <LkFormGroup label="Payment method" className="text-sm mb-16">
-                    <LkSelect
-                      size="sm"
-                      className="radius-12"
-                      value={paymentMethod}
-                      onChange={(e) => setPaymentMethod(e.target.value)}
-                    >
-                      {PAYMENT_METHODS.map((m) => (
-                        <option key={m.value} value={m.value}>{m.label}</option>
-                      ))}
-                    </LkSelect>
-                  </LkFormGroup>
-                  <LkFormGroup label="Notes (optional)" className="text-sm mb-16">
-                    <LkTextarea
-                      size="sm"
-                      className="radius-12"
-                      rows={2}
-                      placeholder="Notes"
-                      value={notes}
-                      onChange={(e) => setNotes(e.target.value)}
-                    />
-                  </LkFormGroup>
-                  <div className="border-top pt-16 mb-16">
-                    <div className="d-flex justify-content-between text-sm"><span>Subtotal</span><span>{subtotal.toFixed(2)}</span></div>
-                    <div className="d-flex justify-content-between text-sm"><span>Discount ({discountPercent}%)</span><span>-{discountAmount.toFixed(2)}</span></div>
-                    {(taxPercent > 0 || taxAmount > 0) && <div className="d-flex justify-content-between text-sm"><span>Tax</span><span>{taxAmount.toFixed(2)}</span></div>}
-                    <div className="d-flex justify-content-between fw-semibold mt-8"><span>Grand total</span><span>{grandTotal.toFixed(2)}</span></div>
-                  </div>
-                  <PermissionGate requiredPerm="pos.sell" mode="disable" permissions={permissions}>
-                    <button type="submit" className="btn btn-primary w-100" disabled={saleLoading || cart.length === 0}>
-                      {saleLoading ? "Processing..." : "Complete sale"}
-                    </button>
-                  </PermissionGate>
-                </form>
-              </Card>
-            </div>
-          </div>
-        </>
-      )}
-
-      {activeTab === "history" && (
-        <Card title="Sales history" subtitle="Branch-scoped orders. View details or refund (if permitted).">
+      {activeTab === "history" ? (
+        <Card title="Sales history" subtitle="Branch-scoped orders. View details or refund when permitted.">
           <div className="mb-16 d-flex flex-wrap gap-12">
             <LkSelect
               size="sm"
@@ -744,12 +462,23 @@ export default function StaffBranchPosPage() {
               onChange={(e) => setOrderSearch(e.target.value)}
             />
           </div>
-          {ordersError && (
+
+          {ordersError ? (
             <div className="alert alert-danger d-flex align-items-center justify-content-between">
               <span>{ordersError}</span>
-              <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => { setOrdersError(""); const p = branchId; staffOrdersList(p, { limit: 100 }).then((r) => setOrders(r.items ?? [])).catch(() => {}); }}>Retry</button>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-danger"
+                onClick={() => {
+                  setOrdersError("");
+                  reloadOrders().catch(() => {});
+                }}
+              >
+                Retry
+              </button>
             </div>
-          )}
+          ) : null}
+
           {ordersLoading ? (
             <div className="py-24">
               <div className="table-responsive">
@@ -766,8 +495,8 @@ export default function StaffBranchPosPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {[1, 2, 3, 4].map((i) => (
-                      <tr key={i}>
+                    {[1, 2, 3, 4].map((row) => (
+                      <tr key={row}>
                         <td><span className="placeholder col-4" /></td>
                         <td><span className="placeholder col-2" /></td>
                         <td><span className="placeholder col-3" /></td>
@@ -799,19 +528,41 @@ export default function StaffBranchPosPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredOrders.map((o) => (
-                    <tr key={o.id}>
-                      <td>{o.createdAt ? new Date(o.createdAt).toLocaleString() : "—"}</td>
-                      <td>{o.orderNumber ?? o.id}</td>
-                      <td>{o.customer?.profile?.displayName ?? "—"}</td>
-                      <td>{Number(o.totalAmount ?? 0).toFixed(2)}</td>
-                      <td>{o.paymentMethod ?? "—"}</td>
-                      <td><span className={`badge bg-${(o.status || "").toUpperCase() === "CANCELLED" ? "secondary" : "success"}`}>{o.status}</span></td>
+                  {filteredOrders.map((order) => (
+                    <tr key={order.id}>
+                      <td>{order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}</td>
+                      <td>{order.orderNumber ?? order.id}</td>
+                      <td>{order.customer?.profile?.displayName ?? "-"}</td>
+                      <td>{Number(order.totalAmount ?? 0).toFixed(2)}</td>
+                      <td>{order.paymentMethod ?? "-"}</td>
                       <td>
-                        <button type="button" className="btn btn-sm btn-outline-primary me-8" onClick={() => openOrderDetail(o.id)}>View</button>
-                        {canRefund && o.status !== "CANCELLED" && (
-                          <button type="button" className="btn btn-sm btn-outline-warning" onClick={() => { setActiveTab("refunds"); setRefundOrderId(o.id); setRefundReason(""); }}>Refund</button>
-                        )}
+                        <span
+                          className={`badge bg-${String(order.status || "").toUpperCase() === "CANCELLED" ? "secondary" : "success"}`}
+                        >
+                          {order.status}
+                        </span>
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-primary me-8"
+                          onClick={() => openOrderDetail(order.id)}
+                        >
+                          View
+                        </button>
+                        {canRefund && order.status !== "CANCELLED" ? (
+                          <button
+                            type="button"
+                            className="btn btn-sm btn-outline-warning"
+                            onClick={() => {
+                              setActiveTab("refunds");
+                              setRefundOrderId(order.id);
+                              setRefundReason("");
+                            }}
+                          >
+                            Refund
+                          </button>
+                        ) : null}
                       </td>
                     </tr>
                   ))}
@@ -819,7 +570,8 @@ export default function StaffBranchPosPage() {
               </table>
             </div>
           )}
-          {orderDetail !== undefined && (
+
+          {orderDetail !== undefined ? (
             <div className="modal show d-block mt-24" style={{ background: "rgba(0,0,0,0.5)" }} aria-modal="true">
               <div className="modal-dialog">
                 <div className="modal-content">
@@ -832,10 +584,16 @@ export default function StaffBranchPosPage() {
                       <p className="text-secondary-light">Loading...</p>
                     ) : orderDetail ? (
                       <>
-                        <p><strong>#{orderDetail.orderNumber}</strong> · {orderDetail.status} · {Number(orderDetail.totalAmount || 0).toFixed(2)}</p>
+                        <p>
+                          <strong>#{orderDetail.orderNumber}</strong> | {orderDetail.status} |{" "}
+                          {Number(orderDetail.totalAmount || 0).toFixed(2)}
+                        </p>
                         <ul className="list-unstyled mb-0">
-                          {(orderDetail.items || []).map((item, i) => (
-                            <li key={i}>{item.product?.name ?? item.productId} × {item.quantity} @ {Number(item.price || 0).toFixed(2)}</li>
+                          {(orderDetail.items || []).map((item, index) => (
+                            <li key={index}>
+                              {item.product?.name ?? item.productId} x {item.quantity} @{" "}
+                              {Number(item.price || 0).toFixed(2)}
+                            </li>
                           ))}
                         </ul>
                       </>
@@ -846,27 +604,37 @@ export default function StaffBranchPosPage() {
                 </div>
               </div>
             </div>
-          )}
+          ) : null}
         </Card>
-      )}
+      ) : null}
 
-      {activeTab === "refunds" && canRefund && (
-        <Card title="Refunds" subtitle="Full order cancel or line-item return (restock + credit note).">
-          {returnSuccess && (
+      {activeTab === "refunds" && canRefund ? (
+        <Card title="Refunds" subtitle="Full order cancel or line-item return with restock and credit note.">
+          {returnSuccess ? (
             <div className="alert alert-success d-flex align-items-center justify-content-between">
-              <span>Return processed. Credit note: <strong>{returnSuccess.creditNumber}</strong></span>
-              <button type="button" className="btn btn-sm btn-outline-success" onClick={() => setReturnSuccess(null)}>Dismiss</button>
+              <span>
+                Return processed. Credit note: <strong>{returnSuccess.creditNumber}</strong>
+              </span>
+              <button type="button" className="btn btn-sm btn-outline-success" onClick={() => setReturnSuccess(null)}>
+                Dismiss
+              </button>
             </div>
-          )}
-          {refundError && (
+          ) : null}
+
+          {refundError ? (
             <div className="alert alert-danger d-flex align-items-center justify-content-between">
               <span>{refundError}</span>
-              <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => setRefundError("")}>Dismiss</button>
+              <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => setRefundError("")}>
+                Dismiss
+              </button>
             </div>
-          )}
+          ) : null}
+
           {returnOrderDetail ? (
             <div className="border rounded p-16 mb-16">
-              <p className="mb-12">Line-item return for order <strong>#{returnOrderDetail.orderNumber ?? returnOrderDetail.id}</strong></p>
+              <p className="mb-12">
+                Line-item return for order <strong>#{returnOrderDetail.orderNumber ?? returnOrderDetail.id}</strong>
+              </p>
               <div className="table-responsive">
                 <table className="table table-sm">
                   <thead>
@@ -878,25 +646,38 @@ export default function StaffBranchPosPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {returnLines.map((l) => (
-                      <tr key={l.variantId}>
-                        <td>{l.productName} {l.variantName ? `· ${l.variantName}` : ""}</td>
-                        <td>{l.maxQty}</td>
+                    {returnLines.map((line) => (
+                      <tr key={line.variantId}>
+                        <td>
+                          {line.productName}
+                          {line.variantName ? ` | ${line.variantName}` : ""}
+                        </td>
+                        <td>{line.maxQty}</td>
                         <td>
                           <LkInput
                             type="number"
                             min={0}
-                            max={l.maxQty}
+                            max={line.maxQty}
                             size="sm"
                             className="radius-12"
                             style={{ width: 70 }}
-                            value={l.qtyToReturn}
-                            onChange={(e) => updateReturnLine(l.variantId, "qtyToReturn", e.target.value)}
+                            value={line.qtyToReturn}
+                            onChange={(e) => updateReturnLine(line.variantId, "qtyToReturn", e.target.value)}
                           />
                         </td>
                         <td>
-                          <LkSelect size="sm" className="radius-12" style={{ minWidth: 140 }} value={l.reason} onChange={(e) => updateReturnLine(l.variantId, "reason", e.target.value)}>
-                            {RETURN_REASONS.map((r) => <option key={r.value} value={r.value}>{r.label}</option>)}
+                          <LkSelect
+                            size="sm"
+                            className="radius-12"
+                            style={{ minWidth: 140 }}
+                            value={line.reason}
+                            onChange={(e) => updateReturnLine(line.variantId, "reason", e.target.value)}
+                          >
+                            {RETURN_REASONS.map((reason) => (
+                              <option key={reason.value} value={reason.value}>
+                                {reason.label}
+                              </option>
+                            ))}
                           </LkSelect>
                         </td>
                       </tr>
@@ -905,28 +686,68 @@ export default function StaffBranchPosPage() {
                 </table>
               </div>
               <div className="d-flex gap-8 mt-12">
-                <button type="button" className="btn btn-outline-secondary btn-sm" onClick={() => { setReturnOrderDetail(null); setReturnLines([]); }}>Cancel</button>
-                <button type="button" className="btn btn-warning btn-sm" disabled={returnSubmitting || !returnLines.some((l) => (l.qtyToReturn || 0) > 0)} onClick={handleLineItemReturnSubmit}>
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary btn-sm"
+                  onClick={() => {
+                    setReturnOrderDetail(null);
+                    setReturnLines([]);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-warning btn-sm"
+                  disabled={returnSubmitting || !returnLines.some((line) => (line.qtyToReturn || 0) > 0)}
+                  onClick={handleLineItemReturnSubmit}
+                >
                   {returnSubmitting ? "Processing..." : "Submit return"}
                 </button>
               </div>
             </div>
           ) : refundOrderId ? (
             <div className="border rounded p-16 mb-16">
-              <p className="mb-8">Full refund (cancel) order <strong>#{refundOrderId}</strong></p>
+              <p className="mb-8">
+                Full refund (cancel) order <strong>#{refundOrderId}</strong>
+              </p>
               <LkFormGroup label="Reason (required)" className="text-sm">
-                <LkTextarea size="sm" className="radius-12 mb-12" rows={2} value={refundReason} onChange={(e) => setRefundReason(e.target.value)} placeholder="e.g. Customer request" />
+                <LkTextarea
+                  size="sm"
+                  className="radius-12 mb-12"
+                  rows={2}
+                  value={refundReason}
+                  onChange={(e) => setRefundReason(e.target.value)}
+                  placeholder="e.g. Customer request"
+                />
               </LkFormGroup>
               <div className="d-flex gap-8">
-                <button type="button" className="btn btn-outline-secondary btn-sm" onClick={() => { setRefundOrderId(null); setRefundReason(""); }}>Cancel</button>
-                <button type="button" className="btn btn-warning btn-sm" disabled={refundSubmitting || !refundReason.trim()} onClick={handleRefundSubmit}>
+                <button
+                  type="button"
+                  className="btn btn-outline-secondary btn-sm"
+                  onClick={() => {
+                    setRefundOrderId(null);
+                    setRefundReason("");
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-warning btn-sm"
+                  disabled={refundSubmitting || !refundReason.trim()}
+                  onClick={handleRefundSubmit}
+                >
                   {refundSubmitting ? "Processing..." : "Submit full refund"}
                 </button>
               </div>
             </div>
           ) : (
-            <p className="text-secondary-light mb-0">Select an order below: use &quot;Partial return&quot; for line-item return (restock + credit note) or &quot;Full refund&quot; to cancel the order.</p>
+            <p className="text-secondary-light mb-0">
+              Select an order below: use &quot;Partial return&quot; for line-item return or &quot;Full refund&quot; to cancel the order.
+            </p>
           )}
+
           <div className="table-responsive mt-16">
             <table className="table table-sm">
               <thead>
@@ -939,35 +760,216 @@ export default function StaffBranchPosPage() {
                 </tr>
               </thead>
               <tbody>
-                {(orders || []).filter((o) => o.status !== "CANCELLED").slice(0, 20).map((o) => (
-                  <tr key={o.id}>
-                    <td>{o.orderNumber ?? o.id}</td>
-                    <td>{o.createdAt ? new Date(o.createdAt).toLocaleString() : "—"}</td>
-                    <td>{Number(o.totalAmount ?? 0).toFixed(2)}</td>
-                    <td><span className="badge bg-success">{o.status}</span></td>
-                    <td>
-                      <button type="button" className="btn btn-sm btn-outline-primary me-8" onClick={() => openLineItemReturn(o)}>Partial return</button>
-                      <button type="button" className="btn btn-sm btn-outline-warning" onClick={() => { setRefundOrderId(o.id); setRefundReason(""); setReturnOrderDetail(null); }}>Full refund</button>
-                    </td>
-                  </tr>
-                ))}
+                {(orders || [])
+                  .filter((order) => order.status !== "CANCELLED")
+                  .slice(0, 20)
+                  .map((order) => (
+                    <tr key={order.id}>
+                      <td>{order.orderNumber ?? order.id}</td>
+                      <td>{order.createdAt ? new Date(order.createdAt).toLocaleString() : "-"}</td>
+                      <td>{Number(order.totalAmount ?? 0).toFixed(2)}</td>
+                      <td><span className="badge bg-success">{order.status}</span></td>
+                      <td>
+                        <button type="button" className="btn btn-sm btn-outline-primary me-8" onClick={() => openLineItemReturn(order)}>
+                          Partial return
+                        </button>
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-outline-warning"
+                          onClick={() => {
+                            setRefundOrderId(order.id);
+                            setRefundReason("");
+                            setReturnOrderDetail(null);
+                          }}
+                        >
+                          Full refund
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
               </tbody>
             </table>
           </div>
         </Card>
-      )}
+      ) : null}
 
-      {activeTab === "drawer" && (
-        <Card title="Cash drawer" subtitle="Open/close shift with starting and counted cash.">
+      {activeTab === "drawer" ? (
+        <Card title="Cash drawer" subtitle="Open and close the shift with starting and counted cash.">
           {!(canCashOpen || canCashClose) ? (
-            <p className="text-secondary-light mb-0">You do not have cash drawer permissions (cashdrawer.open / cashdrawer.close).</p>
+            <p className="text-secondary-light mb-0">
+              You do not have cash drawer permissions (<code>cashdrawer.open</code> / <code>cashdrawer.close</code>).
+            </p>
           ) : (
-            <div className="alert alert-info">
-              <p className="mb-0">Cash drawer endpoints are not implemented in the backend yet. When available, open drawer will record starting cash; close drawer will record counted cash and show any mismatch.</p>
+            <div className="row">
+              {shiftError ? (
+                <div className="col-12 mb-16">
+                  <div className="alert alert-danger d-flex align-items-center justify-content-between">
+                    <span>{shiftError}</span>
+                    <button type="button" className="btn btn-sm btn-outline-danger" onClick={() => setShiftError("")}>
+                      Dismiss
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="col-12 mb-24">
+                <div className={`alert ${currentShift ? "alert-success" : "alert-warning"}`}>
+                  <div className="d-flex align-items-center justify-content-between">
+                    <div>
+                      <strong>Status:</strong> {shiftLoading ? "Loading..." : currentShift ? "Shift Open" : "No Open Shift"}
+                      {currentShift ? (
+                        <span className="ms-16 text-sm">
+                          Opened {new Date(currentShift.openedAt).toLocaleString()}
+                          {currentShift.openedBy?.profile?.displayName ? ` by ${currentShift.openedBy.profile.displayName}` : ""}
+                        </span>
+                      ) : null}
+                    </div>
+                    {currentShift ? (
+                      <span className="badge bg-success">Starting: {formatCurrency(currentShift.startingCash)}</span>
+                    ) : null}
+                  </div>
+                </div>
+              </div>
+
+              {canCashOpen && !currentShift ? (
+                <div className="col-md-6 mb-24">
+                  <div className="border rounded p-16">
+                    <h6 className="mb-16">Open Shift</h6>
+                    <LkFormGroup label="Starting Cash" className="text-sm">
+                      <LkInput
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        placeholder="0.00"
+                        value={startingCash}
+                        onChange={(e) => setStartingCash(e.target.value)}
+                        disabled={shiftLoading}
+                      />
+                    </LkFormGroup>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm w-100"
+                      disabled={shiftLoading || startingCash === ""}
+                      onClick={handleOpenShift}
+                    >
+                      {shiftLoading ? "Opening..." : "Open Shift"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {canCashClose && currentShift ? (
+                <div className="col-md-6 mb-24">
+                  <div className="border rounded p-16">
+                    <h6 className="mb-16">Close Shift</h6>
+                    <LkFormGroup label="Closing Cash (counted)" className="text-sm">
+                      <LkInput
+                        type="number"
+                        min={0}
+                        step="0.01"
+                        placeholder="0.00"
+                        value={closingCash}
+                        onChange={(e) => setClosingCash(e.target.value)}
+                        disabled={shiftLoading}
+                      />
+                    </LkFormGroup>
+                    <LkFormGroup label="Manager Override Reason (optional)" className="text-sm">
+                      <LkInput
+                        type="text"
+                        placeholder="e.g. Cash count discrepancy approved"
+                        value={managerOverrideReason}
+                        onChange={(e) => setManagerOverrideReason(e.target.value)}
+                        disabled={shiftLoading}
+                      />
+                    </LkFormGroup>
+                    <button
+                      type="button"
+                      className="btn btn-warning btn-sm w-100"
+                      disabled={shiftLoading || closingCash === ""}
+                      onClick={handleCloseShift}
+                    >
+                      {shiftLoading ? "Closing..." : "Close Shift"}
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+
+              {zReport || zReportLoading ? (
+                <div className="col-12">
+                  <div className="border rounded p-16">
+                    <h6 className="mb-16">
+                      Z-Report {zReportLoading ? <span className="spinner-border spinner-border-sm ms-8" /> : null}
+                    </h6>
+                    {zReport ? (
+                      <div className="table-responsive">
+                        <table className="table table-sm table-bordered">
+                          <tbody>
+                            <tr>
+                              <td><strong>Shift ID</strong></td>
+                              <td>{zReport.shiftId}</td>
+                            </tr>
+                            <tr>
+                              <td><strong>Period</strong></td>
+                              <td>
+                                {new Date(zReport.openedAt).toLocaleString()} -{" "}
+                                {zReport.closedAt ? new Date(zReport.closedAt).toLocaleString() : "Open"}
+                              </td>
+                            </tr>
+                            <tr>
+                              <td><strong>Starting Cash</strong></td>
+                              <td>{formatCurrency(zReport.startingCash)}</td>
+                            </tr>
+                            <tr>
+                              <td><strong>Closing Cash</strong></td>
+                              <td>{formatCurrency(zReport.closingCash)}</td>
+                            </tr>
+                            <tr
+                              className={
+                                zReport.variance && zReport.variance !== 0
+                                  ? zReport.variance > 0
+                                    ? "table-success"
+                                    : "table-danger"
+                                  : ""
+                              }
+                            >
+                              <td><strong>Variance</strong></td>
+                              <td>{formatCurrency(zReport.variance)}</td>
+                            </tr>
+                            <tr className="table-primary">
+                              <td><strong>Sales Count</strong></td>
+                              <td>{zReport.salesCount}</td>
+                            </tr>
+                            <tr className="table-primary">
+                              <td><strong>Sales Total</strong></td>
+                              <td>{formatCurrency(zReport.salesTotal)}</td>
+                            </tr>
+                            <tr>
+                              <td><strong>Tax Total</strong></td>
+                              <td>{formatCurrency(zReport.taxTotal)}</td>
+                            </tr>
+                            <tr>
+                              <td><strong>Discount Total</strong></td>
+                              <td>{formatCurrency(zReport.discountTotal)}</td>
+                            </tr>
+                            <tr>
+                              <td><strong>Refunds Count</strong></td>
+                              <td>{zReport.refundsCount}</td>
+                            </tr>
+                            <tr>
+                              <td><strong>Refunds Total</strong></td>
+                              <td>{formatCurrency(zReport.refundsTotal)}</td>
+                            </tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
             </div>
           )}
         </Card>
-      )}
+      ) : null}
     </div>
   );
 }

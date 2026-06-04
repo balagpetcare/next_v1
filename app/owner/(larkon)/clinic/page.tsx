@@ -49,6 +49,27 @@ type ClinicOwnerNavItem = {
   href: string;
 };
 
+const OWNER_CLINIC_SHORTCUTS = [
+  {
+    title: "Manage Clinic Catalog",
+    description: "Setup clinical items and vaccine services.",
+    href: "/owner/clinic?view=catalog",
+    icon: "ri-archive-line",
+  },
+  {
+    title: "View Clinic Inventory",
+    description: "View branch clinical stock and vaccine availability.",
+    href: "/owner/clinic?view=inventory",
+    icon: "ri-stack-line",
+  },
+  {
+    title: "Configure Vaccine Mapping",
+    description: "Connect vaccine types to stock items.",
+    href: "/owner/clinic?view=catalog",
+    icon: "ri-syringe-line",
+  },
+];
+
 const OWNER_CLINIC_NAV_ITEMS: ClinicOwnerNavItem[] = [
   { key: "overview", label: "Clinic Network", href: "/owner/clinic" },
   { key: "doctors", label: "Doctors", href: "/owner/clinic?view=doctors" },
@@ -100,6 +121,30 @@ function ClinicOwnerSubNav({ activeView }: { activeView: ClinicOwnerView }) {
           })}
         </ul>
       </div>
+    </div>
+  );
+}
+
+function ClinicSetupShortcuts() {
+  return (
+    <div className="row g-3 mb-4">
+      {OWNER_CLINIC_SHORTCUTS.map((item) => (
+        <div className="col-12 col-md-4" key={item.title}>
+          <Link href={item.href} className="card radius-12 h-100 text-decoration-none text-reset">
+            <div className="card-body p-20">
+              <div className="d-flex align-items-start gap-3">
+                <span className="d-inline-flex align-items-center justify-content-center rounded bg-primary-subtle text-primary" style={{ width: 40, height: 40 }}>
+                  <i className={`${item.icon} fs-5`} />
+                </span>
+                <div>
+                  <h6 className="mb-1 fw-semibold">{item.title}</h6>
+                  <p className="text-muted small mb-0">{item.description}</p>
+                </div>
+              </div>
+            </div>
+          </Link>
+        </div>
+      ))}
     </div>
   );
 }
@@ -346,6 +391,7 @@ export default function ClinicOverviewPage() {
       />
 
       <ClinicOwnerSubNav activeView={activeView} />
+      <ClinicSetupShortcuts />
 
       {error && (
         <div className="alert alert-danger radius-12 mb-24">

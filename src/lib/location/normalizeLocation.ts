@@ -16,6 +16,7 @@ export type LocationValue = {
   divisionId?: string;
   districtId?: string;
   upazilaId?: string;
+  unionId?: string;
   areaId?: string;
   wardId?: string;
 
@@ -109,6 +110,8 @@ export function normalizeLocation(
     asId(input?.districtId) || asId(input?.bdDistrict) || undefined;
   const upazilaId =
     asId(input?.upazilaId) || asId(input?.bdUpazila) || undefined;
+  const unionId =
+    asId(input?.unionId) || asId(input?.bdUnion) || undefined;
   const areaId =
     asId(input?.areaId) ||
     asId(input?.bdAreaId) ||
@@ -134,6 +137,7 @@ export function normalizeLocation(
     divisionId,
     districtId,
     upazilaId,
+    unionId,
     areaId,
     wardId,
     formattedAddress: formattedAddress || undefined,
@@ -258,6 +262,7 @@ export function locationValueToAddressJson(
     divisionId: numOrUndefined(enriched.divisionId),
     districtId: numOrUndefined(enriched.districtId),
     upazilaId: numOrUndefined(enriched.upazilaId),
+    unionId: numOrUndefined(enriched.unionId),
     fullPathText: enriched.fullPathText ?? text ?? null,
     latitude: numOrNull(enriched.latitude ?? enriched.lat),
     longitude: numOrNull(enriched.longitude ?? enriched.lng),
@@ -281,6 +286,7 @@ export function locationValueToPlaceInput(
   bdDivision?: string;
   bdDistrict?: string;
   bdUpazila?: string;
+  bdUnion?: string;
   bdWard?: string;
 } | null {
   const normalized = normalizeLocation(value);
@@ -296,6 +302,7 @@ export function locationValueToPlaceInput(
   if (normalized.countryCode === "BD" && enriched.divisionId) place.bdDivision = String(enriched.divisionId);
   if (normalized.countryCode === "BD" && enriched.districtId) place.bdDistrict = String(enriched.districtId);
   if (normalized.countryCode === "BD" && enriched.upazilaId) place.bdUpazila = String(enriched.upazilaId);
+  if (normalized.countryCode === "BD" && enriched.unionId) place.bdUnion = String(enriched.unionId);
   if (normalized.countryCode === "BD" && enriched.bdAreaId) place.bdWard = String(enriched.bdAreaId);
 
   const formatted = enriched.formattedAddress ?? enriched.fullPathText ?? enriched.text;

@@ -4,12 +4,21 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 import { ownerGet, ownerPatch, ownerPost } from "@/app/owner/_lib/ownerApi";
+import { OWNER_PRICING_NAV } from "@/src/lib/ownerPricingNav";
 
 type OrgPolicy = {
   orgId: number;
   enforceBranchOverrideWithinCentralBand: boolean;
   retailDiscountApprovalEnabled: boolean;
   posPricingGovernanceEnabled?: boolean;
+  posUseEnterpriseListResolution?: boolean;
+  blockSaleBelowCost?: boolean;
+  blockSaleBelowFloor?: boolean;
+  allowCampaignStacking?: boolean;
+  allowMembershipStacking?: boolean;
+  scheduledPricingEnabled?: boolean;
+  batchPricingEnabled?: boolean;
+  defaultMaxDiscountPercent?: unknown;
 };
 
 type AuditRow = {
@@ -53,8 +62,15 @@ function pickOrgId(me: unknown): number | null {
   return id != null && Number.isFinite(Number(id)) ? Number(id) : null;
 }
 
+function permissionSetFromAuthMe(authMe: unknown): Set<string> {
+  const a = authMe as Record<string, unknown> | null | undefined;
+  const raw = a?.permissions;
+  return new Set(Array.isArray(raw) ? raw.map((p) => String(p)) : []);
+}
+
 export default function PricingGovernancePage() {
   const [orgId, setOrgId] = useState<number | null>(null);
+  const [permSet, setPermSet] = useState<Set<string>>(() => new Set());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [policy, setPolicy] = useState<OrgPolicy | null>(null);
@@ -62,6 +78,9 @@ export default function PricingGovernancePage() {
   const [rules, setRules] = useState<RuleRow[]>([]);
   const [approvals, setApprovals] = useState<ApprovalRow[]>([]);
   const [tab, setTab] = useState<"policy" | "audit" | "rules" | "approvals">("policy");
+  /** Optional filters for governance audit API (also read from URL on first load). */
+  const [auditEntityType, setAuditEntityType] = useState("");
+  const [auditEntityKeyContains, setAuditEntityKeyContains] = useState("");
   const [saving, setSaving] = useState(false);
 
   const [ruleForm, setRuleForm] = useState({
@@ -72,12 +91,30 @@ export default function PricingGovernancePage() {
     maxDiscountAmount: "",
   });
 
-  const loadAll = useCallback(async (oid: number) => {
+  const loadAll = useCallback(
+    async (
+      oid: number,
+      auditOpts?: { entityType?: string; entityKeyContains?: string } | null
+    ) => {
     setError(null);
     try {
+      const auditQs = new URLSearchParams({ orgId: String(oid), limit: "30" });
+      const etRaw =
+        auditOpts && auditOpts.entityType !== undefined ? auditOpts.entityType : auditEntityType;
+      const ekRaw =
+        auditOpts && auditOpts.entityKeyContains !== undefined
+          ? auditOpts.entityKeyContains
+          : auditEntityKeyContains;
+      const et = String(etRaw ?? "").trim();
+      const ek = String(ekRaw ?? "").trim();
+      if (et) auditQs.set("entityType", et);
+      if (ek) auditQs.set("entityKeyContains", ek);
+
       const [p, a, r, ap] = await Promise.all([
         ownerGet<{ data?: OrgPolicy; success?: boolean }>(`/api/v1/pricing/governance/policy?orgId=${oid}`),
-        ownerGet<{ data?: AuditRow[]; success?: boolean }>(`/api/v1/pricing/governance/audit?orgId=${oid}&limit=30`),
+        ownerGet<{ data?: AuditRow[]; success?: boolean }>(
+          `/api/v1/pricing/governance/audit?${auditQs.toString()}`
+        ),
         ownerGet<{ data?: RuleRow[]; success?: boolean }>(`/api/v1/pricing/retail-discount/rules?orgId=${oid}&limit=50`),
         ownerGet<{ data?: ApprovalRow[]; success?: boolean }>(`/api/v1/pricing/retail-discount/approvals?orgId=${oid}`),
       ]);
@@ -91,15 +128,21 @@ export default function PricingGovernancePage() {
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : "Failed to load");
     }
-  }, []);
+  },
+    [auditEntityKeyContains, auditEntityType]
+  );
 
   useEffect(() => {
     let cancelled = false;
     (async () => {
       setLoading(true);
       try {
-        const me = await ownerGet<unknown>("/api/v1/owner/me");
+        const [me, authMe] = await Promise.all([
+          ownerGet<unknown>("/api/v1/owner/me"),
+          ownerGet<Record<string, unknown>>("/api/v1/auth/me"),
+        ]);
         if (cancelled) return;
+        setPermSet(permissionSetFromAuthMe(authMe));
         let oid = pickOrgId(me);
         if (oid == null) {
           const orgs = await ownerGet<{ data?: { id: number }[] }>("/api/v1/owner/organizations");
@@ -108,7 +151,25 @@ export default function PricingGovernancePage() {
           oid = first != null ? Number(first) : null;
         }
         setOrgId(oid);
-        if (oid) await loadAll(oid);
+        if (oid) {
+          let entityTypeInit = "";
+          let entityKeyInit = "";
+          if (typeof window !== "undefined") {
+            const sp = new URLSearchParams(window.location.search);
+            const t = sp.get("tab");
+            if (t === "policy" || t === "audit" || t === "rules" || t === "approvals") {
+              setTab(t);
+            }
+            entityTypeInit = sp.get("entityType")?.trim() ?? "";
+            entityKeyInit = sp.get("entityKeyContains")?.trim() ?? "";
+            if (entityTypeInit) setAuditEntityType(entityTypeInit);
+            if (entityKeyInit) setAuditEntityKeyContains(entityKeyInit);
+          }
+          await loadAll(oid, {
+            entityType: entityTypeInit || undefined,
+            entityKeyContains: entityKeyInit || undefined,
+          });
+        }
       } catch (e: unknown) {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load org");
       } finally {
@@ -120,8 +181,14 @@ export default function PricingGovernancePage() {
     };
   }, [loadAll]);
 
+  const canWriteCentralPolicy =
+    permSet.has("pricing.central.write") || permSet.has("global.admin") || permSet.has("country.admin");
+  const canManageRetailRules = permSet.has("pricing.retail.rule.manage") || permSet.has("global.admin");
+  const canApproveRetailDiscounts =
+    permSet.has("retail.discount.approve") || permSet.has("pricing.retail.rule.manage") || permSet.has("global.admin");
+
   async function savePolicy(next: Partial<OrgPolicy>) {
-    if (!orgId) return;
+    if (!orgId || !canWriteCentralPolicy) return;
     setSaving(true);
     setError(null);
     try {
@@ -139,7 +206,7 @@ export default function PricingGovernancePage() {
 
   async function saveRule(e: React.FormEvent) {
     e.preventDefault();
-    if (!orgId || !ruleForm.variantId.trim()) return;
+    if (!orgId || !canManageRetailRules || !ruleForm.variantId.trim()) return;
     setSaving(true);
     setError(null);
     try {
@@ -163,7 +230,7 @@ export default function PricingGovernancePage() {
   }
 
   async function reviewApproval(id: number, approve: boolean) {
-    if (!orgId) return;
+    if (!orgId || !canApproveRetailDiscounts) return;
     setSaving(true);
     setError(null);
     try {
@@ -180,10 +247,25 @@ export default function PricingGovernancePage() {
     }
   }
 
+  async function deactivateRetailRule(id: number) {
+    if (!orgId || !canManageRetailRules) return;
+    if (!window.confirm("Deactivate this retail discount rule?")) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await ownerPatch(`/api/v1/pricing/retail-discount/rules/${id}`, { orgId, status: "INACTIVE" });
+      await loadAll(orgId);
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : "Update failed");
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div className="dashboard-main-body">
       <PageHeader
-        title="Pricing & discount governance"
+        title="Pricing Governance"
         subtitle="Central band (floor/base/MRP), branch override bounds, retail discount caps, and audit trail."
         breadcrumbs={[
           { label: "Owner", href: "/owner/dashboard" },
@@ -191,6 +273,26 @@ export default function PricingGovernancePage() {
           { label: "Pricing governance", href: "/owner/inventory/pricing-governance" },
         ]}
       />
+
+      {orgId && (
+        <div className="d-flex flex-wrap gap-2 mb-3 small">
+          <Link className="btn btn-sm btn-outline-secondary" href={OWNER_PRICING_NAV.priceMaster}>
+            Price master
+          </Link>
+          <Link className="btn btn-sm btn-outline-secondary" href={OWNER_PRICING_NAV.discountRules}>
+            Enterprise rules
+          </Link>
+          <Link className="btn btn-sm btn-outline-secondary" href={OWNER_PRICING_NAV.membership}>
+            Membership
+          </Link>
+          <Link className="btn btn-sm btn-outline-secondary" href={OWNER_PRICING_NAV.campaigns}>
+            Campaigns
+          </Link>
+          <Link className="btn btn-sm btn-outline-secondary" href={OWNER_PRICING_NAV.analytics}>
+            Analytics
+          </Link>
+        </div>
+      )}
 
       {loading && <p className="text-muted small">Loading…</p>}
       {error && (
@@ -214,12 +316,24 @@ export default function PricingGovernancePage() {
                 key={k}
                 type="button"
                 className={`btn btn-sm ${tab === k ? "btn-primary" : "btn-outline-primary"}`}
-                onClick={() => setTab(k)}
+                onClick={() => {
+                  setTab(k);
+                  if (k === "audit" && orgId) {
+                    void loadAll(orgId);
+                  }
+                }}
               >
                 {label}
               </button>
             ))}
           </div>
+
+          {tab === "policy" && !canWriteCentralPolicy && (
+            <div className="alert alert-secondary radius-12 py-2 small mb-3" role="status">
+              View-only: your account can read pricing governance but does not have{" "}
+              <code>pricing.central.write</code>. Policy changes are disabled; contact an organization admin if you need edit access.
+            </div>
+          )}
 
           {tab === "policy" && policy && (
             <div className="card radius-12 mb-3">
@@ -235,7 +349,7 @@ export default function PricingGovernancePage() {
                     type="checkbox"
                     id="enforceBranch"
                     checked={policy.enforceBranchOverrideWithinCentralBand}
-                    disabled={saving}
+                    disabled={saving || !canWriteCentralPolicy}
                     onChange={(e) =>
                       savePolicy({ enforceBranchOverrideWithinCentralBand: e.target.checked })
                     }
@@ -250,7 +364,7 @@ export default function PricingGovernancePage() {
                     type="checkbox"
                     id="retailApproval"
                     checked={policy.retailDiscountApprovalEnabled}
-                    disabled={saving}
+                    disabled={saving || !canWriteCentralPolicy}
                     onChange={(e) => savePolicy({ retailDiscountApprovalEnabled: e.target.checked })}
                   />
                   <label className="form-check-label" htmlFor="retailApproval">
@@ -262,17 +376,109 @@ export default function PricingGovernancePage() {
                   optional approval ids on <code>POST /api/v1/pos/sale</code> before payment completes. Off by default for existing
                   orgs.
                 </p>
-                <div className="form-check form-switch mb-0">
+                <div className="form-check form-switch mb-2">
                   <input
                     className="form-check-input"
                     type="checkbox"
                     id="posGov"
                     checked={Boolean(policy.posPricingGovernanceEnabled)}
-                    disabled={saving}
+                    disabled={saving || !canWriteCentralPolicy}
                     onChange={(e) => savePolicy({ posPricingGovernanceEnabled: e.target.checked })}
                   />
                   <label className="form-check-label" htmlFor="posGov">
                     Enforce pricing governance on POS / checkout (server-side)
+                  </label>
+                </div>
+                <div className="form-check form-switch mb-2">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    id="posEntList"
+                    checked={Boolean(policy.posUseEnterpriseListResolution)}
+                    disabled={saving || !canWriteCentralPolicy}
+                    onChange={(e) => savePolicy({ posUseEnterpriseListResolution: e.target.checked })}
+                  />
+                  <label className="form-check-label" htmlFor="posEntList">
+                    Use enterprise list resolution for POS barcode / product browse (campaigns, membership, batch promos).
+                    When POS governance above is on, this is implied and should match validation.
+                  </label>
+                </div>
+                <div className="form-check form-switch mb-2">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    id="blockCost"
+                    checked={Boolean(policy.blockSaleBelowCost)}
+                    disabled={saving || !canWriteCentralPolicy}
+                    onChange={(e) => savePolicy({ blockSaleBelowCost: e.target.checked })}
+                  />
+                  <label className="form-check-label" htmlFor="blockCost">
+                    Block checkout below latest GRN reference cost (when cost known)
+                  </label>
+                </div>
+                <div className="form-check form-switch mb-2">
+                  <input
+                    className="form-check-input"
+                    type="checkbox"
+                    id="blockFloor"
+                    checked={policy.blockSaleBelowFloor !== false}
+                    disabled={saving || !canWriteCentralPolicy}
+                    onChange={(e) => savePolicy({ blockSaleBelowFloor: e.target.checked })}
+                  />
+                  <label className="form-check-label" htmlFor="blockFloor">
+                    Enforce ProductPricing minPrice as floor on discounted POS lines
+                  </label>
+                </div>
+                <div className="form-check form-switch mb-2">
+                  <input
+                    className="form-check-input"
+                    id="campStack"
+                    type="checkbox"
+                    checked={Boolean(policy.allowCampaignStacking)}
+                    disabled={saving || !canWriteCentralPolicy}
+                    onChange={(e) => savePolicy({ allowCampaignStacking: e.target.checked })}
+                  />
+                  <label className="form-check-label" htmlFor="campStack">
+                    Allow stacking multiple active campaigns (advanced)
+                  </label>
+                </div>
+                <div className="form-check form-switch mb-2">
+                  <input
+                    className="form-check-input"
+                    id="memStack"
+                    type="checkbox"
+                    checked={Boolean(policy.allowMembershipStacking)}
+                    disabled={saving || !canWriteCentralPolicy}
+                    onChange={(e) => savePolicy({ allowMembershipStacking: e.target.checked })}
+                  />
+                  <label className="form-check-label" htmlFor="memStack">
+                    Allow membership tier discounts to stack with promos (when tier permits)
+                  </label>
+                </div>
+                <div className="form-check form-switch mb-2">
+                  <input
+                    className="form-check-input"
+                    id="schedEn"
+                    type="checkbox"
+                    checked={Boolean(policy.scheduledPricingEnabled)}
+                    disabled={saving || !canWriteCentralPolicy}
+                    onChange={(e) => savePolicy({ scheduledPricingEnabled: e.target.checked })}
+                  />
+                  <label className="form-check-label" htmlFor="schedEn">
+                    Enable scheduled central price changes (Price Master schedules)
+                  </label>
+                </div>
+                <div className="form-check form-switch mb-0">
+                  <input
+                    className="form-check-input"
+                    id="batchEn"
+                    type="checkbox"
+                    checked={Boolean(policy.batchPricingEnabled)}
+                    disabled={saving || !canWriteCentralPolicy}
+                    onChange={(e) => savePolicy({ batchPricingEnabled: e.target.checked })}
+                  />
+                  <label className="form-check-label" htmlFor="batchEn">
+                    Enable batch-aware promo pricing at shop lots
                   </label>
                 </div>
               </div>
@@ -281,6 +487,41 @@ export default function PricingGovernancePage() {
 
           {tab === "audit" && (
             <div className="card radius-12">
+              <div className="card-body border-bottom py-2">
+                <div className="row g-2 align-items-end small">
+                  <div className="col-md-3">
+                    <label className="form-label text-muted mb-0">Entity type</label>
+                    <input
+                      className="form-control form-control-sm"
+                      placeholder="e.g. BATCH_PRICING_RULE"
+                      value={auditEntityType}
+                      onChange={(e) => setAuditEntityType(e.target.value)}
+                    />
+                  </div>
+                  <div className="col-md-4">
+                    <label className="form-label text-muted mb-0">Entity key contains</label>
+                    <input
+                      className="form-control form-control-sm"
+                      placeholder="Substring match"
+                      value={auditEntityKeyContains}
+                      onChange={(e) => setAuditEntityKeyContains(e.target.value)}
+                    />
+                  </div>
+                  <div className="col-md-2">
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-primary w-100"
+                      disabled={!orgId || loading}
+                      onClick={() => orgId && void loadAll(orgId, { entityType: auditEntityType, entityKeyContains: auditEntityKeyContains })}
+                    >
+                      Apply filters
+                    </button>
+                  </div>
+                  <div className="col-md-3 small text-muted">
+                    URL query <code>?tab=audit&amp;entityType=…</code> still works on first load.
+                  </div>
+                </div>
+              </div>
               <div className="card-body p-0">
                 <div className="table-responsive">
                   <table className="table table-sm table-hover mb-0 align-middle">
@@ -322,6 +563,11 @@ export default function PricingGovernancePage() {
             <div className="card radius-12 mb-3">
               <div className="card-body">
                 <h6 className="card-title">Add retail discount rule</h6>
+                {!canManageRetailRules && (
+                  <p className="small text-muted mb-2">
+                    View-only: editing rules requires <code>pricing.retail.rule.manage</code>.
+                  </p>
+                )}
                 <form className="row g-2 align-items-end small" onSubmit={saveRule}>
                   <div className="col-md-2">
                     <label className="form-label">Variant ID</label>
@@ -331,6 +577,7 @@ export default function PricingGovernancePage() {
                       onChange={(e) => setRuleForm((s) => ({ ...s, variantId: e.target.value }))}
                       placeholder="SKU variant id"
                       required
+                      disabled={!canManageRetailRules}
                     />
                   </div>
                   <div className="col-md-2">
@@ -340,6 +587,7 @@ export default function PricingGovernancePage() {
                       value={ruleForm.branchId}
                       onChange={(e) => setRuleForm((s) => ({ ...s, branchId: e.target.value }))}
                       placeholder="All branches if empty"
+                      disabled={!canManageRetailRules}
                     />
                   </div>
                   <div className="col-md-2">
@@ -349,6 +597,7 @@ export default function PricingGovernancePage() {
                       value={ruleForm.maxDiscountPercent}
                       onChange={(e) => setRuleForm((s) => ({ ...s, maxDiscountPercent: e.target.value }))}
                       placeholder="%"
+                      disabled={!canManageRetailRules}
                     />
                   </div>
                   <div className="col-md-2">
@@ -358,6 +607,7 @@ export default function PricingGovernancePage() {
                       value={ruleForm.requiresApprovalAbovePercent}
                       onChange={(e) => setRuleForm((s) => ({ ...s, requiresApprovalAbovePercent: e.target.value }))}
                       placeholder="%"
+                      disabled={!canManageRetailRules}
                     />
                   </div>
                   <div className="col-md-2">
@@ -366,10 +616,11 @@ export default function PricingGovernancePage() {
                       className="form-control form-control-sm"
                       value={ruleForm.maxDiscountAmount}
                       onChange={(e) => setRuleForm((s) => ({ ...s, maxDiscountAmount: e.target.value }))}
+                      disabled={!canManageRetailRules}
                     />
                   </div>
                   <div className="col-md-2">
-                    <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
+                    <button type="submit" className="btn btn-primary btn-sm" disabled={saving || !canManageRetailRules}>
                       Save rule
                     </button>
                   </div>
@@ -384,6 +635,7 @@ export default function PricingGovernancePage() {
                       <th>Max %</th>
                       <th>Approval &gt;</th>
                       <th>Status</th>
+                      <th className="text-end">Actions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -396,6 +648,20 @@ export default function PricingGovernancePage() {
                         <td className="small">{r.maxDiscountPercent != null ? String(r.maxDiscountPercent) : "—"}</td>
                         <td className="small">{r.requiresApprovalAbovePercent != null ? String(r.requiresApprovalAbovePercent) : "—"}</td>
                         <td className="small">{r.status}</td>
+                        <td className="text-end">
+                          {r.status === "ACTIVE" ? (
+                            <button
+                              type="button"
+                              className="btn btn-link btn-sm text-danger p-0"
+                              disabled={saving || !canManageRetailRules}
+                              onClick={() => deactivateRetailRule(r.id)}
+                            >
+                              Deactivate
+                            </button>
+                          ) : (
+                            <span className="text-muted">—</span>
+                          )}
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -407,6 +673,11 @@ export default function PricingGovernancePage() {
           {tab === "approvals" && (
             <div className="card radius-12">
               <div className="card-body p-0">
+                {!canApproveRetailDiscounts && (
+                  <p className="small text-muted px-3 pt-3 mb-0">
+                    View-only: approve or reject requires <code>retail.discount.approve</code> (or rule management for listing).
+                  </p>
+                )}
                 <table className="table table-sm mb-0 align-middle">
                   <thead className="bg-light">
                     <tr>
@@ -441,7 +712,7 @@ export default function PricingGovernancePage() {
                             <button
                               type="button"
                               className="btn btn-success btn-sm me-1"
-                              disabled={saving}
+                              disabled={saving || !canApproveRetailDiscounts}
                               onClick={() => reviewApproval(a.id, true)}
                             >
                               Approve
@@ -449,7 +720,7 @@ export default function PricingGovernancePage() {
                             <button
                               type="button"
                               className="btn btn-outline-danger btn-sm"
-                              disabled={saving}
+                              disabled={saving || !canApproveRetailDiscounts}
                               onClick={() => reviewApproval(a.id, false)}
                             >
                               Reject
@@ -467,8 +738,8 @@ export default function PricingGovernancePage() {
           <p className="small text-muted mt-3 mb-0">
             API: <code>/api/v1/pricing/org</code> (central), <code>/api/v1/pricing/branch</code> (override),{" "}
             <code>/api/v1/pricing/retail-discount/validate</code> (POS integration). Permissions:{" "}
-            <code>pricing.central.write</code>, <code>pricing.branch.override</code>, <code>retail.discount.apply</code>,{" "}
-            <code>retail.discount.approve</code>.
+            <code>pricing.central.read</code>, <code>pricing.central.write</code>, <code>pricing.branch.override</code>,{" "}
+            <code>retail.discount.apply</code>, <code>retail.discount.approve</code>.
           </p>
           <Link href="/owner/inventory" className="btn btn-outline-secondary btn-sm mt-2">
             Back to inventory

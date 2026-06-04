@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { pickListsList, warehouseAccessible, warehouseDispatches } from "@/lib/api";
+import { pickListsList, warehouseAccessible, warehouseDispatches, dispatchPrintUrl, dispatchSend } from "@/lib/api";
 import { useToast } from "@/src/hooks/useToast";
 import { getMessageFromApiError } from "@/src/lib/apiErrorToMessage";
 import StaffBranchLayout from "@/src/components/branch/StaffBranchLayout";
@@ -22,6 +22,7 @@ export default function WarehouseOperationsPage() {
   const [picks, setPicks] = useState<any[]>([]);
   const [dispatches, setDispatches] = useState<any[]>([]);
   const [whId, setWhId] = useState<number | null>(null);
+  const [sendingId, setSendingId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!caps.canViewOperations) {
@@ -38,8 +39,12 @@ export default function WarehouseOperationsPage() {
         const first = Array.isArray(whList) && whList.length ? Number((whList[0] as any)?.id) : null;
         if (!cancelled) setWhId(Number.isFinite(first) ? first : null);
 
+        const bid = parseInt(branchId, 10);
         const [pl, disp] = await Promise.all([
-          pickListsList({}).catch(() => ({ items: [] })),
+          pickListsList({
+            branchId: Number.isFinite(bid) ? bid : undefined,
+            workQueue: true,
+          }).catch(() => ({ items: [] })),
           first
             ? warehouseDispatches(first, { take: 20 }).catch(() => [])
             : Promise.resolve([]),
@@ -62,6 +67,23 @@ export default function WarehouseOperationsPage() {
       cancelled = true;
     };
   }, [branchId, toast, caps.canViewOperations]);
+
+  async function handleSendDispatch(dispatchId: number) {
+    setSendingId(dispatchId);
+    try {
+      await dispatchSend(dispatchId);
+      toast.success("Dispatch sent — IN_TRANSIT");
+      const first = whId;
+      if (first) {
+        const disp = await warehouseDispatches(first, { take: 20 }).catch(() => []);
+        setDispatches(Array.isArray(disp) ? disp : []);
+      }
+    } catch (e: unknown) {
+      toast.error(getMessageFromApiError(e));
+    } finally {
+      setSendingId(null);
+    }
+  }
 
   return (
     <StaffBranchLayout branchId={branchId} requiredPermission={null}>
@@ -167,7 +189,7 @@ export default function WarehouseOperationsPage() {
                         <tr>
                           <th>ID</th>
                           <th>Status</th>
-                          <th />
+                          <th className="text-end">Actions</th>
                         </tr>
                       </thead>
                       <tbody>
@@ -178,12 +200,42 @@ export default function WarehouseOperationsPage() {
                               <span className="badge bg-info-subtle text-dark">{d.status ?? "—"}</span>
                             </td>
                             <td className="text-end">
-                              <Link
-                                className="btn btn-sm btn-outline-secondary"
-                                href={`/staff/branch/${branchId}/inventory/receive-dispatch/${d.id}`}
-                              >
-                                Receive
-                              </Link>
+                              <div className="d-flex flex-wrap gap-1 justify-content-end">
+                                <a
+                                  className="btn btn-sm btn-outline-secondary"
+                                  href={dispatchPrintUrl(d.id, "challan")}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  Challan
+                                </a>
+                                <a
+                                  className="btn btn-sm btn-outline-secondary"
+                                  href={dispatchPrintUrl(d.id, "delivery-note")}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  Delivery note
+                                </a>
+                                {(d.status === "CREATED" || d.status === "PACKED") && (
+                                  <button
+                                    type="button"
+                                    className="btn btn-sm btn-primary"
+                                    disabled={sendingId === d.id}
+                                    onClick={() => handleSendDispatch(d.id)}
+                                  >
+                                    {sendingId === d.id ? "Sending…" : "Send"}
+                                  </button>
+                                )}
+                                {d.status === "IN_TRANSIT" && (
+                                  <Link
+                                    className="btn btn-sm btn-outline-primary"
+                                    href={`/staff/branch/${branchId}/inventory/receive?dispatch=${d.id}`}
+                                  >
+                                    Branch receive
+                                  </Link>
+                                )}
+                              </div>
                             </td>
                           </tr>
                         ))}

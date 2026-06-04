@@ -112,6 +112,9 @@ export const IMPLEMENTED_ADMIN_HREFS: Set<string> = new Set([
   '/admin/fundraising',
   '/admin/pos/transactions',
   '/admin/transfers',
+  // Vaccination Campaign 2026
+  '/admin/campaigns',
+  '/admin/campaigns/new',
   // Clinic Operations
   '/admin/services',
   '/admin/appointments',

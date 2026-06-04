@@ -40,7 +40,7 @@ export default function StaffPutawayQueuePage() {
 
   const loadWarehouses = useCallback(async () => {
     const list = await warehouseAccessible().catch(() => []);
-    const arr = Array.isArray(list) ? list : [];
+    const arr = (Array.isArray(list) ? list : []) as Array<{ id: number; name?: string; orgId?: number }>;
     setWarehouses(arr);
     const fromQ = whQ ? Number(whQ) : null;
     const pick =
@@ -115,7 +115,11 @@ export default function StaffPutawayQueuePage() {
   if (!canOps) {
     return (
       <StaffBranchLayout branchId={branchId} requiredPermission={null}>
-        <WarehouseAccessFallback title="Putaway" message="You do not have warehouse operations access for this branch." />
+        <WarehouseAccessFallback
+          branchId={branchId}
+          title="Putaway"
+          message="You do not have warehouse operations access for this branch."
+        />
       </StaffBranchLayout>
     );
   }

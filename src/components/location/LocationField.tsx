@@ -1,9 +1,8 @@
 "use client";
 
 /**
- * LocationField – unified location picker for ALL countries.
- * Uses LocationPickerUnified: Country -> State/Province -> City -> Postal + Address Line + Map.
- * No BD special-case (Division/District/Upazila); same fields for Bangladesh as for others.
+ * LocationField – unified location picker for all countries.
+ * Uses centralized BD hierarchy for Bangladesh and generic state/city for others.
  */
 
 import LocationPickerUnified from "@/components/common/LocationPickerUnified";

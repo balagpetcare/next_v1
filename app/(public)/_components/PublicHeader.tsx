@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Icon } from "@iconify/react";
+import { organization, organizationTelHref } from "@/config/organization";
 import { useLanguage } from "../_lib/LanguageContext";
 import LanguageSelect from "@/src/shared/selects/LanguageSelect";
 
@@ -41,6 +42,9 @@ export default function PublicHeader() {
           </a>
           <a href="#faq" className="jamina-header-link">
             {t("header.navFaq")}
+          </a>
+          <a href={organizationTelHref()} className="jamina-header-link">
+            {organization.phone}
           </a>
           <div className="jamina-lang-switcher d-flex align-items-center">
             <LanguageSelect

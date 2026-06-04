@@ -16,7 +16,10 @@ export type MeResponse = {
 const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
 
 async function fetchJson(url: string) {
-  const res = await fetch(url, { credentials: "include" });
+  const res = await fetch(url, {
+    credentials: "include",
+    cache: "no-store",
+  });
   if (!res.ok) throw new Error(`Request failed (${res.status})`);
   return res.json();
 }
@@ -80,8 +83,17 @@ export function useMe(pathname?: string) {
       }
     }
     run();
+    const onRefresh = () => {
+      run();
+    };
+    if (typeof window !== "undefined") {
+      window.addEventListener("bpa:me-refresh", onRefresh);
+    }
     return () => {
       cancelled = true;
+      if (typeof window !== "undefined") {
+        window.removeEventListener("bpa:me-refresh", onRefresh);
+      }
     };
   }, [pathname]);
 

@@ -64,12 +64,65 @@ export function proxy(req: NextRequest) {
     return NextResponse.redirect(url, 307);
   }
 
-  // Nested .../stock-requests/:id → flat stock-request-detail/:id (Turbopack 404 on nested dynamic segment)
+  // Nested .../stock-requests/:id → canonical stock-request-detail/:id (Turbopack 404 on nested dynamic segment)
   const stockRequestDetailNested = pathname.match(/^\/staff\/branch\/([^/]+)\/inventory\/stock-requests\/(\d+)$/);
   if (stockRequestDetailNested) {
     const [, branchId, requestId] = stockRequestDetailNested;
     const url = req.nextUrl.clone();
     url.pathname = `/staff/branch/${branchId}/inventory/stock-request-detail/${requestId}`;
+    return NextResponse.redirect(url, 307);
+  }
+
+  // Legacy internal path from old beforeFiles rewrite target → canonical detail URL
+  const stockRequestDetailPageLegacy = pathname.match(
+    /^\/staff\/branch\/([^/]+)\/inventory\/stock-request-detail-page\/(\d+)$/
+  );
+  if (stockRequestDetailPageLegacy) {
+    const [, branchId, requestId] = stockRequestDetailPageLegacy;
+    const url = req.nextUrl.clone();
+    url.pathname = `/staff/branch/${branchId}/inventory/stock-request-detail/${requestId}`;
+    return NextResponse.redirect(url, 307);
+  }
+
+  // Legacy nested .../inventory/receive/dispatch/:id → canonical .../inventory/receive-dispatch/:id (Turbopack stability)
+  const receiveDispatchNestedLegacy = pathname.match(
+    /^\/staff\/branch\/([^/]+)\/inventory\/receive\/dispatch\/(\d+)$/
+  );
+  if (receiveDispatchNestedLegacy) {
+    const [, branchId, dispatchId] = receiveDispatchNestedLegacy;
+    const url = req.nextUrl.clone();
+    url.pathname = `/staff/branch/${branchId}/inventory/receive-dispatch/${dispatchId}`;
+    return NextResponse.redirect(url, 307);
+  }
+
+  // Bookmarked internal path → canonical receive-dispatch URL
+  const receiveDispatchPageLegacy = pathname.match(
+    /^\/staff\/branch\/([^/]+)\/inventory\/receive-dispatch-page\/(\d+)$/
+  );
+  if (receiveDispatchPageLegacy) {
+    const [, branchId, dispatchId] = receiveDispatchPageLegacy;
+    const url = req.nextUrl.clone();
+    url.pathname = `/staff/branch/${branchId}/inventory/receive-dispatch/${dispatchId}`;
+    return NextResponse.redirect(url, 307);
+  }
+
+  // Legacy/deep link: .../warehouse/receive-po/:numericId → canonical GRN detail URL. clone() keeps query string.
+  const receivePoGrnDeepLink = pathname.match(/^\/staff\/branch\/([^/]+)\/warehouse\/receive-po\/(\d+)$/);
+  if (receivePoGrnDeepLink) {
+    const [, branchId, grnId] = receivePoGrnDeepLink;
+    const url = req.nextUrl.clone();
+    url.pathname = `/staff/branch/${branchId}/warehouse/vendor-receipts/${grnId}`;
+    return NextResponse.redirect(url, 307);
+  }
+
+  // Internal filesystem URL (bookmark) → canonical .../warehouse/vendor-receipts/:grnId (beforeFiles serves detail-page)
+  const vendorReceiptDetailPageLegacy = pathname.match(
+    /^\/staff\/branch\/([^/]+)\/warehouse\/vendor-receipt-grn-detail-page\/(\d+)$/
+  );
+  if (vendorReceiptDetailPageLegacy) {
+    const [, branchId, grnId] = vendorReceiptDetailPageLegacy;
+    const url = req.nextUrl.clone();
+    url.pathname = `/staff/branch/${branchId}/warehouse/vendor-receipts/${grnId}`;
     return NextResponse.redirect(url, 307);
   }
 
@@ -138,7 +191,29 @@ export function proxy(req: NextRequest) {
     );
     console.info("[proxy]", pathname.split("/").slice(0, 2).join("/"), "hasAuth:", hasAuth, "cookies:", cookieStatus);
   }
-  if (hasAuth) return NextResponse.next();
+  if (hasAuth) {
+    // Keep public barcode label URL stable while serving the flatter physical route.
+    const staffBatchLabelPrint = pathname.match(
+      /^\/staff\/branch\/([^/]+)\/inventory\/labels\/batch\/(\d+)\/print$/
+    );
+    if (staffBatchLabelPrint) {
+      const [, bId, lotId] = staffBatchLabelPrint;
+      const url = req.nextUrl.clone();
+      url.pathname = `/staff/branch/${bId}/inventory/label-batch-print/${lotId}`;
+      return NextResponse.rewrite(url);
+    }
+
+    // Harden GRN detail: public .../warehouse/vendor-receipts/:grnId must always hit the physical
+    // vendor-receipt-grn-detail-page route (next.config beforeFiles rewrite can miss some dev/RSC paths).
+    const vendorReceiptDetail = pathname.match(/^\/staff\/branch\/([^/]+)\/warehouse\/vendor-receipts\/(\d+)$/);
+    if (vendorReceiptDetail) {
+      const [, bId, gid] = vendorReceiptDetail;
+      const url = req.nextUrl.clone();
+      url.pathname = `/staff/branch/${bId}/warehouse/vendor-receipt-grn-detail-page/${gid}`;
+      return NextResponse.rewrite(url);
+    }
+    return NextResponse.next();
+  }
 
   // Redirect to the correct login page (same-origin so cookie is set on this port)
   if (isOwner) {

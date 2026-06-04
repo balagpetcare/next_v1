@@ -9,6 +9,7 @@ const nextConfig = {
 
   // Workaround for Next 16.1+ Turbopack 404 on nested dynamic routes; staff patient detail/edit use flat patient-detail / patient-edit;
   // staff pharmacy requisition detail uses nested .../pharmacy/requisitions/[requisitionId]; legacy flat requisition-detail redirects there.
+  // Staff warehouse GRN detail: public .../vendor-receipts/:grnId → flat vendor-receipt-grn-detail-page/:grnId (beforeFiles).
   experimental: {
     turbopackClientSideNestedAsyncChunking: true,
   },
@@ -71,10 +72,41 @@ const nextConfig = {
         destination: "/staff/branch/:branchId/inventory/stock-request-create",
         permanent: false,
       },
-      // Nested .../stock-requests/:id can 404 under Turbopack; detail lives at flat stock-request-detail/:id
+      // Nested .../stock-requests/:id → canonical .../stock-request-detail/:id
       {
         source: "/staff/branch/:branchId/inventory/stock-requests/:requestId(\\d+)",
         destination: "/staff/branch/:branchId/inventory/stock-request-detail/:requestId",
+        permanent: false,
+      },
+      // Internal filesystem URL (if bookmarked) → canonical public detail URL
+      {
+        source: "/staff/branch/:branchId/inventory/stock-request-detail-page/:requestId(\\d+)",
+        destination: "/staff/branch/:branchId/inventory/stock-request-detail/:requestId",
+        permanent: false,
+      },
+      // Legacy nested dispatch receive URL → canonical flat receive-dispatch (Turbopack / nested-route stability)
+      {
+        source: "/staff/branch/:branchId/inventory/receive/dispatch/:dispatchId(\\d+)",
+        destination: "/staff/branch/:branchId/inventory/receive-dispatch/:dispatchId",
+        permanent: false,
+      },
+      // Internal filesystem URL (if bookmarked) → canonical receive-dispatch URL
+      {
+        source: "/staff/branch/:branchId/inventory/receive-dispatch-page/:dispatchId(\\d+)",
+        destination: "/staff/branch/:branchId/inventory/receive-dispatch/:dispatchId",
+        permanent: false,
+      },
+      // Legacy vendor-receive deep link: GRN detail used to live under receive-po/:id; canonical detail is vendor-receipts/:grnId.
+      // Avoid a sibling dynamic route under receive-po/ (Turbopack/nested-route stability; see docs/WAREHOUSE_VENDOR_RECEIVE_STABLE_DETAIL_ROUTE_FIX_PLAN.md).
+      {
+        source: "/staff/branch/:branchId/warehouse/receive-po/:legacyId(\\d+)",
+        destination: "/staff/branch/:branchId/warehouse/vendor-receipts/:legacyId",
+        permanent: false,
+      },
+      // Old flat GRN detail segment (if bookmarked) → canonical nested URL
+      {
+        source: "/staff/branch/:branchId/warehouse/vendor-receipt-grn-detail-page/:grnId(\\d+)",
+        destination: "/staff/branch/:branchId/warehouse/vendor-receipts/:grnId",
         permanent: false,
       },
       {
@@ -211,6 +243,16 @@ const nextConfig = {
       source: "/staff/branch/:branchId/clinic/medicine-control/injection-tokens/new",
       destination: "/staff/branch/:branchId/clinic/medicine-control-injection-tokens/new",
     };
+    // Barcode label print: keep the public nested URL, serve a flatter physical route for Turbopack/dev stability.
+    const staffInventoryBatchLabelPrintRewrite = {
+      source: "/staff/branch/:branchId/inventory/labels/batch/:lotId(\\d+)/print",
+      destination: "/staff/branch/:branchId/inventory/label-batch-print/:lotId",
+    };
+    // Public .../warehouse/vendor-receipts/:grnId → physical vendor-receipt-grn-detail-page/:grnId (Turbopack / nested dynamic stability; same class as stock-request-detail).
+    const staffWarehouseVendorReceiptGrnDetailRewrite = {
+      source: "/staff/branch/:branchId/warehouse/vendor-receipts/:grnId(\\d+)",
+      destination: "/staff/branch/:branchId/warehouse/vendor-receipt-grn-detail-page/:grnId",
+    };
     // Doctor approval detail uses filesystem route clinic/doctors/approvals/[approvalId] (see redirects for legacy flat/profile URLs).
     return {
       beforeFiles: [
@@ -219,6 +261,8 @@ const nextConfig = {
         staffDoctorApprovalsRewrite,
         staffMedicineInjectionTokensRewrite,
         staffMedicineInjectionTokensNewRewrite,
+        staffInventoryBatchLabelPrintRewrite,
+        staffWarehouseVendorReceiptGrnDetailRewrite,
       ],
       fallback: [apiRewrite],
     };

@@ -20,6 +20,9 @@ export default function CatalogControlHeader({ branchId }: CatalogControlHeaderP
         { label: "Catalog", href: base },
       ]}
       actions={[
+        <Link key="vaccine-mappings" href={`${base}/vaccine-mappings`} className="btn btn-outline-primary radius-12" aria-label="Vaccine mappings">
+          <i className="ri-link me-1" /> Vaccine Mappings
+        </Link>,
         <Link key="category" href={`${base}/categories`} className="btn btn-outline-primary radius-12" aria-label="New category">
           <i className="ri-folder-add-line me-1" /> New Category
         </Link>,

@@ -208,8 +208,8 @@ export default function NewWriteOffRequestPage() {
     setSubmitting(true);
     try {
       const payload = {
-        orgId: parseInt(orgId),
-        locationId: parseInt(selectedLocation),
+        orgId: parseInt(String(orgId), 10),
+        locationId: parseInt(String(selectedLocation), 10),
         reason,
         note: note || undefined,
         lines: lines.map((l) => ({

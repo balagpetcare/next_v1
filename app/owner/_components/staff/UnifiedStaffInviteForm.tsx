@@ -17,12 +17,13 @@
 
 import { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
+import { ownerGet } from "@/app/owner/_lib/ownerApi";
 
 interface Branch {
   id: number;
   name: string;
   org?: { name: string };
-  types?: Array<{ type: { code: string; name: string } }>;
+  types?: Array<{ type: { code: string; name?: string; nameEn?: string } }>;
 }
 
 interface UnifiedStaffInviteFormProps {
@@ -42,7 +43,7 @@ interface UnifiedStaffInviteFormProps {
   showCancelButton?: boolean;
 }
 
-// Role definitions with labels
+/** Labels for MemberRole branch invites (aligned with backend branchRoleMatrix). */
 const ROLE_LABELS: Record<string, string> = {
   BRANCH_MANAGER: "Branch Manager",
   BRANCH_STAFF: "Branch Staff",
@@ -53,36 +54,16 @@ const ROLE_LABELS: Record<string, string> = {
   WAREHOUSE_MANAGER: "Warehouse Manager",
   RECEIVING_STAFF: "Receiving Staff",
   DISPATCH_STAFF: "Dispatch Staff",
+  PHARMACIST: "Pharmacist",
+  CLINIC_STAFF: "Clinic Staff",
+  CLINIC_RECEPTION: "Clinic Reception",
+  CLINIC_INVENTORY_STAFF: "Clinic Inventory Staff",
+  GROOMING_STAFF: "Grooming Staff",
+  BOARDING_STAFF: "Boarding / Daycare Staff",
+  TRAINING_STAFF: "Training Staff",
   INVENTORY_CONTROLLER: "Inventory Controller",
   QC_OFFICER: "QC Officer",
   AUDIT_OFFICER: "Audit Officer",
-  PHARMACIST: "Pharmacist",
-};
-
-// Role categories by branch type
-const ROLES_BY_BRANCH_TYPE: Record<string, string[]> = {
-  CLINIC: ["BRANCH_MANAGER", "BRANCH_STAFF", "SELLER", "DOCTOR"],
-  PHARMACY: ["BRANCH_MANAGER", "BRANCH_STAFF", "SELLER", "PHARMACIST"],
-  SHOP: ["BRANCH_MANAGER", "BRANCH_STAFF", "SELLER"],
-  DELIVERY_HUB: ["DELIVERY_MANAGER", "DELIVERY_STAFF"],
-  WAREHOUSE: [
-    "WAREHOUSE_MANAGER",
-    "RECEIVING_STAFF",
-    "DISPATCH_STAFF",
-    "INVENTORY_CONTROLLER",
-    "QC_OFFICER",
-    "AUDIT_OFFICER",
-  ],
-  CENTRAL_WAREHOUSE: [
-    "BRANCH_MANAGER",
-    "WAREHOUSE_MANAGER",
-    "RECEIVING_STAFF",
-    "DISPATCH_STAFF",
-    "INVENTORY_CONTROLLER",
-    "QC_OFFICER",
-    "AUDIT_OFFICER",
-  ],
-  DEFAULT: ["BRANCH_MANAGER", "BRANCH_STAFF", "SELLER"],
 };
 
 export function UnifiedStaffInviteForm({
@@ -107,39 +88,77 @@ export function UnifiedStaffInviteForm({
   const [error, setError] = useState<string>("");
   const [success, setSuccess] = useState(false);
   const [inviteResult, setInviteResult] = useState<any>(null);
+  /** Server-derived roles for selected branch; null = not loaded yet */
+  const [apiAllowedRoles, setApiAllowedRoles] = useState<string[] | null>(null);
+  const [serverRoleLabels, setServerRoleLabels] = useState<Record<string, string>>({});
+  const [rolesFetchError, setRolesFetchError] = useState<string>("");
 
   // Get selected branch
   const selectedBranch = useMemo(() => {
     return branches.find((b) => String(b.id) === branchId);
   }, [branches, branchId]);
 
-  // Get available roles based on branch type
-  const availableRoles = useMemo(() => {
+  useEffect(() => {
     if (allowedRoles) {
-      return allowedRoles.map((r) => ({ value: r, label: ROLE_LABELS[r] || r }));
+      setApiAllowedRoles(null);
+      setServerRoleLabels({});
+      setRolesFetchError("");
+      return;
     }
-
-    if (!selectedBranch) return [];
-
-    const typeCodes = selectedBranch.types?.map((t) => t.type.code.toUpperCase()) || [];
-    const roles = new Set<string>();
-
-    for (const typeCode of typeCodes) {
-      const typeRoles = ROLES_BY_BRANCH_TYPE[typeCode] || ROLES_BY_BRANCH_TYPE.DEFAULT;
-      typeRoles.forEach((r) => roles.add(r));
+    const id = Number(branchId);
+    if (!id || Number.isNaN(id)) {
+      setApiAllowedRoles(null);
+      setServerRoleLabels({});
+      setRolesFetchError("");
+      return;
     }
+    let cancelled = false;
+    setApiAllowedRoles(null);
+    setRolesFetchError("");
+    (async () => {
+      try {
+        const res = (await ownerGet(
+          `/api/v1/owner/branches/${id}/members/invite-allowed-roles`
+        )) as {
+          success?: boolean;
+          data?: { allowedRoles?: string[]; roleLabels?: Record<string, string> };
+        } | null;
+        if (cancelled) return;
+        const list = res?.data?.allowedRoles;
+        const labels = res?.data?.roleLabels;
+        if (Array.isArray(list)) {
+          setApiAllowedRoles(list);
+          setServerRoleLabels(
+            labels && typeof labels === "object" && !Array.isArray(labels) ? labels : {}
+          );
+        } else setRolesFetchError("Could not load roles for this branch.");
+      } catch (e: unknown) {
+        if (!cancelled) {
+          setRolesFetchError(e instanceof Error ? e.message : "Failed to load invite roles.");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [branchId, allowedRoles]);
 
-    if (typeCodes.length === 0) {
-      ROLES_BY_BRANCH_TYPE.DEFAULT.forEach((r) => roles.add(r));
+  const rolesLoading = Boolean(
+    branchId && !allowedRoles && apiAllowedRoles === null && !rolesFetchError
+  );
+
+  const availableRoles = useMemo(() => {
+    const labelFor = (r: string) => serverRoleLabels[r] || ROLE_LABELS[r] || r;
+    if (allowedRoles?.length) {
+      return allowedRoles.map((r) => ({ value: r, label: labelFor(r) }));
     }
+    if (!branchId) return [];
+    if (rolesFetchError) return [];
+    if (apiAllowedRoles === null) return [];
+    return apiAllowedRoles.map((r) => ({ value: r, label: labelFor(r) }));
+  }, [allowedRoles, branchId, apiAllowedRoles, rolesFetchError, serverRoleLabels]);
 
-    return Array.from(roles).map((r) => ({
-      value: r,
-      label: ROLE_LABELS[r] || r,
-    }));
-  }, [selectedBranch, allowedRoles]);
-
-  // Reset role when branch changes (unless preselected)
+  // Reset role when branch / allowed list changes (unless preselected)
   useEffect(() => {
     if (!preselectedRole && availableRoles.length > 0) {
       const currentRoleValid = availableRoles.some((r) => r.value === role);
@@ -159,6 +178,14 @@ export function UnifiedStaffInviteForm({
     // Validation
     if (!branchId) {
       setError("Please select a branch");
+      return;
+    }
+    if (rolesLoading) {
+      setError("Still loading roles for this branch. Please wait.");
+      return;
+    }
+    if (rolesFetchError) {
+      setError(rolesFetchError);
       return;
     }
     if (!role) {
@@ -310,7 +337,9 @@ export function UnifiedStaffInviteForm({
                         <span className="text-muted">
                           {" "}
                           •{" "}
-                          {selectedBranch.types.map((t) => t.type.name || t.type.code).join(", ")}
+                          {selectedBranch.types
+                            .map((t) => t.type.nameEn || t.type.name || t.type.code)
+                            .join(", ")}
                         </span>
                       )}
                     </small>
@@ -328,13 +357,23 @@ export function UnifiedStaffInviteForm({
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
                   required
-                  disabled={submitting || !branchId || availableRoles.length === 0 || !!preselectedRole}
+                  disabled={
+                    submitting ||
+                    !branchId ||
+                    availableRoles.length === 0 ||
+                    !!preselectedRole ||
+                    rolesLoading
+                  }
                 >
                   <option value="">
                     {!branchId
                       ? "Select branch first"
-                      : availableRoles.length === 0
+                      : rolesLoading
                       ? "Loading roles..."
+                      : availableRoles.length === 0
+                      ? rolesFetchError
+                        ? "Could not load roles"
+                        : "No roles available"
                       : "Select role"}
                   </option>
                   {availableRoles.map((r) => (
@@ -346,7 +385,10 @@ export function UnifiedStaffInviteForm({
                 {preselectedRole && (
                   <small className="text-muted">Role is pre-selected from context</small>
                 )}
-                {selectedBranch && availableRoles.length === 0 && (
+                {rolesFetchError && (
+                  <small className="text-danger d-block mt-1">{rolesFetchError}</small>
+                )}
+                {selectedBranch && !rolesLoading && !rolesFetchError && availableRoles.length === 0 && (
                   <small className="text-warning">No roles available for this branch type</small>
                 )}
               </div>
@@ -403,7 +445,13 @@ export function UnifiedStaffInviteForm({
               <button
                 type="submit"
                 className="btn btn-primary radius-12"
-                disabled={submitting || !branchId || !role}
+                disabled={
+                  submitting ||
+                  !branchId ||
+                  !role ||
+                  rolesLoading ||
+                  Boolean(rolesFetchError)
+                }
               >
                 {submitting ? (
                   <>

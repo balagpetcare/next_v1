@@ -58,15 +58,17 @@ export const AVATAR: CropperConfig = {
   mode: "fixed",
   aspectRatio: 1,
   output: {
-    format: "webp",
-    quality: 0.9,
+    // JPEG: canvas image/webp is inconsistent across browsers and can produce buffers Sharp cannot decode.
+    // Server normalizes to WebP for storage.
+    format: "jpg",
+    quality: 0.88,
     maxWidth: 512,
     maxHeight: 512,
   },
   constraints: {
     minWidth: 256,
     minHeight: 256,
-    maxFileMB: 2,
+    maxFileMB: 8,
     allowUpscale: false,
   },
   ui: {

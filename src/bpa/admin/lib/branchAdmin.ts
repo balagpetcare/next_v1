@@ -171,7 +171,7 @@ export function computeBranchKpis(branches: AdminBranchListRow[]): BranchKpis {
 /**
  * Format branch address summary from location or addressJson
  */
-export function formatBranchAddressSummary(row: AdminBranchListRow): string {
+export function formatBranchAddressSummary(row: Pick<AdminBranchListRow, 'location' | 'addressJson'>): string {
   // Prefer location.address (standardized per schema)
   if (row.location && typeof row.location === 'object') {
     const loc = row.location as Record<string, unknown>

@@ -204,7 +204,7 @@ export default function StaffWarehouseDashboardPage() {
           sortBy,
           sortDir,
         });
-        if (!cancelled) setDashboard(dash);
+        if (!cancelled) setDashboard(dash as WarehouseStaffDashboardData);
       } catch (e: any) {
         if (!cancelled) {
           const message = getMessageFromApiError(e);
@@ -230,7 +230,7 @@ export default function StaffWarehouseDashboardPage() {
 
   const queueTableHeaders = useMemo(() => {
     if (activeQueue === "tasks") return ["Task", "Route", "Items", "Priority", "Status", "Action"];
-    if (activeQueue === "requests") return ["Request", "Branch", "Status", "Lines", "Dispatches", "Action"];
+    if (activeQueue === "requests") return ["Request", "Branch", "Status", "Lines", "Dispatches", "Next", "Action"];
     if (activeQueue === "transfers") return ["Transfer", "From", "To", "Lines", "Status", "Action"];
     if (activeQueue === "receiving") return ["GRN", "Location", "Status", "Lines", "Vendor", "Action"];
     return ["Dispatch", "To", "Status", "Lines", "Request", "Action"];
@@ -396,12 +396,14 @@ export default function StaffWarehouseDashboardPage() {
               {branchVendorPending.draft > 0 ? ` · ${branchVendorPending.draft} draft(s)` : ""}
             </span>
           </div>
-          <Link
-            href={`/staff/branch/${branchId}/warehouse/receive-po`}
-            className="btn btn-sm btn-dark shrink-0"
-          >
-            Review now
-          </Link>
+          <div className="d-flex flex-wrap gap-2 shrink-0">
+            <Link href={`/staff/branch/${branchId}/warehouse/vendor-receipts?tab=pending`} className="btn btn-sm btn-dark">
+              Open vendor receipts
+            </Link>
+            <Link href={`/staff/branch/${branchId}/warehouse/receive-po`} className="btn btn-sm btn-outline-secondary">
+              Receive workspace
+            </Link>
+          </div>
         </div>
       )}
 
@@ -562,8 +564,17 @@ export default function StaffWarehouseDashboardPage() {
                                   <td><QueueStatusBadge label={String(row.status || "DRAFT")} tone={statusTone(row.status)} /></td>
                                   <td>{row._meta?.lineCount ?? row.items?.length ?? 0}</td>
                                   <td>{row._meta?.dispatchCount ?? row.dispatches?.length ?? 0}</td>
+                                  <td className="small text-muted">
+                                    {row.warehouseAction?.nextActionLabel ?? "—"}
+                                  </td>
                                   <td>
-                                    <Link href={`/staff/branch/${branchId}/inventory/stock-requests`} className="btn btn-sm btn-outline-secondary">
+                                    <Link
+                                      href={
+                                        row.warehouseAction?.openHref ??
+                                        `/staff/branch/${branchId}/warehouse/requests/${row.id}`
+                                      }
+                                      className="btn btn-sm btn-outline-primary"
+                                    >
                                       Open
                                     </Link>
                                   </td>
@@ -602,8 +613,15 @@ export default function StaffWarehouseDashboardPage() {
                                   <td>{row.items?.length ?? 0}</td>
                                   <td>{row.stockRequest?.id ? `#${row.stockRequest.id}` : "—"}</td>
                                   <td>
-                                    <Link href={`/staff/branch/${branchId}/warehouse?tab=deliveries`} className="btn btn-sm btn-outline-primary">
-                                      Dispatch
+                                    <Link
+                                      href={
+                                        row.stockRequest?.id
+                                          ? `/staff/branch/${branchId}/warehouse/requests/${row.stockRequest.id}?focus=dispatch&dispatchId=${row.id}`
+                                          : `/staff/branch/${branchId}/warehouse/operations${selectedWhId ? `?wh=${selectedWhId}` : ""}`
+                                      }
+                                      className="btn btn-sm btn-outline-primary"
+                                    >
+                                      Open
                                     </Link>
                                   </td>
                                 </>

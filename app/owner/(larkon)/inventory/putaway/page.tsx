@@ -54,7 +54,7 @@ export default function PutawayPage() {
     (async () => {
       setRecLoading(true);
       try {
-        const next: Record<number, { candidates?: unknown[] } | null> = {};
+        const next: Record<number, { candidates?: Array<{ locationId?: number; locationName?: string; reasons?: string[]; score?: number }> } | null> = {};
         await Promise.all(
           items.map(async (t) => {
             if (!t.grnLineId) {

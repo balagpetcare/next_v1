@@ -127,10 +127,21 @@ export default function ClinicBranchTable({ rows, loading = false }: ClinicBranc
                       </span>
                     </td>
                     <td className="text-end">
-                      <Link href={`/owner/clinic/${row.id}`} className="btn btn-sm btn-primary radius-12">
-                        <i className="ri-arrow-right-line me-1" />
-                        Manage
-                      </Link>
+                      <div className="d-flex justify-content-end flex-wrap gap-2">
+                        <Link href={`/owner/clinic/${row.id}/catalog`} className="btn btn-sm btn-outline-primary radius-12">
+                          Catalog
+                        </Link>
+                        <Link href={`/owner/clinic/${row.id}/inventory`} className="btn btn-sm btn-outline-primary radius-12">
+                          Inventory
+                        </Link>
+                        <Link href={`/owner/clinic/${row.id}/catalog/vaccine-mappings`} className="btn btn-sm btn-outline-secondary radius-12">
+                          Vaccine Mapping
+                        </Link>
+                        <Link href={`/owner/clinic/${row.id}`} className="btn btn-sm btn-primary radius-12">
+                          <i className="ri-arrow-right-line me-1" />
+                          Manage
+                        </Link>
+                      </div>
                     </td>
                   </tr>
                 ))

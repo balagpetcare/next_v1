@@ -1,4 +1,5 @@
 import { getApiHeaders } from "./countryContext";
+import { isWarehouseHubBranch } from "@/src/lib/branchSidebarConfig";
 
 // In browser: use same-origin so /api/* goes through Next.js rewrite and cookies are sent.
 // In Node (SSR): use explicit API URL.
@@ -103,6 +104,53 @@ export async function apiDelete<T = any>(path: string): Promise<T> {
   });
   if (!res.ok) return parseError(res);
   return res.json();
+}
+
+export interface OwnerVaccinationCardItem {
+  vaccinationId: number;
+  vaccineTypeId: number | null;
+  vaccineName: string | null;
+  administeredAt: string | null;
+  nextDueDate: string | null;
+  manufacturer: string | null;
+  batchNumber: string | null;
+  branchName: string | null;
+  status: string | null;
+  dueStatus: "OVERDUE" | "UPCOMING" | null;
+}
+
+export interface OwnerVaccinationCardPet {
+  id: number;
+  name: string | null;
+  sex: string | null;
+  dateOfBirth: string | null;
+  animalTypeNameSnapshot?: string | null;
+  breedNameSnapshot?: string | null;
+  subBreedNameSnapshot?: string | null;
+  colorNameSnapshot?: string | null;
+  sizeNameSnapshot?: string | null;
+  animalType?: { id: number; name: string | null } | null;
+  breed?: { id: number; name: string | null } | null;
+  subBreed?: { id: number; name: string | null } | null;
+  color?: { id: number; name: string | null } | null;
+  size?: { id: number; name: string | null } | null;
+}
+
+export interface OwnerVaccinationCardPayload {
+  pet: OwnerVaccinationCardPet;
+  card: {
+    vaccinations: OwnerVaccinationCardItem[];
+    nextDue: OwnerVaccinationCardItem[];
+    overdueCount: number;
+    upcomingCount: number;
+  };
+}
+
+export async function ownerPetVaccinationCardGet(petId: string | number): Promise<OwnerVaccinationCardPayload | null> {
+  const res = await apiGet<{ success?: boolean; data?: OwnerVaccinationCardPayload }>(
+    `/api/v1/owner/me/pets/${encodeURIComponent(String(petId))}/vaccination-card`
+  );
+  return res?.data ?? null;
 }
 
 // ========== Common (animal types, breeds for clinic/pet forms) ==========
@@ -276,6 +324,30 @@ export async function fetchBranchSummary(branchId: string | number): Promise<{
         /* ignore — user may lack GRN route permission in edge cases */
       }
     }
+
+    if (orgIdForGrn && isWarehouseHubBranch(branch)) {
+      const canWhFulfillment = ["warehouse.view", "warehouse.operations", "warehouse.pick.execute", "warehouse.manage"].some((p) =>
+        (myAccess.permissions ?? []).includes(p)
+      );
+      if (canWhFulfillment) {
+        try {
+          const whList = await warehouseAccessible();
+          const firstWh =
+            Array.isArray(whList) && whList.length ? Number((whList as { id?: number }[])[0]?.id) : NaN;
+          if (Number.isFinite(firstWh) && firstWh > 0) {
+            const sum = (await warehouseOperationsSummary(firstWh)) as {
+              requisitionQueueCount?: number;
+              warehouseRequisitionQueueCount?: number;
+            };
+            kpis.pendingWarehouseFulfillmentCount = Number(
+              sum?.warehouseRequisitionQueueCount ?? sum?.requisitionQueueCount ?? 0
+            );
+          }
+        } catch {
+          /* optional — warehouse summary may fail if route blocked */
+        }
+      }
+    }
     const todayBoard: Record<string, any> = {
       approvalsPending: [],
       tasksAssignedToMe: [],
@@ -383,8 +455,12 @@ export async function staffInventoryLedger(opts: { locationId: number; variantId
   return { items: res?.data ?? [], pagination: (res as any)?.pagination ?? {} };
 }
 
-export async function staffInventoryLocations() {
-  const res = await apiGet<{ success?: boolean; data?: any[] }>("/api/v1/inventory/locations");
+export async function staffInventoryLocations(opts?: { orgId?: number; warehouseId?: number }) {
+  const params = new URLSearchParams();
+  if (opts?.orgId != null) params.set("orgId", String(opts.orgId));
+  if (opts?.warehouseId != null) params.set("warehouseId", String(opts.warehouseId));
+  const q = params.toString();
+  const res = await apiGet<{ success?: boolean; data?: any[] }>(`/api/v1/inventory/locations${q ? `?${q}` : ""}`);
   return Array.isArray(res?.data) ? res.data : [];
 }
 
@@ -413,6 +489,41 @@ export async function staffInventoryLots(opts: { locationId: number; variantId?:
 export async function staffFefoLots(locationId: number, variantId: number) {
   const res = await apiGet<{ success?: boolean; data?: any[] }>(`/api/v1/inventory/fefo?locationId=${locationId}&variantId=${variantId}`);
   return res?.data ?? [];
+}
+
+/** GET /api/v1/inventory/shop-batches - SHOP lots with list sell snapshot (branch manager) */
+export async function staffShopBatchesList(branchId: string) {
+  const params = new URLSearchParams();
+  params.set("branchId", branchId);
+  return apiGet<{
+    success?: boolean;
+    data?: {
+      shopLocationId: number;
+      orgId: number;
+      items: any[];
+      batchPricingEnabled: boolean;
+    };
+  }>(`/api/v1/inventory/shop-batches?${params}`);
+}
+
+/** GET /api/v1/inventory/shop-batches/:lotId - one SHOP lot detail for staff batch pricing */
+export async function staffShopBatchDetail(branchId: string, lotId: number | string) {
+  const params = new URLSearchParams();
+  params.set("branchId", branchId);
+  return apiGet<{ success?: boolean; data?: any; message?: string }>(
+    `/api/v1/inventory/shop-batches/${encodeURIComponent(String(lotId))}?${params}`
+  );
+}
+
+/** PATCH /api/v1/inventory/shop-batches/:lotId - update expiry and batch sell rule (audit reason) */
+export async function staffShopBatchUpdate(
+  branchId: string,
+  lotId: number,
+  body: { expDate?: string | null; sellPrice?: number | null; reason: string; sellsAtRulePrice?: boolean }
+) {
+  const params = new URLSearchParams();
+  params.set("branchId", branchId);
+  return apiPatch<{ success?: boolean; data?: any; message?: string }>(`/api/v1/inventory/shop-batches/${lotId}?${params}`, body);
 }
 
 export async function staffCreateOpeningStock(body: { locationId: number; variantId: number; quantity: number; lotId?: number; orgId?: number; lotCode?: string; mfgDate?: string; expDate?: string }) {
@@ -619,7 +730,17 @@ export async function staffGetDispatch(dispatchId: number | string) {
 export async function staffReceiveDispatch(
   dispatchId: number | string,
   body: {
-    items?: { variantId: number; lotId?: number; quantityReceived?: number; quantityDamaged?: number; quantityShort?: number }[];
+    items?: {
+      variantId: number;
+      lotId?: number;
+      quantityReceived?: number;
+      quantityDamaged?: number;
+      quantityShort?: number;
+      excessQty?: number;
+      reasonCode?: string;
+      lineNote?: string;
+      followUpNote?: string;
+    }[];
     notes?: string;
     receiveMode?: "verify" | "submit" | "confirm";
   }
@@ -627,6 +748,83 @@ export async function staffReceiveDispatch(
   return apiPost<{ success?: boolean; data?: any; message?: string; receiveMode?: string }>(
     `/api/v1/inventory/dispatches/${dispatchId}/receive`,
     body
+  );
+}
+
+/** GET /api/v1/staff/branch/:branchId/inbound-queue — actionable branch inbound (dispatches + legacy transfers). */
+export async function staffInboundQueue(branchId: string | number) {
+  const res = await apiGet<{ success?: boolean; data?: { items?: any[] } }>(
+    `/api/v1/staff/branch/${branchId}/inbound-queue`
+  );
+  return res?.data?.items ?? [];
+}
+
+/** GET /api/v1/inventory/dispatches/:id/receive-session — dispatch + DispatchReceiveSession. */
+export async function staffGetDispatchReceiveSession(dispatchId: number | string) {
+  const res = await apiGet<{ success?: boolean; data?: { dispatch?: any; session?: any } }>(
+    `/api/v1/inventory/dispatches/${dispatchId}/receive-session`
+  );
+  return res?.data ?? null;
+}
+
+/** PUT — save receive draft (verify). */
+export async function staffPutDispatchReceiveSession(
+  dispatchId: number | string,
+  body: {
+    items?: {
+      variantId: number;
+      lotId?: number;
+      quantityReceived?: number;
+      quantityDamaged?: number;
+      quantityShort?: number;
+      excessQty?: number;
+      reasonCode?: string;
+      lineNote?: string;
+      followUpNote?: string;
+    }[];
+    notes?: string;
+  }
+) {
+  return apiPut<{ success?: boolean; data?: any; receiveMode?: string }>(
+    `/api/v1/inventory/dispatches/${dispatchId}/receive-session`,
+    body
+  );
+}
+
+export async function staffSubmitDispatchReceiveSession(dispatchId: number | string) {
+  return apiPost<{ success?: boolean; data?: any; receiveMode?: string }>(
+    `/api/v1/inventory/dispatches/${dispatchId}/receive-session/submit`,
+    {}
+  );
+}
+
+export async function staffConfirmDispatchReceiveSession(
+  dispatchId: number | string,
+  body?: {
+    notes?: string;
+    items?: {
+      variantId: number;
+      lotId?: number;
+      quantityReceived?: number;
+      quantityDamaged?: number;
+      quantityShort?: number;
+      excessQty?: number;
+      reasonCode?: string;
+      lineNote?: string;
+      followUpNote?: string;
+    }[];
+  }
+) {
+  return apiPost<{ success?: boolean; data?: any; receiveMode?: string }>(
+    `/api/v1/inventory/dispatches/${dispatchId}/receive-session/confirm`,
+    body ?? {}
+  );
+}
+
+export async function staffCancelDispatchReceiveSession(dispatchId: number | string) {
+  return apiPost<{ success?: boolean; data?: any }>(
+    `/api/v1/inventory/dispatches/${dispatchId}/receive-session/cancel`,
+    {}
   );
 }
 
@@ -708,9 +906,12 @@ export type StockRequestProductsPagination = {
 };
 
 // ========== Staff Branch POS / Sales (Phase 5B) ==========
-/** GET /api/v1/pos/products?branchId= – products with variants, stock, and location price for POS */
-export async function staffPosProducts(branchId: string) {
-  const res = await apiGet<{ success?: boolean; data?: any[] }>(`/api/v1/pos/products?branchId=${branchId}`);
+/** GET /api/v1/pos/products?branchId=&q= – products with variants, stock, and location price for POS */
+export async function staffPosProducts(branchId: string, q?: string) {
+  const params = new URLSearchParams();
+  params.set("branchId", branchId);
+  if (q != null && String(q).trim()) params.set("q", String(q).trim());
+  const res = await apiGet<{ success?: boolean; data?: any[] }>(`/api/v1/pos/products?${params}`);
   return Array.isArray(res?.data) ? res.data : [];
 }
 
@@ -738,6 +939,8 @@ export async function staffPosSale(body: {
   branchId: number;
   items: { productId: number; variantId?: number; quantity: number; price: number; retailDiscountApprovalId?: number }[];
   paymentMethod: string;
+  /** Split tender (optional); when set, backend validates sum against order total. */
+  paymentSplits?: { method: string; amount: number; reference?: string }[];
   discountPercent?: number;
   taxPercent?: number;
   customerId?: number;
@@ -786,6 +989,117 @@ export async function staffOrderCancel(orderId: number, reason?: string) {
   });
 }
 
+/** POST /api/v1/pos/orders/:orderId/cancel — POS-scoped cancel; requires pos.refund on order branch */
+export async function staffPosCancelOrder(orderId: number, reason?: string) {
+  return apiPost<{ success?: boolean; data?: any; message?: string }>(`/api/v1/pos/orders/${orderId}/cancel`, {
+    reason: reason ?? "Refund requested",
+  });
+}
+
+/** GET /api/v1/pos/membership/card?branchId=&code= */
+export async function staffPosMembershipLookup(branchId: string, code: string) {
+  const params = new URLSearchParams();
+  params.set("branchId", branchId);
+  params.set("code", code);
+  const res = await apiGet<{ success?: boolean; data?: any }>(`/api/v1/pos/membership/card?${params}`);
+  return res?.data ?? null;
+}
+
+/** GET /api/v1/pos/membership/resolve?branchId=&code=&customerUserId=&phone= */
+export async function staffPosMembershipResolve(
+  branchId: string,
+  params: { code?: string; customerUserId?: number; phone?: string }
+) {
+  const query = new URLSearchParams();
+  query.set("branchId", branchId);
+  if (params.code) query.set("code", params.code);
+  if (params.customerUserId != null) query.set("customerUserId", String(params.customerUserId));
+  if (params.phone) query.set("phone", params.phone);
+  const res = await apiGet<{ success?: boolean; data?: any }>(`/api/v1/pos/membership/resolve?${query}`);
+  return res?.data ?? null;
+}
+
+/** GET /api/v1/pos/customers/lookup?branchId=&q= */
+export async function staffPosCustomerLookup(branchId: string, q: string) {
+  const params = new URLSearchParams();
+  params.set("branchId", branchId);
+  params.set("q", q);
+  const res = await apiGet<{ success?: boolean; data?: any }>(`/api/v1/pos/customers/lookup?${params}`);
+  return res?.data ?? null;
+}
+
+/** POST /api/v1/pos/customers/ensure */
+export async function staffPosCustomerEnsure(
+  branchId: number,
+  body: { phone?: string; email?: string; displayName?: string }
+) {
+  return apiPost<{ success?: boolean; data?: any; message?: string }>("/api/v1/pos/customers/ensure", {
+    branchId,
+    ...body,
+  });
+}
+
+/** --- POS server carts --- */
+export async function staffPosCartsList(branchId: string) {
+  const res = await apiGet<{ success?: boolean; data?: any[] }>(`/api/v1/pos/carts?branchId=${branchId}`);
+  return Array.isArray(res?.data) ? res.data : [];
+}
+
+export async function staffPosCartCreate(branchId: number, posShiftId?: number | null) {
+  return apiPost<{ success?: boolean; data?: any }>("/api/v1/pos/carts", { branchId, posShiftId: posShiftId ?? undefined });
+}
+
+export async function staffPosCartGet(branchId: string, cartId: number) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`/api/v1/pos/carts/${cartId}?branchId=${branchId}`);
+  return res?.data ?? null;
+}
+
+export async function staffPosCartPatch(branchId: number, cartId: number, body: Record<string, unknown>) {
+  return apiPatch<{ success?: boolean; data?: any }>(`/api/v1/pos/carts/${cartId}`, { branchId, ...body });
+}
+
+export async function staffPosCartAddLine(branchId: number, cartId: number, body: Record<string, unknown>) {
+  return apiPost<{ success?: boolean; data?: any }>(`/api/v1/pos/carts/${cartId}/lines`, { branchId, ...body });
+}
+
+export async function staffPosCartPatchLine(branchId: number, cartId: number, lineId: number, body: Record<string, unknown>) {
+  return apiPatch<{ success?: boolean; data?: any }>(`/api/v1/pos/carts/${cartId}/lines/${lineId}`, { branchId, ...body });
+}
+
+export async function staffPosCartDeleteLine(branchId: number, cartId: number, lineId: number) {
+  return apiDelete<{ success?: boolean; data?: any }>(`/api/v1/pos/carts/${cartId}/lines/${lineId}?branchId=${branchId}`);
+}
+
+export async function staffPosCartHold(branchId: number, cartId: number, version?: number) {
+  return apiPost<{ success?: boolean; data?: any }>(`/api/v1/pos/carts/${cartId}/hold`, { branchId, ...(version != null ? { version } : {}) });
+}
+
+export async function staffPosCartResume(branchId: number, cartId: number, version?: number) {
+  return apiPost<{ success?: boolean; data?: any }>(`/api/v1/pos/carts/${cartId}/resume`, { branchId, ...(version != null ? { version } : {}) });
+}
+
+export async function staffPosCartPreview(branchId: number, cartId: number, body: { discountPercent?: number; taxPercent?: number }) {
+  return apiPost<{ success?: boolean; data?: any }>(`/api/v1/pos/carts/${cartId}/preview`, { branchId, ...body });
+}
+
+export async function staffPosCartFinalize(
+  branchId: number,
+  cartId: number,
+  body: {
+    payments: { method: string; amount: number; reference?: string }[];
+    discountPercent?: number;
+    taxPercent?: number;
+    customerId?: number;
+    notes?: string;
+  }
+) {
+  return apiPost<{ success?: boolean; data?: any }>(`/api/v1/pos/carts/${cartId}/finalize`, { branchId, ...body });
+}
+
+export async function staffPosCartAbandon(branchId: string, cartId: number) {
+  return apiDelete<{ success?: boolean; data?: any }>(`/api/v1/pos/carts/${cartId}?branchId=${branchId}`);
+}
+
 /** POST /api/v1/pos/return – line-item return (branchId, orderId, items: [{ variantId, quantity, reason? }]) */
 export async function staffPosReturn(body: {
   branchId: number;
@@ -793,6 +1107,29 @@ export async function staffPosReturn(body: {
   items: { variantId: number; quantity: number; reason?: string }[];
 }) {
   return apiPost<{ success?: boolean; data?: any; message?: string }>("/api/v1/pos/return", body);
+}
+
+// ========== POS Shift Management ==========
+/** GET /api/v1/pos/shift/current?branchId= – get current open shift */
+export async function staffPosGetCurrentShift(branchId: string) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`/api/v1/pos/shift/current?branchId=${branchId}`);
+  return res?.data ?? null;
+}
+
+/** POST /api/v1/pos/shift/open – open new shift */
+export async function staffPosOpenShift(body: { branchId: number; startingCash: number }) {
+  return apiPost<{ success?: boolean; data?: any; message?: string }>("/api/v1/pos/shift/open", body);
+}
+
+/** POST /api/v1/pos/shift/close/:id – close shift with counted cash */
+export async function staffPosCloseShift(shiftId: number, body: { closingCash: number; managerOverrideReason?: string }) {
+  return apiPost<{ success?: boolean; data?: any; message?: string }>(`/api/v1/pos/shift/close/${shiftId}`, body);
+}
+
+/** GET /api/v1/pos/shift/:id/z-report – get Z-report for shift */
+export async function staffPosGetZReport(shiftId: number) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`/api/v1/pos/shift/${shiftId}/z-report`);
+  return res?.data ?? null;
 }
 
 // ========== Staff Branch Clinic Services / Appointments (Phase 5C) ==========
@@ -1815,6 +2152,24 @@ export async function staffClinicDoctors(branchId: string): Promise<{ id: number
   }
 }
 
+/** GET /api/v1/clinic/branches/:branchId/doctors-enriched – enriched doctor list for surgeries */
+export async function staffClinicDoctorsEnriched(
+  branchId: string,
+  opts?: { limit?: number }
+): Promise<{ items: any[] }> {
+  try {
+    const params = new URLSearchParams();
+    if (opts?.limit) params.set("limit", String(opts.limit));
+    const res = await apiGet<{ success?: boolean; data?: any }>(
+      `${clinicBase(branchId)}/doctors-enriched?${params}`
+    );
+    const data = res?.data ?? {};
+    return { items: Array.isArray(data.items) ? data.items : Array.isArray(data) ? data : [] };
+  } catch {
+    return { items: [] };
+  }
+}
+
 // --- Staff Doctor Management (Enterprise) ---
 export async function staffDoctorsSummary(branchId: string) {
   const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/doctors/summary`);
@@ -2388,6 +2743,17 @@ export async function staffClinicItemStock(branchId: string, params?: { itemId?:
     return Array.isArray(res?.data) ? res.data : [];
   } catch {
     return [];
+  }
+}
+
+export async function staffClinicCatalogItemById(branchId: string, itemId: string | number) {
+  try {
+    const res = await apiGet<{ success?: boolean; data?: any }>(
+      `${clinicBase(branchId)}/catalog/items/${encodeURIComponent(String(itemId))}`
+    );
+    return res?.data ?? null;
+  } catch {
+    return null;
   }
 }
 
@@ -4269,6 +4635,88 @@ export async function staffClinicPrescriptionOrderLines(branchId: string, prescr
 }
 
 // ========== Vaccinations ==========
+export async function staffClinicVaccinationDashboard(branchId: string) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/vaccinations/dashboard`);
+  return res?.data ?? { summary: {}, recentRecords: [] };
+}
+
+export async function staffClinicVaccinationReminders(
+  branchId: string,
+  params?: { status?: string; from?: string; to?: string; overdueOnly?: boolean; petId?: number }
+) {
+  const q = new URLSearchParams();
+  if (params?.status) q.set("status", String(params.status));
+  if (params?.from) q.set("from", String(params.from));
+  if (params?.to) q.set("to", String(params.to));
+  if (params?.overdueOnly) q.set("overdueOnly", "true");
+  if (params?.petId != null) q.set("petId", String(params.petId));
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/vaccinations/reminders${q.toString() ? `?${q}` : ""}`
+  );
+  return res?.data ?? { branchId: Number(branchId), orgId: null, items: [] };
+}
+
+export async function staffClinicVaccineTypes(branchId: string, params?: { search?: string; q?: string; limit?: number }) {
+  const q = new URLSearchParams();
+  const search = params?.search ?? params?.q;
+  if (search) q.set("search", search);
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  const res = await apiGet<{ success?: boolean; data?: { items: any[] } }>(`${clinicBase(branchId)}/vaccine-types${q.toString() ? `?${q}` : ""}`);
+  return res?.data?.items ?? [];
+}
+
+export async function staffClinicVaccineTypesList(branchId: string, params?: { search?: string; q?: string; limit?: number }) {
+  return staffClinicVaccineTypes(branchId, params);
+}
+
+export async function staffClinicVaccineInventoryMappings(branchId: string) {
+  const res = await apiGet<{ success?: boolean; data?: { items?: any[]; branchId?: number; orgId?: number } }>(
+    `${clinicBase(branchId)}/vaccine-inventory-mappings`
+  );
+  return res?.data ?? { items: [], branchId: Number(branchId), orgId: null };
+}
+
+export async function staffClinicUpsertVaccineInventoryMapping(
+  branchId: string,
+  vaccineTypeId: number,
+  body: {
+    clinicalItemId: number;
+    clinicalItemVariantId?: number | null;
+    isActive?: boolean;
+    notes?: string | null;
+  }
+) {
+  const res = await apiPut<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/vaccine-inventory-mappings/${vaccineTypeId}`,
+    body
+  );
+  return res?.data ?? null;
+}
+
+export async function staffClinicVaccineStockCandidates(
+  branchId: string,
+  vaccineTypeId: number,
+  params?: { includeExpired?: boolean; includeZeroStock?: boolean; limit?: number }
+) {
+  const q = new URLSearchParams();
+  q.set("vaccineTypeId", String(vaccineTypeId));
+  if (params?.includeExpired) q.set("includeExpired", "true");
+  if (params?.includeZeroStock) q.set("includeZeroStock", "true");
+  if (params?.limit != null) q.set("limit", String(params.limit));
+  const res = await apiGet<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/vaccinations/stock-candidates?${q.toString()}`);
+  const payload = (res as any)?.data?.data ?? (res as any)?.data ?? res;
+  return {
+    mapping: payload?.mapping ?? { status: "UNMAPPED", vaccineTypeId, matchStrategy: "none" },
+    items: Array.isArray(payload?.items) ? payload.items : [],
+    debug: payload?.debug,
+  };
+}
+
+export async function staffClinicVaccinationBillingOptions(branchId: string) {
+  const res = await apiGet<{ success?: boolean; data?: { services?: any[] } }>(`${clinicBase(branchId)}/vaccinations/billing-options`);
+  return res?.data?.services ?? [];
+}
+
 export async function staffClinicVaccinationsList(branchId: string, petId: number) {
   const res = await apiGet<{ success?: boolean; data?: { vaccinations: any[] } }>(`${clinicBase(branchId)}/patients/${petId}/vaccinations`);
   return res?.data?.vaccinations ?? [];
@@ -4281,6 +4729,69 @@ export async function staffClinicVaccinationsNextDue(branchId: string, petId: nu
 
 export async function staffClinicVaccinationRecord(branchId: string, body: { petId: number; vaccineTypeId: number; administeredAt?: string; nextDueDate?: string; batchNumber?: string; manufacturer?: string; vetClinic?: string; notes?: string }) {
   const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/vaccinations`, body);
+  return res?.data ?? null;
+}
+
+export async function staffClinicAdministerVaccination(
+  branchId: string,
+  body: {
+    petId: number;
+    vaccineTypeId: number;
+    batchId: number;
+    idempotencyKey?: string;
+    administeredAt?: string;
+    nextDueDate?: string;
+    notes?: string;
+    createBilling?: boolean;
+    visitId?: number;
+    appointmentId?: number;
+    serviceId?: number;
+    pricingVariantId?: number;
+    unitPrice?: number;
+    quantity?: number;
+    discountAmount?: number;
+    billingNotes?: string;
+  }
+) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(`${clinicBase(branchId)}/vaccinations/administer`, body);
+  return res?.data ?? null;
+}
+
+export async function staffClinicCorrectVaccination(
+  branchId: string,
+  vaccinationId: number,
+  body: {
+    correctionReason: string;
+    administeredAt?: string;
+    nextDueDate?: string | null;
+    notes?: string | null;
+    manufacturer?: string | null;
+    batchNumber?: string | null;
+  }
+) {
+  const res = await apiPatch<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/vaccinations/${vaccinationId}/correct`,
+    body
+  );
+  return res?.data ?? null;
+}
+
+export async function staffClinicVoidVaccination(
+  branchId: string,
+  vaccinationId: number,
+  body: { voidReason: string }
+) {
+  const res = await apiPost<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/vaccinations/${vaccinationId}/void`,
+    body
+  );
+  return res?.data ?? null;
+}
+
+export async function staffClinicVaccinationAudit(branchId: string, vaccinationId: number) {
+  const res = await apiGet<{ success?: boolean; data?: any }>(
+    `${clinicBase(branchId)}/vaccinations/${vaccinationId}/audit`
+  );
   return res?.data ?? null;
 }
 
@@ -5112,11 +5623,32 @@ export async function warehouseOperationsInbound(
 
 export async function warehouseOperationsRequisitions(
   warehouseId: number,
-  opts?: { page?: number; limit?: number }
+  opts?: {
+    page?: number;
+    limit?: number;
+    q?: string;
+    status?: string;
+    branchId?: number;
+    dateFrom?: string;
+    dateTo?: string;
+    sortBy?: string;
+    sortDir?: "asc" | "desc";
+    hasDispatch?: "true" | "false";
+    urgency?: string;
+  }
 ): Promise<{ items: unknown[]; pagination?: Record<string, unknown> }> {
   const q = new URLSearchParams();
   if (opts?.page != null) q.set("page", String(opts.page));
   if (opts?.limit != null) q.set("limit", String(opts.limit));
+  if (opts?.q) q.set("q", opts.q);
+  if (opts?.status) q.set("status", opts.status);
+  if (opts?.branchId != null) q.set("branchId", String(opts.branchId));
+  if (opts?.dateFrom) q.set("dateFrom", opts.dateFrom);
+  if (opts?.dateTo) q.set("dateTo", opts.dateTo);
+  if (opts?.sortBy) q.set("sortBy", opts.sortBy);
+  if (opts?.sortDir) q.set("sortDir", opts.sortDir);
+  if (opts?.hasDispatch) q.set("hasDispatch", opts.hasDispatch);
+  if (opts?.urgency) q.set("urgency", opts.urgency);
   const res = await apiGet<{ success?: boolean; data?: unknown[]; pagination?: Record<string, unknown> }>(
     `/api/v1/warehouse/${warehouseId}/operations/requisitions${q.toString() ? `?${q}` : ""}`
   );
@@ -5259,20 +5791,86 @@ export async function grnGet(id: number, orgId?: number): Promise<unknown | null
   return res?.data ?? null;
 }
 
+export type GrnListPagination = {
+  page: number;
+  limit: number;
+  total: number;
+  totalPages: number;
+};
+
+/** GET /api/v1/grn — branch-scoped list (tab filters, date range, pagination). */
+export async function grnList(params: {
+  orgId: number;
+  branchId?: number;
+  status?: string;
+  sessionStatus?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  page?: number;
+  limit?: number;
+}): Promise<{ items: unknown[]; pagination: GrnListPagination }> {
+  const q = new URLSearchParams();
+  q.set("orgId", String(params.orgId));
+  if (params.branchId != null) q.set("branchId", String(params.branchId));
+  if (params.status) q.set("status", params.status);
+  if (params.sessionStatus) q.set("sessionStatus", params.sessionStatus);
+  if (params.dateFrom) q.set("dateFrom", params.dateFrom);
+  if (params.dateTo) q.set("dateTo", params.dateTo);
+  q.set("page", String(params.page ?? 1));
+  q.set("limit", String(params.limit ?? 20));
+  const res = await apiGet<{ success?: boolean; data?: unknown[]; pagination?: Partial<GrnListPagination> }>(
+    `/api/v1/grn?${q.toString()}`
+  );
+  const p = res?.pagination;
+  const pagination: GrnListPagination = {
+    page: Number(p?.page) || 1,
+    limit: Number(p?.limit) || 20,
+    total: Number(p?.total) || 0,
+    totalPages: Number(p?.totalPages) || 0,
+  };
+  return { items: Array.isArray(res?.data) ? res.data : [], pagination };
+}
+
 /** Same-origin paths for browser print preview (iframe); auth via cookies. */
 export function grnPrintUrl(grnId: number, kind: "grn" | "discrepancy" = "grn"): string {
   return kind === "discrepancy" ? `/api/v1/grn/${grnId}/print/discrepancy` : `/api/v1/grn/${grnId}/print`;
 }
 
+/** Inventory module aliases — same HTML as GRN print where kind is `grn`. */
+export function vendorReceiptPrintUrl(grnId: number, kind: "grn" | "delivery-note"): string {
+  const base = `/api/v1/inventory/vendor-receipts/${grnId}/print`;
+  return kind === "delivery-note" ? `${base}/delivery-note` : `${base}/grn`;
+}
+
 export function dispatchPrintUrl(
   dispatchId: number,
-  kind: "challan" | "branch-confirmation" | "discrepancy" | "branch-worksheet"
+  kind:
+    | "challan"
+    | "delivery-note"
+    | "branch-receiving-record"
+    | "branch-confirmation"
+    | "discrepancy"
+    | "branch-worksheet"
 ): string {
   const base = `/api/v1/inventory/dispatches/${dispatchId}/print`;
   if (kind === "challan") return `${base}/challan`;
+  if (kind === "delivery-note") return `${base}/delivery-note`;
+  if (kind === "branch-receiving-record") return `${base}/branch-receiving-record`;
   if (kind === "branch-confirmation") return `${base}/branch-confirmation`;
   if (kind === "branch-worksheet") return `${base}/branch-worksheet`;
   return `${base}/discrepancy`;
+}
+
+/** POST — mark dispatch IN_TRANSIT (stock leaves warehouse location). */
+export async function dispatchSend(dispatchId: number, body?: { orgId?: number }) {
+  const q = body?.orgId ? `?orgId=${body.orgId}` : "";
+  const { orgId: _o, ...rest } = body || {};
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(
+    `/api/v1/inventory/dispatches/${dispatchId}/send${q}`,
+    rest
+  );
+  if (!res?.success && (res as { message?: string })?.message) throw new Error((res as { message: string }).message);
+  return (res as { data?: unknown })?.data ?? res;
 }
 
 export function purchaseOrderPrintUrl(poId: number, kind: "po" | "worksheet" = "po"): string {
@@ -5589,10 +6187,34 @@ export async function allocationPlanCancel(id: number, orgId?: number, reason?: 
   return res?.data ?? res;
 }
 
-export async function pickListsList(params?: { orgId?: number; mine?: boolean; status?: string }): Promise<{ items: unknown[]; pagination?: unknown }> {
+/** Parent plan id: creates supplementary plan from open backorder remaining qty and runs FEFO. */
+export async function allocationPlanSupplementaryFromBackorders(
+  parentPlanId: number,
+  body: { fromLocationId: number; orgId?: number }
+): Promise<unknown> {
+  const q = body.orgId ? `?orgId=${body.orgId}` : "";
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(
+    `/api/v1/allocation-plans/${parentPlanId}/supplementary-from-backorders${q}`,
+    body
+  );
+  if (!res?.success && res?.message) throw new Error(res.message);
+  return res?.data ?? res;
+}
+
+export async function pickListsList(params?: {
+  orgId?: number;
+  /** Only lists explicitly assigned to the current user. */
+  mine?: boolean;
+  /** Unclaimed (null assignee) or assigned to you — needed for allocation-plan picks that start unassigned. */
+  workQueue?: boolean;
+  branchId?: number;
+  status?: string;
+}): Promise<{ items: unknown[]; pagination?: unknown }> {
   const q = new URLSearchParams();
   if (params?.orgId) q.set("orgId", String(params.orgId));
   if (params?.mine) q.set("mine", "1");
+  if (params?.workQueue) q.set("workQueue", "1");
+  if (params?.branchId != null && Number.isFinite(Number(params.branchId))) q.set("branchId", String(params.branchId));
   if (params?.status) q.set("status", params.status);
   const res = await apiGet<{ success?: boolean; data?: unknown[]; pagination?: unknown }>(
     `/api/v1/pick-lists${q.toString() ? `?${q}` : ""}`
@@ -5620,9 +6242,25 @@ export async function pickListStart(id: number, orgId?: number): Promise<unknown
   return res?.data ?? res;
 }
 
-export async function pickListComplete(id: number, orgId?: number): Promise<unknown> {
+export async function pickListComplete(
+  id: number,
+  orgId?: number,
+  body?: { lines?: Array<{ lineId: number; quantityPicked: number; id?: number; pickedQty?: number }> }
+): Promise<unknown> {
   const q = orgId ? `?orgId=${orgId}` : "";
-  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(`/api/v1/pick-lists/${id}/complete${q}`, {});
+  const payload =
+    body?.lines?.length && Array.isArray(body.lines)
+      ? {
+          lines: body.lines.map((l) => ({
+            lineId: l.lineId ?? l.id,
+            quantityPicked: l.quantityPicked ?? l.pickedQty,
+          })),
+        }
+      : {};
+  const res = await apiPost<{ success?: boolean; data?: unknown; message?: string }>(
+    `/api/v1/pick-lists/${id}/complete${q}`,
+    payload
+  );
   if (!res?.success && res?.message) throw new Error(res.message);
   return res?.data ?? res;
 }

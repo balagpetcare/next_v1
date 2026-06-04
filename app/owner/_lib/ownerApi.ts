@@ -1614,11 +1614,68 @@ export async function ownerClinicItemsList(
   if (params?.page != null) q.set("page", String(params.page));
   if (params?.limit != null) q.set("limit", String(params.limit));
   const query = q.toString();
-  const res = await ownerGet<{ success?: boolean; data?: { items?: unknown[]; pagination?: { page: number; limit: number; total: number; totalPages: number } } }>(
+  const res = await ownerGet<unknown>(
     `/api/v1/owner/clinic/branches/${branchId}/items${query ? `?${query}` : ""}`
   );
-  const data = (res as { data?: { items?: unknown[]; pagination?: { page: number; limit: number; total: number; totalPages: number } } })?.data;
-  return { items: data?.items ?? [], pagination: data?.pagination ?? { page: 1, limit: 20, total: 0, totalPages: 0 } };
+  const response = res as any;
+  const data = response?.data?.data ?? response?.data ?? response;
+  const nestedData = data?.data ?? null;
+  const items = Array.isArray(data?.items)
+    ? data.items
+    : Array.isArray(nestedData?.items)
+      ? nestedData.items
+      : Array.isArray(response?.items)
+        ? response.items
+        : Array.isArray(data)
+          ? data
+          : [];
+  const pagination = data?.pagination ?? nestedData?.pagination ?? response?.pagination ?? null;
+  return {
+    items,
+    pagination: pagination ?? { page: 1, limit: 20, total: 0, totalPages: 0 },
+  };
+}
+
+export async function ownerClinicVaccineInventoryMappings(
+  branchId: string | number
+): Promise<{ branchId: number; orgId: number | null; items: unknown[] }> {
+  const res = await ownerGet<unknown>(
+    `/api/v1/owner/clinic/branches/${branchId}/vaccine-inventory-mappings`
+  );
+  const response = res as any;
+  const data = response?.data?.data ?? response?.data ?? response;
+  const nestedData = data?.data ?? null;
+  const items = Array.isArray(data?.items)
+    ? data.items
+    : Array.isArray(nestedData?.items)
+      ? nestedData.items
+      : Array.isArray(response?.items)
+        ? response.items
+        : Array.isArray(data)
+          ? data
+          : [];
+  return {
+    branchId: Number(data?.branchId ?? nestedData?.branchId ?? response?.branchId ?? branchId),
+    orgId: data?.orgId ?? nestedData?.orgId ?? response?.orgId ?? null,
+    items,
+  };
+}
+
+export async function ownerClinicUpsertVaccineInventoryMapping(
+  branchId: string | number,
+  vaccineTypeId: string | number,
+  body: {
+    clinicalItemId: number;
+    clinicalItemVariantId?: number | null;
+    isActive?: boolean;
+    notes?: string | null;
+  }
+): Promise<unknown> {
+  const res = await ownerPut<{ success?: boolean; data?: unknown }>(
+    `/api/v1/owner/clinic/branches/${branchId}/vaccine-inventory-mappings/${vaccineTypeId}`,
+    body
+  );
+  return (res as { data?: unknown })?.data ?? null;
 }
 
 export async function ownerClinicItemSearch(
@@ -1630,17 +1687,20 @@ export async function ownerClinicItemSearch(
   if (params?.domainType) q.set("domainType", params.domainType);
   if (params?.limit != null) q.set("limit", String(params.limit));
   const query = q.toString();
-  const res = await ownerGet<{ success?: boolean; data?: unknown[] }>(
+  const res = await ownerGet<unknown>(
     `/api/v1/owner/clinic/branches/${branchId}/items/search${query ? `?${query}` : ""}`
   );
-  return ((res as { data?: unknown[] })?.data ?? []) as unknown[];
+  const response = res as any;
+  const data = response?.data?.data ?? response?.data ?? response;
+  return (Array.isArray(data) ? data : Array.isArray(response?.items) ? response.items : []) as unknown[];
 }
 
 export async function ownerClinicItemById(branchId: string | number, itemId: string | number): Promise<Record<string, unknown> | null> {
-  const res = await ownerGet<{ success?: boolean; data?: unknown }>(
+  const res = await ownerGet<unknown>(
     `/api/v1/owner/clinic/branches/${branchId}/items/${itemId}`
   );
-  return asJsonRecord((res as { data?: unknown })?.data);
+  const response = res as any;
+  return asJsonRecord(response?.data?.data ?? response?.data ?? response);
 }
 
 export async function ownerClinicItemCreate(branchId: string | number, body: Record<string, unknown>): Promise<unknown> {
@@ -2841,8 +2901,10 @@ export async function closeWarehouseTransferOrder(id: number) {
 }
 
 // ========== Phase 4: Inventory Analytics ==========
-function buildQuery(params: Record<string, string | number | undefined | null>): string {
-  const entries = Object.entries(params).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)]);
+function buildQuery(params: Record<string, string | number | boolean | undefined | null>): string {
+  const entries = Object.entries(params)
+    .filter(([, v]) => v != null && v !== "")
+    .map(([k, v]) => [k, typeof v === "boolean" ? (v ? "true" : "false") : String(v)]);
   return entries.length ? "?" + new URLSearchParams(entries).toString() : "";
 }
 
@@ -2878,6 +2940,52 @@ export async function acceptNetworkRecommendation(
 
 export async function getNetworkBalanceSnapshot(orgId: number, branchId?: number) {
   return ownerGet(`/api/v1/network-balance/snapshots/latest${buildQuery({ orgId, branchId })}`);
+}
+
+/** Branch transfer shortage → PO/GRN pipeline (procurement demand lines). */
+export async function listProcurementDemands(params: {
+  orgId: number;
+  status?: string;
+  stockRequestId?: number;
+  page?: number;
+  limit?: number;
+}) {
+  return ownerGet(`/api/v1/procurement-demand${buildQuery(params)}`);
+}
+
+export async function getProcurementDemand(id: number, orgId: number) {
+  return ownerGet(`/api/v1/procurement-demand/${id}?orgId=${encodeURIComponent(String(orgId))}`);
+}
+
+export async function getStockRequest(id: number | string) {
+  return ownerGet<{
+    data?: {
+      id: number;
+      status: string;
+      requestIntent?: string;
+      branchId?: number;
+      orgId?: number;
+      items?: Array<{
+        id: number;
+        productId: number;
+        variantId: number;
+        requestedQty: number;
+        fulfilledQty: number;
+        cancelledQty: number;
+        lineKind?: string;
+        product?: { id: number; name?: string };
+        variant?: { id: number; sku?: string; title?: string };
+      }>;
+    };
+  }>(`/api/v1/stock-requests/${encodeURIComponent(String(id))}`);
+}
+
+export async function linkProcurementDemandPoLine(id: number, body: { orgId: number; purchaseOrderLineId: number }) {
+  return ownerPost(`/api/v1/procurement-demand/${id}/link-po-line`, body);
+}
+
+export async function cancelProcurementDemandLine(id: number, body: { orgId: number; reason?: string }) {
+  return ownerPost(`/api/v1/procurement-demand/${id}/cancel`, body);
 }
 
 export async function listQuarantineStock(orgId: number) {

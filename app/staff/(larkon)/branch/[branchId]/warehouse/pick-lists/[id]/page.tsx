@@ -9,6 +9,9 @@ import {
   pickListHandoff,
   pickListStart,
   pickListUpdateLine,
+  staffInventoryLocations,
+  dispatchSend,
+  dispatchPrintUrl,
 } from "@/lib/api";
 import StaffBranchLayout from "@/src/components/branch/StaffBranchLayout";
 import { useBranchContext } from "@/lib/useBranchContext";
@@ -53,6 +56,7 @@ export default function StaffPickListDetailPage() {
   const [error, setError] = useState("");
   const [acting, setActing] = useState(false);
   const [toLoc, setToLoc] = useState("");
+  const [destLocations, setDestLocations] = useState<Array<{ id: number; name?: string; type?: string }>>([]);
   const [lineQty, setLineQty] = useState<Record<number, string>>({});
   const [scanInput, setScanInput] = useState("");
   const [highlightLineId, setHighlightLineId] = useState<number | null>(null);
@@ -87,6 +91,49 @@ export default function StaffPickListDetailPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id, caps.canViewPickLists]);
 
+  useEffect(() => {
+    setToLoc("");
+  }, [pick?.id]);
+
+  useEffect(() => {
+    const bid =
+      pick?.allocationPlan?.stockRequest?.branchId ?? pick?.allocationPlan?.medicineRequisition?.branchId;
+    const orgId = pick?.orgId;
+    if (bid == null || orgId == null) {
+      setDestLocations([]);
+      return;
+    }
+    let cancelled = false;
+    staffInventoryLocations({ orgId: Number(orgId) })
+      .then((all) => {
+        if (cancelled) return;
+        const filtered = (all || []).filter(
+          (l: { branch?: { id?: number }; isActive?: boolean }) =>
+            l.branch != null && String(l.branch.id) === String(bid) && l.isActive !== false
+        );
+        const mapped = filtered.map((l: { id: number; name?: string; type?: string }) => ({
+          id: l.id,
+          name: l.name,
+          type: l.type,
+        }));
+        setDestLocations(mapped);
+        if (mapped.length === 1) {
+          setToLoc(String(mapped[0].id));
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setDestLocations([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    pick?.orgId,
+    pick?.allocationPlan?.stockRequest?.branchId,
+    pick?.allocationPlan?.medicineRequisition?.branchId,
+    pick?.id,
+  ]);
+
   const zoneGroups = useMemo(() => {
     const lines = (pick?.lines || []) as PickLine[];
     const m = new Map<string, PickLine[]>();
@@ -116,7 +163,14 @@ export default function StaffPickListDetailPage() {
     setActing(true);
     setError("");
     try {
-      await pickListComplete(id);
+      const lines = ((pick?.lines || []) as PickLine[]).map((l) => ({
+        lineId: l.id,
+        quantityPicked: Math.min(
+          l.quantityToPick ?? 0,
+          Math.max(0, parseInt(String(lineQty[l.id] ?? "0"), 10))
+        ),
+      }));
+      await pickListComplete(id, (pick as { orgId?: number })?.orgId, { lines });
       await load();
     } catch (e: any) {
       setError(e?.message || "Failed");
@@ -160,17 +214,31 @@ export default function StaffPickListDetailPage() {
   }
 
   async function handleHandoff() {
-    if (!toLoc.trim()) {
-      setError("Enter destination location ID");
+    const trimmed = toLoc.trim();
+    if (!trimmed || !Number.isFinite(Number(trimmed))) {
+      setError("Select the destination receive location for the requester branch.");
       return;
     }
     setActing(true);
     setError("");
     try {
-      await pickListHandoff(id, { toLocationId: Number(toLoc) });
+      await pickListHandoff(id, { toLocationId: Number(trimmed) });
       await load();
     } catch (e: any) {
       setError(e?.message || "Failed");
+    } finally {
+      setActing(false);
+    }
+  }
+
+  async function handleSendDispatch(dispatchDbId: number) {
+    setActing(true);
+    setError("");
+    try {
+      await dispatchSend(dispatchDbId);
+      await load();
+    } catch (e: any) {
+      setError(e?.message || "Failed to send dispatch");
     } finally {
       setActing(false);
     }
@@ -248,17 +316,40 @@ export default function StaffPickListDetailPage() {
             </button>
           )}
           {st === "COMPLETED" && !pick.dispatch && (
-            <div className="d-flex flex-wrap align-items-end gap-2">
-              <input
-                className="form-control form-control-sm"
-                placeholder="To location ID"
-                style={{ maxWidth: 160 }}
-                value={toLoc}
-                onChange={(e) => setToLoc(e.target.value)}
-              />
-              <button className="btn btn-sm btn-dark" disabled={acting} onClick={handleHandoff}>
-                Handoff dispatch
-              </button>
+            <div className="d-flex flex-column align-items-start gap-2">
+              <div className="d-flex flex-wrap align-items-end gap-2">
+                <select
+                  className="form-select form-select-sm"
+                  style={{ minWidth: 220, maxWidth: 360 }}
+                  value={toLoc}
+                  onChange={(e) => setToLoc(e.target.value)}
+                  aria-label="Destination inventory location"
+                >
+                  <option value="">Select receive location…</option>
+                  {destLocations.map((l) => (
+                    <option key={l.id} value={String(l.id)}>
+                      {l.name ?? `Location ${l.id}`}
+                      {l.type ? ` (${l.type})` : ""}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  className="btn btn-sm btn-dark"
+                  disabled={acting || !toLoc.trim()}
+                  title={!toLoc.trim() ? "Choose destination location" : ""}
+                  onClick={handleHandoff}
+                >
+                  Handoff dispatch
+                </button>
+              </div>
+              {destLocations.length === 0 &&
+                (pick.allocationPlan?.stockRequest?.branchId != null ||
+                  pick.allocationPlan?.medicineRequisition?.branchId != null) && (
+                  <span className="small text-danger">
+                    No active inventory locations found for the requester branch in this organization. Create at least one
+                    active location for that branch (Owner / branch setup), then refresh.
+                  </span>
+                )}
             </div>
           )}
         </div>
@@ -371,8 +462,67 @@ export default function StaffPickListDetailPage() {
       </div>
 
       {pick.dispatch && (
-        <div className="alert alert-success mt-3">
-          Linked dispatch #{pick.dispatch.id} — {pick.dispatch.status}
+        <div className="card border mt-3">
+          <div className="card-body">
+            <h6 className="card-title mb-2">Dispatch #{pick.dispatch.id}</h6>
+            <p className="small text-muted mb-2">
+              Status: <span className="badge bg-secondary">{pick.dispatch.status}</span>
+              {pick.dispatch.status === "IN_TRANSIT" && (
+                <span className="ms-2">Branch can receive in Receive Center.</span>
+              )}
+              {(pick.dispatch.status === "CREATED" || pick.dispatch.status === "PACKED") && (
+                <span className="ms-2">
+                  Send dispatch to move stock out and mark <strong>IN_TRANSIT</strong> before the branch can receive.
+                </span>
+              )}
+            </p>
+            {(pick.dispatch.status === "CREATED" || pick.dispatch.status === "PACKED") && (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm me-2"
+                disabled={acting}
+                onClick={() => handleSendDispatch(pick.dispatch.id)}
+              >
+                Send dispatch (mark in transit)
+              </button>
+            )}
+            {(caps.canViewPickLists || caps.canViewOperations) && (
+              <div className="d-flex flex-wrap gap-2 mt-2">
+                <a
+                  href={dispatchPrintUrl(pick.dispatch.id, "challan")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-outline-secondary btn-sm"
+                >
+                  Challan
+                </a>
+                <a
+                  href={dispatchPrintUrl(pick.dispatch.id, "delivery-note")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-outline-secondary btn-sm"
+                >
+                  Delivery note (carrier)
+                </a>
+                <a
+                  href={dispatchPrintUrl(pick.dispatch.id, "branch-receiving-record")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-outline-secondary btn-sm"
+                >
+                  Branch file copy
+                </a>
+                <a
+                  href={dispatchPrintUrl(pick.dispatch.id, "branch-worksheet")}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="btn btn-outline-secondary btn-sm"
+                >
+                  Receive worksheet
+                </a>
+              </div>
+            )}
+          </div>
         </div>
       )}
     </StaffBranchLayout>

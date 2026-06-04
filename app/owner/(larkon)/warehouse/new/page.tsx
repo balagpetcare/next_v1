@@ -66,7 +66,7 @@ export default function OwnerWarehouseNewPage() {
         if (cancelled) return;
         const orgRows = pickArray(orgsRes) as { id?: number }[];
         const oid = orgRows[0]?.id != null ? Number(orgRows[0].id) : null;
-        setOrgId(Number.isFinite(oid) && oid > 0 ? oid : null);
+        setOrgId(oid != null && Number.isFinite(oid) && oid > 0 ? oid : null);
       } catch {
         if (!cancelled) setOrgId(null);
       } finally {
