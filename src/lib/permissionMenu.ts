@@ -1129,6 +1129,7 @@ const REGISTRY: Record<AppKey, MenuItem[]> = {
         { id: "admin.system", label: "System Hub", href: "/admin/system", required: [] },
         { id: "admin.health", label: "Health", href: "/admin/health", required: [] },
         { id: "admin.systemIntegrations", label: "Integrations", href: "/admin/system/integrations", required: [] },
+        { id: "admin.smsCenter", label: "SMS Center", href: "/admin/sms-center", required: [] },
         { id: "admin.systemSessions", label: "Active Sessions", href: "/admin/system/sessions", required: [] },
         { id: "admin.settings", label: "Settings", href: "/admin/settings", required: [] },
         { id: "admin.analytics", label: "Analytics", href: "/admin/analytics", required: [] },

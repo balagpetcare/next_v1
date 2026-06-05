@@ -141,6 +141,7 @@ export const IMPLEMENTED_ADMIN_HREFS: Set<string> = new Set([
   '/admin/system',
   '/admin/health',
   '/admin/system/integrations',
+  '/admin/sms-center',
   '/admin/system/sessions',
   '/admin/settings',
   '/admin/analytics',
