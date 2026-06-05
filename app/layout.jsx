@@ -3,11 +3,17 @@ import "./globals.css";
 import "./font.css";
 import PluginInit from "@/src/helper/PluginInit";
 import { I18nWrapper } from "@/app/(public)/_lib/I18nWrapper";
+import AnalyticsShell from "@/src/lib/analytics/components/AnalyticsShell";
+import { buildPageMetadata } from "@/src/shared/seo/metadata";
 
-export const metadata = {
-  title: "WPA — Pet Smart Solution",
-  description: "World Pet Association (WPA) — Pet Smart Solution. Multi-panel web for pet care and management.",
-};
+const siteMode = process.env.SITE_MODE || "owner";
+
+export const metadata = buildPageMetadata({
+  title: siteMode === "owner" || siteMode === "producer" ? undefined : "WPA Panel",
+  description:
+    "World Pet Association (WPA) — Pet Smart Solution. Multi-panel web for pet care and management.",
+  noIndex: siteMode !== "owner" && siteMode !== "producer",
+});
 
 export default async function RootLayout({ children }) {
   const cookieStore = await cookies();
@@ -39,6 +45,7 @@ export default async function RootLayout({ children }) {
         {/* owner-panel.css quarantined to _quarantine_cleanup/2026-02-16/wowdash_all_dashboards/public/assets/css/ */}
       </head>
       <body>
+        <AnalyticsShell />
         <I18nWrapper initialLocale={lang}>
           {children}
         </I18nWrapper>

@@ -1194,6 +1194,7 @@ export type CampaignAnalyticsData = {
   bookingsByArea?: Array<{
     bdAreaId: number | null;
     areaName: string;
+    coverageZoneName?: string | null;
     totalBookings: number;
     totalCats: number;
     totalRevenue: number;

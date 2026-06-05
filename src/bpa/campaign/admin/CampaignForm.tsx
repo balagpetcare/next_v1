@@ -321,7 +321,7 @@ export default function CampaignForm({ initial, submitLabel = 'Save', onSubmit, 
               <label className="form-check-label" htmlFor="sw-venue">Pay At Venue</label>
             </div>
             <div className="form-check form-switch mb-2">
-              <input className="form-check-input" type="checkbox" role="switch" id="sw-walkin" checked={values.walkInAllowed ?? values.allowWalkIns} onChange={(e) => { patch('walkInAllowed', e.target.checked); patch('allowWalkIns', e.target.checked) }} />
+              <input className="form-check-input" type="checkbox" role="switch" id="sw-walkin" checked={values.allowWalkIns} onChange={(e) => patch('allowWalkIns', e.target.checked)} />
               <label className="form-check-label" htmlFor="sw-walkin">Walk-In</label>
             </div>
           </div>
@@ -429,7 +429,7 @@ export function campaignToFormValues(c: {
   vaccineCost?: number | string | null
   serviceCharge?: number | string | null
   packageFeatures?: string[] | unknown
-  pricing?: { packageFeatures?: string[] }
+  pricing?: { packageFeatures?: string[]; vaccineCost?: number | string | null; serviceCharge?: number | string | null }
   maxPetsPerBooking?: number
   minAdvanceHours?: number
   allowWalkIns?: boolean
@@ -475,7 +475,7 @@ export function campaignToFormValues(c: {
     })(),
     maxPetsPerBooking: c.maxPetsPerBooking ?? 5,
     minAdvanceHours: c.minAdvanceHours ?? 24,
-    allowWalkIns: c.allowWalkIns ?? true,
+    allowWalkIns: c.allowWalkIns ?? cfg?.walkInAllowed ?? true,
     walkInQuotaPercent: c.walkInQuotaPercent ?? 20,
     bookingEnabled: cfg?.bookingEnabled ?? true,
     onlinePaymentEnabled: cfg?.onlinePaymentEnabled ?? false,
