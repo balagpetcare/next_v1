@@ -131,10 +131,40 @@ export type CampaignBookingRow = {
   queueNumber?: string | null;
   checkedInAt?: string | null;
   completedAt?: string | null;
-  location?: { id: number; name: string; address?: string | null };
+  bookingArea?: string | null;
+  coverageZoneName?: string | null;
+  cityCorporation?: string | null;
+  area?: string | null;
+  locationLabel?: string | null;
+  location?: {
+    id?: number;
+    name?: string;
+    address?: string | null;
+    cityCorporation?: string;
+    area?: string;
+    locationLabel?: string;
+  };
   slot?: { startTime?: string; endTime?: string };
   pets?: CampaignPetRow[];
 };
+
+/** Display label for booking location (venue or Dhaka corporation + area). */
+export function formatCampaignBookingLocation(row: CampaignBookingRow): string {
+  if (row.locationLabel?.trim()) return row.locationLabel.trim();
+  if (row.location?.locationLabel?.trim()) return row.location.locationLabel.trim();
+  if (row.location?.name?.trim()) return row.location.name.trim();
+  if (row.cityCorporation && row.area) return `${row.cityCorporation} → ${row.area}`;
+  if (row.location?.cityCorporation && row.location?.area) {
+    return `${row.location.cityCorporation} → ${row.location.area}`;
+  }
+  if (row.area?.trim()) return row.area.trim();
+  if (row.location?.area?.trim()) return row.location.area.trim();
+  if (row.cityCorporation?.trim()) return row.cityCorporation.trim();
+  if (row.location?.cityCorporation?.trim()) return row.location.cityCorporation.trim();
+  if (row.bookingArea?.trim()) return row.bookingArea.trim();
+  if (row.coverageZoneName?.trim()) return row.coverageZoneName.trim();
+  return '—';
+}
 
 export type CampaignQueueItem = {
   queueNumber?: string | null;
@@ -374,18 +404,86 @@ export async function campaignAdminVaccinationStats(id: number): Promise<Vaccina
   return unwrap(res);
 }
 
+export type CampaignBookingListSummary = {
+  totalBookings: number;
+  totalPets: number;
+  filteredBookings: number;
+  filteredPets: number;
+};
+
+export type CampaignBookingFilterOptions = {
+  cityCorporations: string[];
+  areas: string[];
+  coverageZones: string[];
+  bookingModes: string[];
+  paymentStatuses: string[];
+};
+
+export type CampaignBookingListParams = {
+  page?: number;
+  pageSize?: number;
+  status?: string;
+  cityCorporation?: string;
+  area?: string;
+  coverageZone?: string;
+  bookingMode?: string;
+  dateFrom?: string;
+  dateTo?: string;
+  date?: string;
+  ownerName?: string;
+  phone?: string;
+  reference?: string;
+  paymentStatus?: string;
+  petCountMin?: number;
+  petCountMax?: number;
+  locationId?: number;
+};
+
+function appendBookingListParams(sp: URLSearchParams, params?: CampaignBookingListParams) {
+  if (!params) return;
+  if (params.page) sp.set('page', String(params.page));
+  if (params.pageSize) sp.set('pageSize', String(params.pageSize));
+  if (params.status) sp.set('status', params.status);
+  if (params.cityCorporation) sp.set('cityCorporation', params.cityCorporation);
+  if (params.area) sp.set('area', params.area);
+  if (params.coverageZone) sp.set('coverageZone', params.coverageZone);
+  if (params.bookingMode) sp.set('bookingMode', params.bookingMode);
+  if (params.dateFrom) sp.set('dateFrom', params.dateFrom);
+  if (params.dateTo) sp.set('dateTo', params.dateTo);
+  if (params.date) sp.set('date', params.date);
+  if (params.ownerName) sp.set('ownerName', params.ownerName);
+  if (params.phone) sp.set('phone', params.phone);
+  if (params.reference) sp.set('reference', params.reference);
+  if (params.paymentStatus) sp.set('paymentStatus', params.paymentStatus);
+  if (params.petCountMin != null) sp.set('petCountMin', String(params.petCountMin));
+  if (params.petCountMax != null) sp.set('petCountMax', String(params.petCountMax));
+  if (params.locationId) sp.set('locationId', String(params.locationId));
+}
+
 export async function campaignAdminBookings(
   campaignId: number,
-  params?: { page?: number; pageSize?: number; status?: string; date?: string; locationId?: number }
-): Promise<{ items: CampaignBookingRow[]; total: number; page: number; pageSize: number; totalPages: number }> {
+  params?: CampaignBookingListParams
+): Promise<{
+  items: CampaignBookingRow[];
+  total: number;
+  page: number;
+  pageSize: number;
+  totalPages: number;
+  summary?: CampaignBookingListSummary;
+}> {
   const sp = new URLSearchParams();
-  if (params?.page) sp.set("page", String(params.page));
-  if (params?.pageSize) sp.set("pageSize", String(params.pageSize));
-  if (params?.status) sp.set("status", params.status);
-  if (params?.date) sp.set("date", params.date);
-  if (params?.locationId) sp.set("locationId", String(params.locationId));
+  appendBookingListParams(sp, params);
   const qs = sp.toString();
-  return apiGet(`${admin}/campaigns/${campaignId}/bookings${qs ? `?${qs}` : ""}`);
+  return apiGet(`${admin}/campaigns/${campaignId}/bookings${qs ? `?${qs}` : ''}`);
+}
+
+export async function campaignAdminBookingFilterOptions(
+  campaignId: number
+): Promise<CampaignBookingFilterOptions> {
+  const res = await apiGet<{ success: boolean; data: CampaignBookingFilterOptions }>(
+    `${admin}/campaigns/${campaignId}/bookings/filter-options`
+  );
+  return unwrap(res);
 }
 
 export async function campaignAdminLocations(
@@ -1308,12 +1406,10 @@ const exportAccept =
 export async function campaignAdminExportBookings(
   campaignId: number,
   format: CampaignExportFormat,
-  params?: { status?: string; date?: string; locationId?: number }
+  params?: CampaignBookingListParams
 ): Promise<void> {
   const sp = new URLSearchParams({ format });
-  if (params?.status) sp.set("status", params.status);
-  if (params?.date) sp.set("date", params.date);
-  if (params?.locationId) sp.set("locationId", String(params.locationId));
+  appendBookingListParams(sp, params);
   const ext = format === "xlsx" ? "xlsx" : format === "pdf" ? "pdf" : "csv";
   await campaignDownloadBlob(
     `${admin}/campaigns/${campaignId}/bookings/export?${sp}`,
