@@ -116,7 +116,7 @@ export default function StaffPutawayTaskDetailPage() {
     if (task?.grnLineId && orgId) {
       loadPreview();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [task?.id, task?.grnLineId, orgId]);
 
   async function confirm() {

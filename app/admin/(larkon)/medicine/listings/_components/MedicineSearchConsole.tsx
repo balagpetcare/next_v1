@@ -65,7 +65,7 @@ export default function MedicineSearchConsole({
     if (urlHasAdv) return;
     const raw = window.localStorage.getItem(LS_ADV);
     if (raw === "1") setDraft((d) => ({ ...d, advancedOpen: true }));
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- one-time hydrate
+     
   }, []);
 
   const setAdvancedOpen = useCallback(

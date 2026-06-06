@@ -84,7 +84,7 @@ export default function StaffDeliveryDetailPage() {
     }
     if (!assignmentId) return;
     loadAssignment();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [assignmentId, caps.canViewDeliveries]);
 
   async function handleAction(action: string) {

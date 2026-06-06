@@ -42,7 +42,7 @@ export function useEntityFilters(config, defaultFilters = {}) {
     if (currentFiltersStr !== newFiltersStr) {
       setFilters(newFilters);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [searchParams]);
 
   const updateFilter = (key, value) => {

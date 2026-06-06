@@ -41,7 +41,7 @@ const TermsConditionLayer = () => {
         <p>Some initial <strong>bold</strong> text</p>
         <p><br /></p>
       </div>`);
-  // eslint-disable-next-line no-unused-vars
+   
   const [isHighlightReady, setIsHighlightReady] = useState(false);
 
   useEffect(() => {
@@ -70,16 +70,18 @@ const TermsConditionLayer = () => {
   const modules = isHighlightReady
     ? {
         syntax: {
-          highlight: (text) => hljs?.highlightAuto(text).value, // Enable highlight.js in Quill
+          highlight: (text) => hljs?.highlightAuto(text).value,
         },
         toolbar: {
-          container: "#toolbar-container", // Custom toolbar container
+          container: "#toolbar-container",
         },
+        clipboard: { matchVisual: false },
       }
     : {
         toolbar: {
-          container: "#toolbar-container", // Custom toolbar container
+          container: "#toolbar-container",
         },
+        clipboard: { matchVisual: false },
       };
 
   const formats = [

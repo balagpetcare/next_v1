@@ -1,4 +1,4 @@
-/* eslint-disable react/prop-types */
+ 
 "use client";
 
 export default function PosPaymentSummary({ subtotal, discountAmount, taxAmount, grandTotal, className }) {

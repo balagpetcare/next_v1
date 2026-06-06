@@ -7,7 +7,7 @@ import type { Map as LeafletMap, Marker as LeafletMarker } from "leaflet";
 type LeafletModule = typeof import("leaflet");
 
 const ensureIcons = (L: LeafletModule) => {
-  // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+   
   // @ts-ignore
   delete L.Icon.Default.prototype._getIconUrl;
   L.Icon.Default.mergeOptions({
@@ -130,12 +130,12 @@ export default function MapPicker({
         markerRef.current = null;
         readyRef.current = false;
         if (container) {
-          // eslint-disable-next-line no-underscore-dangle
+           
           (container as any)._leaflet_id = null;
         }
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [disabled]);
 
   // Update marker / view on prop change

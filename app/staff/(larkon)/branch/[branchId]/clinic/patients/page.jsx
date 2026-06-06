@@ -57,7 +57,7 @@ export default function StaffBranchClinicPatientsPage() {
   useEffect(() => {
     if (!branchId) return;
     let cancelled = false;
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- list fetch lifecycle
+     
     setLoading(true);
     setError("");
     const offset = (page - 1) * PAGE_SIZE;

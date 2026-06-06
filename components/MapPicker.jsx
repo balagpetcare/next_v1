@@ -108,7 +108,7 @@ export default function MapPicker({ lat, lng, onPick, height = 280 }) {
         container._leaflet_id = null;
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []); // Run once on mount
 
   // Update marker/view when props change

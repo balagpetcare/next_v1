@@ -103,7 +103,7 @@ export default function StaffBranchClinicPatientDetailPage() {
 
   useEffect(() => {
     /* Fetch patient workspace on branch/id change; loadOverview sets loading/error state. */
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load sequence for clinic workspace
+     
     loadOverview();
     return () => {
       cancelledRef.current = true;

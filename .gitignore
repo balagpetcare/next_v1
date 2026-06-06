@@ -28,6 +28,20 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+*.log
+/logs/
+
+# local validation / CI scratch output (do not commit)
+build-*.txt
+lint-*.txt
+lint-*.json
+tsc-*.txt
+tsc-output.txt
+*-audit-run.txt
+*-output.txt
+*-result.txt
+.cache/
+.turbo/
 
 # local env files (do not commit secrets)
 .env

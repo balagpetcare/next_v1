@@ -235,7 +235,7 @@ export default function StaffDispatchReceiveWorkspacePage() {
       if (rem <= 0 && ex > 0) any = true;
     }
     return any;
-  }, [dispatch, lineInputs, rowChecked, submitting]); // eslint-disable-line react-hooks/exhaustive-deps -- getRowError uses dispatch/lineInputs/rowChecked
+  }, [dispatch, lineInputs, rowChecked, submitting]);  
 
   const summaryTotals = useMemo(() => {
     let remT = 0;

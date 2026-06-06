@@ -88,7 +88,7 @@ export default function StaffPickListDetailPage() {
       return;
     }
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [id, caps.canViewPickLists]);
 
   useEffect(() => {

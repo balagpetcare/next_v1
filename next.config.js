@@ -8,6 +8,63 @@ const larkonAliases = {
   "@larkon-ui": path.join(__dirname, "src/larkon-ui"),
 };
 
+/** @returns {import('next').NextConfig['images']['remotePatterns']} */
+function buildImageRemotePatterns() {
+  const patterns = [
+    {
+      protocol: "http",
+      hostname: "localhost",
+      port: "3000",
+      pathname: "/api/v1/files/**",
+    },
+    {
+      protocol: "http",
+      hostname: "127.0.0.1",
+      port: "3000",
+      pathname: "/api/v1/files/**",
+    },
+  ];
+  const seen = new Set(patterns.map((p) => `${p.protocol}://${p.hostname}:${p.port || ""}`));
+
+  for (const raw of [
+    process.env.API_BASE_URL,
+    process.env.NEXT_PUBLIC_API_BASE_URL,
+  ]) {
+    if (!raw) continue;
+    try {
+      const withScheme = /^https?:\/\//i.test(String(raw))
+        ? String(raw)
+        : `http://${raw}`;
+      const u = new URL(withScheme.replace(/\/+$/, ""));
+      const port =
+        u.port ||
+        (u.protocol === "https:" ? "443" : u.protocol === "http:" ? "80" : "");
+      const key = `${u.protocol.replace(":", "")}://${u.hostname}:${port}`;
+      if (seen.has(key)) continue;
+      if (
+        (u.hostname === "localhost" || u.hostname === "127.0.0.1") &&
+        port &&
+        parseInt(port, 10) >= 3100 &&
+        parseInt(port, 10) <= 3107
+      ) {
+        continue;
+      }
+      /** @type {import('next').RemotePattern} */
+      const entry = {
+        protocol: u.protocol.replace(":", ""),
+        hostname: u.hostname,
+        pathname: "/api/v1/files/**",
+      };
+      if (u.port) entry.port = u.port;
+      patterns.push(entry);
+      seen.add(key);
+    } catch {
+      /* skip invalid env URL */
+    }
+  }
+  return patterns;
+}
+
 const nextConfig = {
   // Allow loading images served by the BPA API (port 3000) via next/image.
   distDir: process.env.SITE_MODE ? `.next/${process.env.SITE_MODE}` : ".next",
@@ -22,6 +79,7 @@ const nextConfig = {
   },
 
   turbopack: {
+    root: __dirname,
     resolveAlias: {
       ...larkonAliases,
       "@larkon/*": "./src/larkon-admin/*",
@@ -285,14 +343,7 @@ const nextConfig = {
   },
 
   images: {
-    remotePatterns: [
-      {
-        protocol: "http",
-        hostname: "localhost",
-        port: "3000",
-        pathname: "/api/v1/files/**",
-      },
-    ],
+    remotePatterns: buildImageRemotePatterns(),
   },
 
   sassOptions: {

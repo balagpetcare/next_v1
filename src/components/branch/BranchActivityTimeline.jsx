@@ -14,14 +14,15 @@ export default function BranchActivityTimeline({
 }) {
   const perms = Array.isArray(permissions) ? permissions : [];
   const canView = perms.includes("dashboard.view") || perms.includes("audit.view");
-  if (!canView) return null;
-
   const [filter, setFilter] = useState("all");
   const list = Array.isArray(activity) ? activity : [];
   const filtered = useMemo(() => {
+    if (!canView) return [];
     if (filter !== "me" || currentUserId == null) return list.slice(0, 50);
     return list.filter((a) => String(a.actorId ?? a.userId ?? a.actor?.id ?? "") === String(currentUserId)).slice(0, 50);
-  }, [list, filter, currentUserId]);
+  }, [list, filter, currentUserId, canView]);
+
+  if (!canView) return null;
 
   return (
     <Card

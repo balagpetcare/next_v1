@@ -73,7 +73,7 @@ export default function DhakaAreaPicker({
     return () => {
       alive = false;
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   useEffect(() => {

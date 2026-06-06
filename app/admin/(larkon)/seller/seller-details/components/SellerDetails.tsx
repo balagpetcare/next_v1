@@ -11,8 +11,8 @@ const ProductCategory = () => {
     <div className="ps-lg-4">
       <CardTitle as={'h4'}>Profit by Product Category</CardTitle>
       {productCategoryData.map((item, idx) => (
-        <React.Fragment>
-          <div className="d-flex align-items-center justify-content-between mt-3 mb-1" key={idx}>
+        <React.Fragment key={idx}>
+          <div className="d-flex align-items-center justify-content-between mt-3 mb-1">
             <p className="mb-0 fs-15 fw-medium text-dark">{item.title}</p>
             <div>
               <p className="mb-0 fs-15 fw-medium text-dark">

@@ -41,7 +41,7 @@ class DeliveryReport {
   verdict: "PASS" | "FAIL" | "PARTIAL" = "PARTIAL";
 
   log(msg: string) {
-    // eslint-disable-next-line no-console
+     
     console.log(`[e2e-delivery] ${msg}`);
   }
 

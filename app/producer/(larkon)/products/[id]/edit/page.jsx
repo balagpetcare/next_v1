@@ -26,7 +26,7 @@ export default function ProducerProductEditPage() {
 
   useEffect(() => {
     if (!id) return;
-    setLoading(true); // eslint-disable-line react-hooks/set-state-in-effect -- loading flag before async fetch
+    setLoading(true);  
     producerProductGet(id)
       .then((p) => {
         if (!p) {

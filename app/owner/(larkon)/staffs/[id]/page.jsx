@@ -119,7 +119,7 @@ export default function OwnerStaffDetailsPage() {
 
   useEffect(() => {
     if (id) load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [id]);
 
   const breadcrumbs = [

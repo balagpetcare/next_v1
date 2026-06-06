@@ -75,7 +75,7 @@ export default function VerificationCasePanel({
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [entityType, entityId]);
 
   const status = useMemo(() => norm(caseData?.status), [caseData?.status]);

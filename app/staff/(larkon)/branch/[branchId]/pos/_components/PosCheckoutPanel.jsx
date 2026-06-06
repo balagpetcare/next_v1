@@ -1,4 +1,4 @@
-/* eslint-disable react/prop-types */
+ 
 "use client";
 
 import Card from "@/src/bpa/components/ui/Card";

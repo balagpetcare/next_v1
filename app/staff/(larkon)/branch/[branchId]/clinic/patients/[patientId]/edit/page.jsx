@@ -105,7 +105,7 @@ export default function StaffBranchClinicPatientEditPage() {
   }, [branchId, patientId]);
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load sequence for edit form
+     
     loadPatient();
   }, [loadPatient]);
 

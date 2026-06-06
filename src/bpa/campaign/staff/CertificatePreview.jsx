@@ -86,7 +86,7 @@ export default function CertificatePreview({ token, petName, onClose }) {
               </dl>
               {data.qrCodeImage ? (
                 <div className="text-center mt-3">
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  { }
                   <img src={data.qrCodeImage} alt="Verification QR code" style={{ maxWidth: 120 }} />
                 </div>
               ) : null}

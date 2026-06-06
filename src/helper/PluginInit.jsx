@@ -73,7 +73,7 @@ export default function PluginInit() {
           continue;
         }
         
-        // eslint-disable-next-line no-await-in-loop
+         
         await injectScript(src);
       }
     })();

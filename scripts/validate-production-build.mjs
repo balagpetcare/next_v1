@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 /**
- * Simulate VPS production install (npm ci --omit=dev) and verify build-time deps exist.
- * Does not run full next build (slow); checks postcss/tailwind/typescript resolution.
+ * Verify build-time deps resolve after production-like install.
+ *
+ * Default: non-destructive resolve check (safe after `next build` / SWC in use).
+ * Set VALIDATE_PROD_CI=1 to run `npm ci --omit=dev` first (use on clean CI agents only).
  *
  * Usage: node scripts/validate-production-build.mjs
  */
@@ -28,9 +30,14 @@ function run(cmd, args, opts = {}) {
   }
 }
 
-console.log("Production dependency check (npm ci --omit=dev)\n");
-
-run("npm", ["ci", "--omit=dev"]);
+if (process.env.VALIDATE_PROD_CI === "1") {
+  console.log("Production dependency check (npm ci --omit=dev)\n");
+  run("npm", ["ci", "--omit=dev"]);
+} else {
+  console.log(
+    "Production dependency check (resolve-only; set VALIDATE_PROD_CI=1 for npm ci --omit=dev)\n",
+  );
+}
 
 console.log("\nResolving build-time packages from node_modules...\n");
 
@@ -39,7 +46,7 @@ for (const pkg of BUILD_DEPS) {
     const resolved = require.resolve(pkg, { paths: [ROOT] });
     console.log(`OK  ${pkg} -> ${path.relative(ROOT, resolved)}`);
   } catch {
-    console.error(`FAIL ${pkg} not resolvable after npm ci --omit=dev`);
+    console.error(`FAIL ${pkg} not resolvable`);
     process.exit(1);
   }
 }

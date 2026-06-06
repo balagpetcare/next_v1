@@ -77,7 +77,7 @@ export default function OwnerPurchaseOrderDetailPage() {
 
   useEffect(() => {
     load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [id]);
 
   async function act(action: "submit" | "approve" | "reject" | "cancel", body?: Record<string, unknown>) {
