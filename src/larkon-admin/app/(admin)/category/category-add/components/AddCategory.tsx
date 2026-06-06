@@ -12,7 +12,7 @@ import { FormInputProps } from '@larkon/types/component-props'
 import Link from 'next/link'
 
 type controlType = {
-  control: Control<any>
+  control: Control<FieldValues>
 }
 
 const GeneralInformationCard = ({ control }: controlType) => {

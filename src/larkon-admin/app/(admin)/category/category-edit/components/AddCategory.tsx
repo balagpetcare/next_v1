@@ -10,7 +10,7 @@ import { Control, FieldValues, useForm } from 'react-hook-form'
 import Link from 'next/link'
 
 type controlType = {
-  control: Control<any>
+  control: Control<FieldValues>
 }
 
 const GeneralInformationCard = ({ control }: controlType) => {

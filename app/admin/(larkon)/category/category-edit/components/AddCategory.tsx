@@ -10,7 +10,7 @@ import { Control, FieldValues, useForm } from 'react-hook-form'
 import Link from 'next/link'
 
 type controlType = {
-  control: Control<any>
+  control: Control<FieldValues>
 }
 
 const GeneralInformationCard = ({ control }: controlType) => {
@@ -98,7 +98,7 @@ const AddCategory = () => {
     metaTag: yup.string().required('Please enter meta tag'),
   })
 
-  const { reset, handleSubmit, control } = useForm({
+  const { reset, handleSubmit, control } = useForm<any>({
     resolver: yupResolver(messageSchema),
     defaultValues: {
       title: "Fashion Men , Women & Kid's",

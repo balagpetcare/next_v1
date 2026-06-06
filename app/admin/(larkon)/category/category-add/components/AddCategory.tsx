@@ -12,7 +12,7 @@ import { FormInputProps } from '@larkon/types/component-props'
 import Link from 'next/link'
 
 type controlType = {
-  control: Control<any>
+  control: Control<FieldValues>
 }
 
 const GeneralInformationCard = ({ control }: controlType) => {
@@ -100,7 +100,7 @@ const AddCategory = () => {
     metaTag: yup.string().required('Please enter meta tag'),
   })
 
-  const { reset, handleSubmit, control } = useForm({
+  const { reset, handleSubmit, control } = useForm<any>({
     resolver: yupResolver(messageSchema),
   })
   return (
