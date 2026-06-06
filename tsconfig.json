@@ -40,7 +40,19 @@
     "**/*.ts",
     "**/*.tsx",
     ".next/types/**/*.ts",
-    ".next/dev/types/**/*.ts"
+    ".next/dev/types/**/*.ts",
+    ".next/country/types/**/*.ts",
+    ".next/country/dev/types/**/*.ts",
+    ".next/shop/types/**/*.ts",
+    ".next/shop/dev/types/**/*.ts",
+    ".next/clinic/types/**/*.ts",
+    ".next/clinic/dev/types/**/*.ts",
+    ".next/doctor/types/**/*.ts",
+    ".next/doctor/dev/types/**/*.ts",
+    ".next/mother/types/**/*.ts",
+    ".next/mother/dev/types/**/*.ts",
+    ".next/owner/types/**/*.ts",
+    ".next/owner/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",
