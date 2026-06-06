@@ -1,6 +1,13 @@
 /** @type {import('next').NextConfig} */
 // Canonical Next config for bpa_web. Do not add a parallel next.config.mjs — it caused split-brain
 // (Turbopack workarounds and redirects lived only in .mjs while `next dev` loaded this file).
+const path = require("path");
+
+const larkonAliases = {
+  "@larkon": path.join(__dirname, "src/larkon-admin"),
+  "@larkon-ui": path.join(__dirname, "src/larkon-ui"),
+};
+
 const nextConfig = {
   // Allow loading images served by the BPA API (port 3000) via next/image.
   distDir: process.env.SITE_MODE ? `.next/${process.env.SITE_MODE}` : ".next",
@@ -16,9 +23,18 @@ const nextConfig = {
 
   turbopack: {
     resolveAlias: {
-      "@larkon": "./src/larkon-admin",
+      ...larkonAliases,
       "@larkon/*": "./src/larkon-admin/*",
+      "@larkon-ui/*": "./src/larkon-ui/*",
     },
+  },
+
+  webpack: (config) => {
+    config.resolve.alias = {
+      ...(config.resolve.alias || {}),
+      ...larkonAliases,
+    };
+    return config;
   },
 
   // Redirect wrong staff doctor URLs (profile/approvals etc.) to correct list pages so they don't 404.
