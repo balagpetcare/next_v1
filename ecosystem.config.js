@@ -9,8 +9,10 @@
  *
  * Do NOT:
  *   - use `npm run start` for admin/other panels (defaults to staff :3100)
- *   - set SITE_MODE during `npm run build`
+ *   - set SITE_MODE during `npm run build` (runtime only — injected per app below)
  *   - add bpa-web-mother or generic bpa-web (obsolete)
+ *
+ * Each PM2 app receives SITE_MODE + NEXT_PUBLIC_DEFAULT_PANEL from panel-registry.cjs.
  *
  * @see docs/deployment/PRODUCTION_DEPLOYMENT_PLAN.md
  */

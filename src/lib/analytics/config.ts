@@ -8,6 +8,8 @@ function readEnv(key: string): string | undefined {
 function resolveAppSurface(): AppSurface {
   const explicit = readEnv("NEXT_PUBLIC_ANALYTICS_APP_SURFACE");
   if (explicit === "landing" || explicit === "campaign" || explicit === "panel") return explicit;
+  const siteMode = readEnv("SITE_MODE") ?? readEnv("NEXT_PUBLIC_DEFAULT_PANEL");
+  if (siteMode && siteMode !== "owner" && siteMode !== "producer") return "panel";
   if (readEnv("NEXT_PUBLIC_DEFAULT_PANEL")) return "panel";
   return readEnv("NEXT_PUBLIC_CAMPAIGN_SLUG") ? "campaign" : "landing";
 }

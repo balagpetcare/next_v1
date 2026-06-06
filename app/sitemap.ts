@@ -1,10 +1,9 @@
 import type { MetadataRoute } from "next";
 import { buildSitemapEntries } from "@/src/shared/seo/sitemap";
-
-const siteMode = process.env.SITE_MODE || "owner";
+import { getSiteMode, isLandingMode } from "@/src/shared/panel/siteMode";
 
 export default function sitemap(): MetadataRoute.Sitemap {
-  if (siteMode === "owner" || siteMode === "producer") {
+  if (isLandingMode(getSiteMode())) {
     return buildSitemapEntries([
       { path: "/", changeFrequency: "weekly", priority: 1 },
     ]);

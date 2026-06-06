@@ -23,6 +23,8 @@ function resolveAppSurface(): SeoAppSurface {
   const explicit = readEnv("NEXT_PUBLIC_SEO_APP_SURFACE") ?? readEnv("NEXT_PUBLIC_ANALYTICS_APP_SURFACE");
   if (explicit === "landing" || explicit === "campaign" || explicit === "panel") return explicit;
   if (readEnv("NEXT_PUBLIC_CAMPAIGN_SLUG")) return "campaign";
+  const siteMode = readEnv("SITE_MODE") ?? readEnv("NEXT_PUBLIC_DEFAULT_PANEL");
+  if (siteMode && siteMode !== "owner" && siteMode !== "producer") return "panel";
   if (readEnv("NEXT_PUBLIC_DEFAULT_PANEL")) return "panel";
   return "landing";
 }

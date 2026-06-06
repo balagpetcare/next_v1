@@ -12,11 +12,10 @@ import TestimonialsSection from "./_components/TestimonialsSection";
 import FaqSection from "./_components/FaqSection";
 import CtaSection from "./_components/CtaSection";
 import ProducerLandingPage from "@/app/producer/_components/ProducerLandingPage";
-
-const isProducerMode = process.env.SITE_MODE === "producer";
+import { isProducerMode } from "@/src/shared/panel/siteMode";
 
 export default function PublicLandingPage() {
-  if (isProducerMode) {
+  if (isProducerMode()) {
     return <ProducerLandingPage />;
   }
   return (

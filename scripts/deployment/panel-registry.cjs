@@ -2,17 +2,21 @@
  * Canonical bpa_web panel → port → PM2 name registry.
  * Used by ecosystem.config.js and deployment scripts.
  *
+ * Each PM2 process gets SITE_MODE + NEXT_PUBLIC_DEFAULT_PANEL so one unified
+ * `.next` build serves the correct panel at runtime (root redirect + metadata).
+ *
  * Removed (obsolete): bpa-web (generic), bpa-web-mother (use bpa-web-staff on :3100).
  */
 const path = require("path");
 
 const DEFAULT_API = "https://api.bangladeshpetassociation.com";
 
-/** @type {Array<{ name: string; port: number; siteUrl: string; phase: number; extraEnv?: Record<string, string>; note?: string }>} */
+/** @type {Array<{ name: string; port: number; siteMode: string; siteUrl: string; phase: number; extraEnv?: Record<string, string>; note?: string }>} */
 const PANELS = [
   {
     name: "bpa-web-staff",
     port: 3100,
+    siteMode: "staff",
     siteUrl: "https://staff.bangladeshpetassociation.com",
     phase: 1,
     note: "Serves /staff and /mother on one process",
@@ -20,16 +24,17 @@ const PANELS = [
   {
     name: "bpa-web-admin",
     port: 3103,
+    siteMode: "admin",
     siteUrl: "https://admin.bangladeshpetassociation.com",
     phase: 2,
     extraEnv: {
       AUTH_COOKIE_NAME: "bpa_admin",
-      NEXT_PUBLIC_DEFAULT_PANEL: "admin",
     },
   },
   {
     name: "bpa-web-shop",
     port: 3101,
+    siteMode: "shop",
     siteUrl: "https://shop.bangladeshpetassociation.com",
     phase: 3,
     note: "Requires container isolation from bpa-landing on :3101 (bare metal conflict)",
@@ -37,31 +42,35 @@ const PANELS = [
   {
     name: "bpa-web-clinic",
     port: 3102,
+    siteMode: "clinic",
     siteUrl: "https://clinic.bangladeshpetassociation.com",
     phase: 3,
   },
   {
     name: "bpa-web-owner",
     port: 3104,
+    siteMode: "owner",
     siteUrl: "https://owner.bangladeshpetassociation.com",
     phase: 3,
-    extraEnv: { NEXT_PUBLIC_DEFAULT_PANEL: "owner" },
   },
   {
     name: "bpa-web-producer",
     port: 3105,
+    siteMode: "producer",
     siteUrl: "https://producer.bangladeshpetassociation.com",
     phase: 3,
   },
   {
     name: "bpa-web-country",
     port: 3106,
+    siteMode: "country",
     siteUrl: "https://country.bangladeshpetassociation.com",
     phase: 3,
   },
   {
     name: "bpa-web-doctor",
     port: 3107,
+    siteMode: "doctor",
     siteUrl: "https://doctor.bangladeshpetassociation.com",
     phase: 3,
   },
@@ -85,7 +94,7 @@ const PM2_PHASES = {
 const NPM_START_SCRIPTS = Object.fromEntries(
   PANELS.map((p) => {
     const key = p.name.replace(/^bpa-web-/, "");
-    return [key, `next start -p ${p.port}`];
+    return [key, `cross-env SITE_MODE=${p.siteMode} next start -p ${p.port}`];
   }),
 );
 
@@ -119,6 +128,8 @@ function createPm2Apps(options) {
     env: {
       ...sharedEnv,
       NEXT_PUBLIC_SITE_URL: panel.siteUrl,
+      SITE_MODE: panel.siteMode,
+      NEXT_PUBLIC_DEFAULT_PANEL: panel.siteMode,
       ...(panel.extraEnv || {}),
     },
     max_memory_restart: "1G",

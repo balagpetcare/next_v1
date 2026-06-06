@@ -7,18 +7,15 @@ import { organization, buildOrganizationJsonLd } from "@/config/organization";
 import PublicHeader from "./_components/PublicHeader";
 import PublicSiteFooter from "./_components/PublicSiteFooter";
 import GoToTopButton from "./_components/GoToTopButton";
+import {
+  getSiteMode,
+  getPanelHomePath,
+  isProducerMode,
+  shouldRedirectRootFromPublic,
+} from "@/src/shared/panel/siteMode";
 
-const siteMode = process.env.SITE_MODE || "owner";
+const siteMode = getSiteMode();
 const LOCALE_COOKIE_NAMES = ["app_locale", "landing_locale"] as const;
-const defaultPaths: Record<string, string> = {
-  mother: "/mother",
-  shop: "/shop",
-  clinic: "/clinic",
-  admin: "/admin",
-  owner: "/owner",
-  producer: "/producer",
-  country: "/country",
-};
 
 const appBase = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3104";
 
@@ -48,9 +45,8 @@ export default async function PublicLayout({
 }: {
   children: React.ReactNode;
 }) {
-  if (siteMode !== "owner" && siteMode !== "producer") {
-    const path = defaultPaths[siteMode] ?? "/owner";
-    redirect(path);
+  if (shouldRedirectRootFromPublic(siteMode)) {
+    redirect(getPanelHomePath(siteMode));
   }
 
   let initialLocale: "en" | "bn" = "en";
@@ -91,7 +87,7 @@ export default async function PublicLayout({
     ],
   };
 
-  if (siteMode === "producer") {
+  if (isProducerMode(siteMode)) {
     return (
       <div className="landing producer-landing pl-v2">
         <main id="main-content" role="main">

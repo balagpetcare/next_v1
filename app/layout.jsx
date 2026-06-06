@@ -5,14 +5,15 @@ import PluginInit from "@/src/helper/PluginInit";
 import { I18nWrapper } from "@/app/(public)/_lib/I18nWrapper";
 import AnalyticsShell from "@/src/lib/analytics/components/AnalyticsShell";
 import { buildPageMetadata } from "@/src/shared/seo/metadata";
+import { getSiteMode, isLandingMode } from "@/src/shared/panel/siteMode";
 
-const siteMode = process.env.SITE_MODE || "owner";
+const siteMode = getSiteMode();
 
 export const metadata = buildPageMetadata({
-  title: siteMode === "owner" || siteMode === "producer" ? undefined : "WPA Panel",
+  title: isLandingMode(siteMode) ? undefined : "WPA Panel",
   description:
     "World Pet Association (WPA) — Pet Smart Solution. Multi-panel web for pet care and management.",
-  noIndex: siteMode !== "owner" && siteMode !== "producer",
+  noIndex: !isLandingMode(siteMode),
 });
 
 export default async function RootLayout({ children }) {
