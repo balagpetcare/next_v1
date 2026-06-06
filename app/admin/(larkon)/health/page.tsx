@@ -6,7 +6,7 @@ import Link from 'next/link'
 import PageHeader from '@/src/bpa/components/PageHeader'
 import SectionCard from '@/src/bpa/admin/components/SectionCard'
 
-const base = String(process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000').replace(/\/+$/, '')
+const base = (typeof window !== "undefined" ? "" : String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000")).replace(/\/+$/, "")
 
 export default function HealthPage() {
   const [apiOk, setApiOk] = useState<boolean | null>(null)
