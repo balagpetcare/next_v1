@@ -39,7 +39,7 @@ export default function ClinicContractsPage() {
 
   const fetchContracts = async () => {
     try {
-      const response = await fetch("/api/clinic/contracts");
+      const response = await fetch("/api/v1/clinic/contracts", { credentials: "include" });
       const data = await response.json();
       setContracts(data);
     } catch (error) {
@@ -52,13 +52,14 @@ export default function ClinicContractsPage() {
   const handleSave = async () => {
     try {
       const url = editingContract 
-        ? `/api/clinic/contracts/${editingContract.id}`
-        : "/api/clinic/contracts";
+        ? `/api/v1/clinic/contracts/${editingContract.id}`
+        : "/api/v1/clinic/contracts";
       
       const method = editingContract ? "PUT" : "POST";
       
       const response = await fetch(url, {
         method,
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(formData),
       });

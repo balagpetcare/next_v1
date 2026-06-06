@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ownerGet, ownerPost, ownerDelete } from "@/app/owner/_lib/ownerApi";
 import PageHeader from "@/app/owner/_components/shared/PageHeader";
 
-const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/+$/, "") || "";
+const API_BASE = typeof window !== "undefined" ? "" : (String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "") || "");
 
 function getInviteAcceptUrl(token) {
   if (typeof window === "undefined") return "";

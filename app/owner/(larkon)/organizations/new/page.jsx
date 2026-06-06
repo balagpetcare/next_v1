@@ -7,7 +7,7 @@ import OrganizationWizardForm from "@/app/owner/(larkon)/organizations/_componen
 import { postLocationManual, locationToPlace } from "@/lib/locationPlace";
 import { getMeLocation } from "@/lib/api";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
+const API_BASE = typeof window !== "undefined" ? "" : (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000");
 
 function placeToLocation(place) {
   if (!place) return {};

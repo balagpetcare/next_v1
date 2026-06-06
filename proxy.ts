@@ -178,8 +178,19 @@ export function proxy(req: NextRequest) {
   const isShop = pathname.startsWith("/shop");
   const isClinic = pathname.startsWith("/clinic");
   const isMother = pathname.startsWith("/mother");
+  const isProducer = pathname.startsWith("/producer");
+  const isDoctor = pathname.startsWith("/doctor");
 
-  const needsAuth = isOwner || isAdmin || isStaff || isCountry || isShop || isClinic || isMother;
+  const needsAuth =
+    isOwner ||
+    isAdmin ||
+    isStaff ||
+    isCountry ||
+    isShop ||
+    isClinic ||
+    isMother ||
+    isProducer ||
+    isDoctor;
 
   if (!needsAuth) return NextResponse.next();
 
@@ -232,6 +243,26 @@ export function proxy(req: NextRequest) {
     const url = new URL("/country/login", req.url);
     return NextResponse.redirect(withNextParam(url, req));
   }
+  if (isShop) {
+    const url = new URL("/login", req.url);
+    url.searchParams.set("app", "shop");
+    return NextResponse.redirect(withNextParam(url, req));
+  }
+  if (isClinic) {
+    const url = new URL("/login", req.url);
+    url.searchParams.set("app", "clinic");
+    return NextResponse.redirect(withNextParam(url, req));
+  }
+  if (isProducer) {
+    const url = new URL("/login", req.url);
+    url.searchParams.set("app", "producer");
+    return NextResponse.redirect(withNextParam(url, req));
+  }
+  if (isDoctor) {
+    const url = new URL("/login", req.url);
+    url.searchParams.set("app", "doctor");
+    return NextResponse.redirect(withNextParam(url, req));
+  }
 
   const url = new URL("/login", req.url);
   return NextResponse.redirect(withNextParam(url, req));
@@ -246,5 +277,7 @@ export const config = {
     "/shop/:path*",
     "/clinic/:path*",
     "/mother/:path*",
+    "/producer/:path*",
+    "/doctor/:path*",
   ],
 };

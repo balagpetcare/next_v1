@@ -7,9 +7,9 @@ function getBase(): string {
   return API_BASE;
 }
 
-/** Use backend URL directly for owner clinic catalog calls (avoids Next.js proxy 404). */
+/** Use backend URL directly for owner clinic catalog SSR only; browser uses same-origin proxy. */
 function getCatalogBase(): string {
-  return API_BASE;
+  return getBase();
 }
 
 /** JSON envelopes often infer `data` as `{}`, which fails strict `Record<string, unknown>` assignment. */

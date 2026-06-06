@@ -210,7 +210,7 @@ export default function OwnerKycClientPage() {
   useEffect(() => {
     if (!kyc || !["VERIFIED", "APPROVED"].includes(status) || hasRedirected.current) return;
     hasRedirected.current = true;
-    const base = String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+    const base = typeof window !== "undefined" ? "" : String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
     fetch(`${base}/api/v1/auth/me`, { credentials: "include" })
       .then((r) => r.json().catch(() => null))
       .then((j) => {

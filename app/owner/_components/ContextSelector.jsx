@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import { Icon } from "@iconify/react";
 
-const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE_URL || "").replace(/\/+$/, "") || "";
+const API_BASE = typeof window !== "undefined" ? "" : (String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "") || "");
 
 export default function ContextSelector({ contexts = [], defaultContext, onSwitch }) {
   const [open, setOpen] = useState(false);

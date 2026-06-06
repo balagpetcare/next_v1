@@ -5,7 +5,7 @@ import dynamic from "next/dynamic";
 
 // We'll check for leaflet availability at runtime in the component
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
+const API_BASE = typeof window !== "undefined" ? "" : (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000");
 
 // Default center: Dhaka, Bangladesh
 const DEFAULT_CENTER = [23.8103, 90.4125];

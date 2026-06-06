@@ -12,7 +12,7 @@ type CacheEntry = {
   data: LocationMasterItem[];
 };
 
-const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+const API_BASE = (typeof window !== "undefined" ? "" : String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000")).replace(/\/+$/, "");
 const CACHE_TTL_MS = 10 * 60 * 1000;
 const STORAGE_PREFIX = "bd_master_cache_v1:";
 const memoryCache = new Map<string, CacheEntry>();

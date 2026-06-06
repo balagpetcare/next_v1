@@ -7,6 +7,7 @@ import { Card, Col, Row, Button } from "react-bootstrap";
 import { detectAuthType, validateRegistration } from "@/src/utils/authHelpers";
 import { apiPost } from "@/lib/api";
 import AuthFooter from "@/src/bpa/components/AuthFooter";
+import { getBrowserSafeApiBase } from "@/lib/authRedirect";
 
 /** Larkon-style two-column layout wrapper: form left, image right */
 function LarkonAuthLayout({ children }) {
@@ -47,11 +48,9 @@ function LarkonAuthLayout({ children }) {
  * - Otherwise: Shows direct user registration
  * - Checks if user is already logged in and provides login option
  */
-const API_BASE =
-  (typeof process !== "undefined" && process.env.NEXT_PUBLIC_API_BASE_URL) || "http://localhost:3000";
-
 async function apiGet(path) {
-  const res = await fetch(`${API_BASE}${path}`, {
+  const base = getBrowserSafeApiBase();
+  const res = await fetch(`${base}${path}`, {
     method: "GET",
     credentials: "include",
     headers: { "Accept": "application/json" },
@@ -569,7 +568,11 @@ function RegisterPageContent() {
   const handleSuccess = () => {
     setSuccess(true);
     setTimeout(() => {
-      router.push("/login?registered=1");
+      const app = sp.get("app");
+      const loginQs = app
+        ? `registered=1&app=${encodeURIComponent(app)}`
+        : "registered=1";
+      router.push(`/login?${loginQs}`);
     }, 2000);
   };
 

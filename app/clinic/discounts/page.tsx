@@ -54,11 +54,11 @@ export default function ClinicDiscountsPage() {
     setLoading(true);
     try {
       if (activeTab === "policies") {
-        const response = await fetch("/api/clinic/discounts/policies");
+        const response = await fetch("/api/v1/clinic/discounts/policies", { credentials: "include" });
         const data = await response.json();
         setPolicies(data);
       } else {
-        const response = await fetch("/api/clinic/discounts/cards");
+        const response = await fetch("/api/v1/clinic/discounts/cards", { credentials: "include" });
         const data = await response.json();
         setCards(data);
       }
@@ -72,13 +72,14 @@ export default function ClinicDiscountsPage() {
   const handleSavePolicy = async () => {
     try {
       const url = editingPolicy 
-        ? `/api/clinic/discounts/policies/${editingPolicy.id}`
-        : "/api/clinic/discounts/policies";
+        ? `/api/v1/clinic/discounts/policies/${editingPolicy.id}`
+        : "/api/v1/clinic/discounts/policies";
       
       const method = editingPolicy ? "PUT" : "POST";
       
       const response = await fetch(url, {
         method,
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(policyFormData),
       });
@@ -97,13 +98,14 @@ export default function ClinicDiscountsPage() {
   const handleSaveCard = async () => {
     try {
       const url = editingCard 
-        ? `/api/clinic/discounts/cards/${editingCard.id}`
-        : "/api/clinic/discounts/cards";
+        ? `/api/v1/clinic/discounts/cards/${editingCard.id}`
+        : "/api/v1/clinic/discounts/cards";
       
       const method = editingCard ? "PUT" : "POST";
       
       const response = await fetch(url, {
         method,
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(cardFormData),
       });
@@ -297,7 +299,10 @@ export default function ClinicDiscountsPage() {
   const handleSuspendCard = async (cardId: number) => {
     if (confirm("Are you sure you want to suspend this card?")) {
       try {
-        await fetch(`/api/clinic/discounts/cards/${cardId}/suspend`, { method: "POST" });
+        await fetch(`/api/v1/clinic/discounts/cards/${cardId}/suspend`, {
+          method: "POST",
+          credentials: "include",
+        });
         await fetchData();
       } catch (error) {
         console.error("Failed to suspend card:", error);

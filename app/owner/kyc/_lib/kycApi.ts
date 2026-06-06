@@ -121,7 +121,7 @@ export async function uploadKycFile(
   const data = (res as { data?: typeof res })?.data ?? res;
   const media = (data as { media?: { key?: string; mimeType?: string; size?: number } })?.media;
   const key = media?.key ?? "";
-  const base = String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(
+  const base = (typeof window !== "undefined" ? "" : String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000")).replace(
     /\/+$/,
     ""
   );

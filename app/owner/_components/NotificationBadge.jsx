@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { ownerGet, ownerPost } from "@/app/owner/_lib/ownerApi";
 
-const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+const API_BASE = (typeof window !== "undefined" ? "" : String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000")).replace(/\/+$/, "");
 
 /** Fetch notifications; returns [] on 403 (no owner access) without throwing */
 async function fetchNotifications() {

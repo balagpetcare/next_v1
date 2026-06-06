@@ -8,7 +8,7 @@ import StatusTimeline from "@/app/owner/_components/StatusTimeline";
 import VerificationCasePanel from "@/app/owner/_components/verification/VerificationCasePanel";
 import { ownerGet } from "@/app/owner/_lib/ownerApi";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
+const API_BASE = typeof window !== "undefined" ? "" : (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000");
 
 function normalize(s) {
   return String(s || "").toUpperCase();

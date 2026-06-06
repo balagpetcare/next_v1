@@ -52,7 +52,11 @@
     ".next/mother/types/**/*.ts",
     ".next/mother/dev/types/**/*.ts",
     ".next/owner/types/**/*.ts",
-    ".next/owner/dev/types/**/*.ts"
+    ".next/owner/dev/types/**/*.ts",
+    ".next/producer/types/**/*.ts",
+    ".next/producer/dev/types/**/*.ts",
+    ".next/admin/types/**/*.ts",
+    ".next/admin/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

@@ -5,7 +5,7 @@ import { apiGet, apiPost } from "@/lib/api";
 import { useToast } from "@/src/hooks/useToast";
 import { normalizeApiError, useApiErrorPopup } from "../_lib/apiErrorPopup";
 
-const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+const API_BASE = (typeof window !== "undefined" ? "" : String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000")).replace(/\/+$/, "");
 const DOC_TYPES = [
   { value: "NID_FRONT", label: "NID Front" },
   { value: "NID_BACK", label: "NID Back" },

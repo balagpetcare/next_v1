@@ -21,6 +21,7 @@ function OwnerLoginRedirect() {
     if (returnTo) params.set("returnTo", returnTo);
     if (next) params.set("next", next);
     if (!returnTo && !next) params.set("next", "/owner");
+    params.set("app", "owner");
     const q = params.toString();
     router.replace(q ? `/login?${q}` : "/login");
   }, [searchParams, router]);

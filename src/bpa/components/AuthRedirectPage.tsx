@@ -15,23 +15,8 @@ export interface AuthRedirectPageProps {
 }
 
 /**
- * AuthRedirectPage - A minimal page component that redirects to central auth
- * 
- * This component:
- * 1. Shows a "Redirecting..." message
- * 2. Computes the returnTo URL from query params or defaults
- * 3. Redirects to the central auth server
- * 4. Provides a fallback link if redirect is blocked
- * 
- * @example
- * ```tsx
- * // app/owner/login/page.tsx
- * import AuthRedirectPage from "@/src/bpa/components/AuthRedirectPage";
- * 
- * export default function OwnerLoginPage() {
- *   return <AuthRedirectPage panelName="owner" action="login" defaultLandingPath="/owner" />;
- * }
- * ```
+ * AuthRedirectPage - Redirects panel /login and /register entry routes to same-origin
+ * `/login?app=<panel>` or `/register?app=<panel>` (API via /api/v1 proxy).
  */
 export function AuthRedirectPageContent({
   panelName,
@@ -115,7 +100,7 @@ export function AuthRedirectPageContent({
 
             <h4 className="mb-12">Redirecting to {actionLabel}...</h4>
             <p className="mb-24 text-secondary-light">
-              You are being redirected to the {panelLabel} {actionLabel.toLowerCase()} page.
+              You are being redirected to the {panelLabel} {actionLabel.toLowerCase()} page on this site.
             </p>
 
             {/* Spinner animation */}

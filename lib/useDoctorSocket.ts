@@ -3,10 +3,11 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { io, Socket } from "socket.io-client";
 
-const API_BASE =
+const API_BASE = String(
   typeof window !== "undefined"
-    ? (window.location.origin || String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3100").replace(/\/+$/, ""))
-    : String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+    ? window.location.origin
+    : process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000"
+).replace(/\/+$/, "");
 
 function getAuthToken(): string | null {
   if (typeof document === "undefined") return null;

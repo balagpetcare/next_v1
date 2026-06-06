@@ -7,7 +7,7 @@ import { uploadKycFile } from "../_lib/kycApi";
 import type { KycDocumentSlot, KycDocumentType } from "../_types/kyc";
 import { FileImage, Upload, CheckCircle2, AlertCircle } from "lucide-react";
 
-const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+const API_BASE = (typeof window !== "undefined" ? "" : String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000")).replace(/\/+$/, "");
 
 const DOC_TYPE_OPTIONS: { value: KycDocumentType; label: string }[] = [
   { value: "NID", label: "National ID (NID)" },

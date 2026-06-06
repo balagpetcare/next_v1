@@ -17,26 +17,14 @@ function AuthLoginContent() {
     const returnTo = searchParams.get("returnTo");
     const next = searchParams.get("next");
 
-    const panelLoginPaths: Record<string, string> = {
-      owner: "/owner/login",
-      admin: "/admin/login",
-      partner: "/partner/login",
-      country: "/country/login",
-      staff: "/staff/login",
-      shop: "/shop/login",
-      clinic: "/clinic/login",
-      producer: "/producer/login",
-      mother: "/mother/login",
-    };
-
-    const targetPath = app && panelLoginPaths[app];
     const params = new URLSearchParams();
+    if (app) params.set("app", app);
     if (returnTo) params.set("returnTo", returnTo);
     if (next) params.set("next", next);
     const q = params.toString();
 
-    if (targetPath) {
-      router.replace(q ? `${targetPath}?${q}` : targetPath);
+    if (app) {
+      router.replace(q ? `/login?${q}` : `/login?app=${encodeURIComponent(app)}`);
     } else {
       router.replace(q ? `/login?${q}` : "/login");
     }

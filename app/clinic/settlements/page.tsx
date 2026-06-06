@@ -69,15 +69,21 @@ export default function ClinicSettlementsPage() {
     setLoading(true);
     try {
       if (activeTab === "overview") {
-        const response = await fetch(`/api/clinic/settlements/summary?period=${period}`);
+        const response = await fetch(`/api/v1/clinic/settlements/summary?period=${period}`, {
+          credentials: "include",
+        });
         const data = await response.json();
         setSummary(data);
       } else if (activeTab === "records") {
-        const response = await fetch(`/api/clinic/settlements/records?period=${period}`);
+        const response = await fetch(`/api/v1/clinic/settlements/records?period=${period}`, {
+          credentials: "include",
+        });
         const data = await response.json();
         setRecords(data);
       } else {
-        const response = await fetch("/api/clinic/settlements/adjustments");
+        const response = await fetch("/api/v1/clinic/settlements/adjustments", {
+          credentials: "include",
+        });
         const data = await response.json();
         setAdjustments(data);
       }
@@ -92,8 +98,9 @@ export default function ClinicSettlementsPage() {
     if (!selectedRecord) return;
 
     try {
-      const response = await fetch(`/api/clinic/settlements/${selectedRecord.id}/process`, {
+      const response = await fetch(`/api/v1/clinic/settlements/${selectedRecord.id}/process`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           paymentMethod: "BANK_TRANSFER",
@@ -114,8 +121,9 @@ export default function ClinicSettlementsPage() {
     if (!selectedRecord) return;
 
     try {
-      const response = await fetch(`/api/clinic/settlements/${selectedRecord.id}/adjustments`, {
+      const response = await fetch(`/api/v1/clinic/settlements/${selectedRecord.id}/adjustments`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(adjustmentFormData),
       });

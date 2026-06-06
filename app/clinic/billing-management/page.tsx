@@ -63,15 +63,15 @@ export default function ClinicBillingPage() {
     setLoading(true);
     try {
       if (activeTab === "records") {
-        const response = await fetch("/api/clinic/billing/records");
+        const response = await fetch("/api/v1/clinic/billing/records", { credentials: "include" });
         const data = await response.json();
         setRecords(data);
       } else if (activeTab === "refunds") {
-        const response = await fetch("/api/clinic/billing/refunds");
+        const response = await fetch("/api/v1/clinic/billing/refunds", { credentials: "include" });
         const data = await response.json();
         setRefunds(data);
       } else {
-        const response = await fetch("/api/clinic/billing/discounts");
+        const response = await fetch("/api/v1/clinic/billing/discounts", { credentials: "include" });
         const data = await response.json();
         setDiscounts(data);
       }
@@ -86,8 +86,9 @@ export default function ClinicBillingPage() {
     if (!selectedRecord) return;
 
     try {
-      const response = await fetch(`/api/clinic/billing/${selectedRecord.id}/refund`, {
+      const response = await fetch(`/api/v1/clinic/billing/${selectedRecord.id}/refund`, {
         method: "POST",
+        credentials: "include",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(refundFormData),
       });

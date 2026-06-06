@@ -8,10 +8,10 @@
  */
 
 const API_BASE =
-  (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(
-    /\/$/,
-    ""
-  );
+  (typeof window !== "undefined"
+    ? ""
+    : String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000")
+  ).replace(/\/+$/, "");
 
 function pickEndpoint(envKey, fallbackPath) {
   const v = process.env[envKey];

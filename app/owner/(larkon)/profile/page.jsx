@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import LocationField from "@/src/components/location/LocationField";
 import { normalizeLocation, withLegacyLocationFields } from "@/src/lib/location/normalizeLocation";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
+const API_BASE = typeof window !== "undefined" ? "" : (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000");
 
 async function apiGet(path) {
   const res = await fetch(`${API_BASE}${path}`, { credentials: "include" });

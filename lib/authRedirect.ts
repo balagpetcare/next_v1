@@ -1,21 +1,15 @@
 /**
- * Central Auth Redirect Helper
- * 
- * Builds authentication URLs for redirecting to the central auth UI.
- * Includes security validation to ensure returnTo URLs are same-origin
- * or from allowed localhost ports.
- * 
- * Environment Variables:
- * - NEXT_PUBLIC_AUTH_BASE_URL: Base URL of the central auth server (default: http://localhost:3000)
- * 
+ * Panel auth redirect helpers.
+ *
+ * All panels authenticate on the **same origin** as the Next.js app (`/login`, `/register`)
+ * with API calls proxied through `/api/v1/*`. Never redirect the browser to an external
+ * API host for login/register (cookies must be set on the panel port).
+ *
  * @example
  * ```ts
  * import { buildAuthUrl, getDefaultReturnTo } from '@/lib/authRedirect';
- * 
- * // In a client component
  * const returnTo = getDefaultReturnTo('owner', '/owner');
- * const loginUrl = buildAuthUrl('login', 'owner', returnTo);
- * router.replace(loginUrl);
+ * router.replace(buildAuthUrl('login', 'owner', returnTo)); // → /login?app=owner&returnTo=...
  * ```
  */
 
@@ -41,15 +35,15 @@ export const PANEL_CONFIG: Record<string, { port: number; basePath: string; labe
 };
 
 /**
- * Get the central auth base URL from environment or default
+ * Legacy API host hint (SSR / server-side only). Browser auth must not navigate here.
+ * @deprecated Prefer buildAuthUrl() which returns same-origin /login or /register.
  */
 export function getAuthBaseUrl(): string {
   if (typeof window !== 'undefined') {
-    return (window as any).__NEXT_PUBLIC_AUTH_BASE_URL ||
-           process.env.NEXT_PUBLIC_AUTH_BASE_URL ||
-           'http://localhost:3000';
+    return '';
   }
-  return process.env.NEXT_PUBLIC_AUTH_BASE_URL || 'http://localhost:3000';
+  return (process.env.NEXT_PUBLIC_AUTH_BASE_URL || process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:3000')
+    .replace(/\/+$/, '');
 }
 
 /**
@@ -150,31 +144,25 @@ export function getDefaultReturnTo(panelName: string, defaultPath?: string): str
 }
 
 /**
- * Build the central auth URL for login or register
- * 
+ * Build same-origin login or register URL for a panel.
+ *
  * @param action - 'login' or 'register'
  * @param appName - The panel/app name (owner, admin, etc.)
  * @param returnTo - URL to redirect to after auth (will be validated)
- * @returns The full auth URL to redirect to
+ * @returns Path + query, e.g. `/login?app=clinic&returnTo=...`
  */
 export function buildAuthUrl(
   action: 'login' | 'register',
   appName: string,
   returnTo: string,
-  useSameOriginForAdmin?: boolean
+  _useSameOriginForAdmin?: boolean
 ): string {
   const params = new URLSearchParams();
   params.set('app', appName);
   params.set('returnTo', returnTo);
 
-  // Admin, Doctor, Staff: use same-origin /login so cookie is set on panel port (path-only for reliable router.replace).
-  const sameOriginPanels = ['admin', 'doctor', 'staff'];
-  if (useSameOriginForAdmin && sameOriginPanels.includes(appName) && typeof window !== 'undefined') {
-    return `/login?${params.toString()}`;
-  }
-
-  const authBase = getAuthBaseUrl();
-  return `${authBase}/auth/${action}?${params.toString()}`;
+  const path = action === 'register' ? '/register' : '/login';
+  return `${path}?${params.toString()}`;
 }
 
 /**
@@ -238,9 +226,7 @@ export function getAuthRedirectUrl(
   defaultLandingPath?: string
 ): string {
   const returnTo = parseReturnToFromQuery(searchParams ?? null, panelName, defaultLandingPath);
-  // Admin, doctor, staff: same-origin /login so cookie is set on panel port (avoids unauthorized after returnTo)
-  const useSameOrigin = ['admin', 'doctor', 'staff'].includes(panelName);
-  return buildAuthUrl(action, panelName, returnTo, useSameOrigin);
+  return buildAuthUrl(action, panelName, returnTo);
 }
 
 /**
@@ -249,8 +235,13 @@ export function getAuthRedirectUrl(
  */
 export function getLoginPathForPanel(panelName: string): string {
   const config = PANEL_CONFIG[panelName];
-  if (config) return `${config.basePath}/login`;
-  return "/login";
+  const app = panelName || config?.basePath?.replace(/^\//, '') || 'owner';
+  const returnTo =
+    typeof window !== 'undefined' && config
+      ? `${window.location.origin}${config.basePath}`
+      : config?.basePath || `/${app}`;
+  const params = new URLSearchParams({ app, returnTo });
+  return `/login?${params.toString()}`;
 }
 
 /**

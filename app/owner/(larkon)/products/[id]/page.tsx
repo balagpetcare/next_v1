@@ -7,7 +7,7 @@ import { apiFetch } from "@/src/lib/apiFetch";
 import ImageUploadField from "@/app/owner/_components/branch/ImageUploadField";
 import { notify } from "@/app/owner/_components/Notification";
 
-const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+const API_BASE = (typeof window !== "undefined" ? "" : String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000")).replace(/\/+$/, "");
 
 async function uploadBlobAsMedia(blob: Blob): Promise<{ id: number; url: string }> {
   const fd = new FormData();

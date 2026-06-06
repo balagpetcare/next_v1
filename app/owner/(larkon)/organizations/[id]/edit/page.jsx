@@ -16,7 +16,7 @@ import {
   locationValueToAddressJson,
 } from "@/src/lib/location/normalizeLocation";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
+const API_BASE = typeof window !== "undefined" ? "" : (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000");
 
 // ---------- API helpers (same style as your create page) ----------
 async function uploadMedia(file) {

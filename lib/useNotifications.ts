@@ -4,7 +4,10 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { apiGet, apiPost } from "./api";
 import { io, Socket } from "socket.io-client";
 
-const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+const API_BASE =
+  typeof window !== "undefined"
+    ? window.location.origin.replace(/\/+$/, "")
+    : String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
 const WS_BASE = API_BASE.replace(/^http/, "ws");
 const COUNT_POLL_MS = 15000;
 const LIST_POLL_MS = 30000;

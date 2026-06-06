@@ -15,10 +15,7 @@ function LogoutRunner() {
   React.useEffect(() => {
     (async () => {
       try {
-        const base =
-          process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000";
-
-        await fetch(new URL("/api/v1/auth/logout", base), {
+        await fetch("/api/v1/auth/logout", {
           method: "POST",
           credentials: "include",
         });

@@ -39,7 +39,7 @@ const DEFAULT_VALUE: LocationValue = {
   postalCode: "",
 };
 
-const API_BASE = (typeof window !== "undefined" && (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "")) || "";
+const API_BASE = (typeof window !== "undefined" ? "" : String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000")).replace(/\/+$/, "");
 
 async function fetchJson<T>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {

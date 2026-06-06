@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { getBrowserSafeApiBase } from "@/lib/authRedirect";
 
-const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
-
-async function getJSON(url) {
-  const res = await fetch(url, { credentials: "include", headers: { Accept: "application/json" } });
+async function getJSON(path) {
+  const base = getBrowserSafeApiBase();
+  const res = await fetch(`${base}${path}`, { credentials: "include", headers: { Accept: "application/json" } });
   const j = await res.json().catch(() => null);
   if (!res.ok) throw new Error(j?.message || res.statusText || "Request failed");
   return j;
@@ -17,7 +17,7 @@ export function useMe() {
   const refresh = useCallback(async () => {
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
-      const j = await getJSON(`${API_BASE}/api/v1/me`);
+      const j = await getJSON("/api/v1/me");
       const me = j?.success ? j.data : j;
       setState({ loading: false, me, error: null });
     } catch (e) {

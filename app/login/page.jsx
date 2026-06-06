@@ -45,7 +45,9 @@ function isProtectedPath(path) {
     p === "/country" || p.startsWith("/country/") ||
     p === "/mother" || p.startsWith("/mother/") ||
     p === "/shop" || p.startsWith("/shop/") ||
-    p === "/clinic" || p.startsWith("/clinic/")
+    p === "/clinic" || p.startsWith("/clinic/") ||
+    p === "/producer" || p.startsWith("/producer/") ||
+    p === "/doctor" || p.startsWith("/doctor/")
   );
 }
 
@@ -94,19 +96,31 @@ function LoginPageContent() {
       const returnTo = sp.get("returnTo");
       const onAdminPort = typeof window !== "undefined" && String(window.location.port) === "3103";
       const onDoctorPort = typeof window !== "undefined" && String(window.location.port) === "3107";
+      const onProducerPort = typeof window !== "undefined" && String(window.location.port) === "3105";
       const isAdminFlow = app === "admin" || (returnTo && returnTo.includes("/admin")) || onAdminPort;
       const isDoctorFlow = app === "doctor" || (returnTo && returnTo.includes("/doctor")) || onDoctorPort;
       const isStaffFlow = app === "staff" || (returnTo && returnTo.includes("/staff"));
+      const isProducerFlow =
+        app === "producer" || (returnTo && returnTo.includes("/producer")) || onProducerPort;
       const loginPath = isAdminFlow
         ? "/api/v1/admin/auth/login"
         : isDoctorFlow
           ? "/api/v1/doctor/auth/login"
-          : isStaffFlow
-            ? "/api/v1/auth/staff/login"
-            : "/api/v1/auth/login";
+          : isProducerFlow
+            ? "/api/v1/producer/auth/login"
+            : isStaffFlow
+              ? "/api/v1/auth/staff/login"
+              : "/api/v1/auth/login";
 
       if (process.env.NODE_ENV === "development") {
-        console.info("[login] fetch: browser-initiated", { loginPath, app, isStaffFlow, isAdminFlow, isDoctorFlow });
+        console.info("[login] fetch: browser-initiated", {
+          loginPath,
+          app,
+          isStaffFlow,
+          isAdminFlow,
+          isDoctorFlow,
+          isProducerFlow,
+        });
       }
       const response = await apiPost(loginPath, payload);
 
@@ -151,7 +165,15 @@ function LoginPageContent() {
         const path = allowedTarget;
         targetPath = path === "/mother" || path === "/mother/" ? "/post-auth-landing" : path;
       }
-      if (!targetPath) targetPath = isAdminFlow && onAdminPort ? "/admin" : isStaffFlow ? "/staff" : "/post-auth-landing";
+      if (!targetPath) {
+        targetPath = isAdminFlow && onAdminPort
+          ? "/admin"
+          : isStaffFlow
+            ? "/staff"
+            : isProducerFlow
+              ? "/producer/dashboard"
+              : "/post-auth-landing";
+      }
 
       // Staff-only: never send staff to post-auth-landing; always full-page redirect to /staff
       // so cookie is applied and auth/me will succeed on /staff (avoids post-auth-landing 401).
@@ -165,6 +187,19 @@ function LoginPageContent() {
           console.info("[staff-login] redirect to staff", { staffUrl });
         }
         scheduleRedirect(staffUrl);
+        return;
+      }
+
+      const usedProducerLogin = loginPath === "/api/v1/producer/auth/login";
+      if (usedProducerLogin && targetPath === "/post-auth-landing") {
+        targetPath = "/producer/dashboard";
+      }
+      if (usedProducerLogin) {
+        const producerUrl = targetPath.startsWith("http") ? targetPath : `${origin}${targetPath}`;
+        if (process.env.NODE_ENV === "development") {
+          console.info("[producer-login] redirect after success", { producerUrl });
+        }
+        scheduleRedirect(producerUrl);
         return;
       }
 

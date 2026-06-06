@@ -31,7 +31,7 @@ import {
 import { useRecentLocations } from "@/src/components/location/hooks/useRecentLocations";
 import type { BangladeshLocationSelection } from "@/components/location/LocationSelector";
 
-const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+const API_BASE = (typeof window !== "undefined" ? "" : String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000")).replace(/\/+$/, "");
 
 async function fetchJson<T = unknown>(path: string): Promise<T> {
   const res = await fetch(`${API_BASE}${path}`, {

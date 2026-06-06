@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { getBrowserSafeApiBase } from "@/lib/authRedirect";
 
 export type MeResponse = {
   user?: any;
@@ -13,10 +14,9 @@ export type MeResponse = {
   profile?: any;
 };
 
-const API_BASE = String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
-
-async function fetchJson(url: string) {
-  const res = await fetch(url, {
+async function fetchJson(path: string) {
+  const base = getBrowserSafeApiBase();
+  const res = await fetch(`${base}${path}`, {
     credentials: "include",
     cache: "no-store",
   });
@@ -39,7 +39,7 @@ export function useMe(pathname?: string) {
       setLoading(true);
       try {
         // Try /api/v1/auth/me first (includes full profile with avatarMedia, permissions, panels)
-        const authMe = await fetchJson(`${API_BASE}/api/v1/auth/me`);
+        const authMe = await fetchJson("/api/v1/auth/me");
         const data = authMe && typeof authMe === "object" && "data" in authMe ? (authMe as any).data : authMe;
         const normalizedAuth =
           data && typeof data === "object"
@@ -60,7 +60,7 @@ export function useMe(pathname?: string) {
       } catch (e) {
         // Fallback to /api/v1/me
         try {
-          const primary = await fetchJson(`${API_BASE}/api/v1/me`);
+          const primary = await fetchJson("/api/v1/me");
           const normalized =
             primary && typeof primary === "object" && "data" in primary ? (primary as any).data : primary;
           if (!cancelled) {
@@ -70,7 +70,7 @@ export function useMe(pathname?: string) {
         } catch (e2) {
           // admin fallback
           try {
-            const admin = await fetchJson(`${API_BASE}/api/v1/admin/auth/me`);
+            const admin = await fetchJson("/api/v1/admin/auth/me");
             const normalized =
               admin && typeof admin === "object" && "data" in admin ? (admin as any).data : admin;
             if (!cancelled) setMe(normalized);

@@ -5,9 +5,9 @@
  */
 import { getCountryCode } from "@/lib/countryContext";
 
-// In browser with no explicit base: use same-origin so Next.js rewrites /api/* to backend (avoids CORS, sends cookies).
+// In browser: always same-origin so Next.js proxies /api to backend (never cross-origin from client).
 export function getApiBase() {
-  if (typeof window !== "undefined" && !process.env.NEXT_PUBLIC_API_BASE_URL) return "";
+  if (typeof window !== "undefined") return "";
   return String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
 }
 

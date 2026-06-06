@@ -45,7 +45,7 @@ function MapContent({
   const handleConfirm = useCallback(async () => {
     setLoading(true);
     try {
-      const base = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+  const base = (typeof window !== "undefined" ? "" : String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000")).replace(/\/+$/, "");
       const res = await fetch(
         `${base}/api/v1/locations/reverse?lat=${position[0]}&lng=${position[1]}`,
         { credentials: "include", cache: "no-store" }

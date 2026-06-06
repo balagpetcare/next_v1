@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { LocationValue, withLegacyLocationFields } from "@/src/lib/location/normalizeLocation";
 
-const API_BASE = (process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000").replace(/\/+$/, "");
+const API_BASE = (typeof window !== "undefined" ? "" : String(process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3000")).replace(/\/+$/, "");
 
 type Option = { id: string; nameEn?: string; name?: string };
 
