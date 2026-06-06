@@ -19,6 +19,12 @@ npx tsc --noEmit
 npm run build
 ```
 
+Production deploy pipeline (lint + typecheck + build + panel validation):
+
+```bash
+npm run deploy:build
+```
+
 Optional extended pipeline (recommended before major releases):
 
 ```bash
