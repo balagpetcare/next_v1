@@ -29,6 +29,8 @@ import {
   type CampaignSmsLogRow,
   type CampaignSummary,
 } from '@/lib/campaignApi'
+import { adminSmsGatewayTest } from '@/lib/smsApi'
+import { normalizeBangladeshPhone } from '@/lib/phone'
 
 type HubTab = 'analytics' | 'export' | 'sms' | 'certificates'
 
@@ -84,6 +86,9 @@ export default function CampaignOperationsCenter({ campaignId }: Props) {
   const [smsLogTotalPages, setSmsLogTotalPages] = useState(1)
   const [smsCost, setSmsCost] = useState<CampaignSmsCostSummary | null>(null)
   const [smsLogLoading, setSmsLogLoading] = useState(false)
+  const [smsTestPhone, setSmsTestPhone] = useState('')
+  const [smsTestBusy, setSmsTestBusy] = useState(false)
+  const [smsTestResult, setSmsTestResult] = useState('')
 
   const [certRows, setCertRows] = useState<CertRow[]>([])
   const [certSearch, setCertSearch] = useState('')
@@ -592,6 +597,70 @@ export default function CampaignOperationsCenter({ campaignId }: Props) {
 
       {tab === 'sms' ? (
         <div className="row g-4">
+          <div className="col-12">
+            <div className="card border-0 shadow-sm border-start border-4 border-info">
+              <div className="card-header bg-transparent">
+                <h6 className="mb-0">SMS gateway test</h6>
+              </div>
+              <div className="card-body">
+                <p className="small text-muted mb-3">
+                  Send a test message via BulkSMSBD to verify credentials, queue, and delivery. Admin only.
+                </p>
+                <div className="row g-2 align-items-end">
+                  <div className="col-md-5">
+                    <label className="form-label small" htmlFor="sms-test-phone">
+                      Phone number
+                    </label>
+                    <input
+                      id="sms-test-phone"
+                      type="tel"
+                      className="form-control font-monospace"
+                      placeholder="01701022277 or +880…"
+                      value={smsTestPhone}
+                      onChange={(e) => setSmsTestPhone(e.target.value)}
+                    />
+                  </div>
+                  <div className="col-md-auto">
+                    <button
+                      type="button"
+                      className="btn btn-info"
+                      disabled={smsTestBusy || !smsTestPhone.trim()}
+                      onClick={async () => {
+                        setSmsTestBusy(true)
+                        setSmsTestResult('')
+                        try {
+                          const phone = normalizeBangladeshPhone(smsTestPhone.trim())
+                          const res = await adminSmsGatewayTest(phone)
+                          const d = res.data
+                          const lines = [
+                            res.success ? 'Gateway: OK' : 'Gateway: FAILED',
+                            d?.provider ? `Provider: ${d.provider}` : null,
+                            d?.messageId ? `Message ID: ${d.messageId}` : null,
+                            d?.logId != null ? `Log ID: ${d.logId}` : null,
+                            d?.queued ? 'Queued: yes' : d?.queued === false ? 'Queued: no (direct send)' : null,
+                            d?.error ? `Error: ${d.error}` : null,
+                            res.error?.message ? `API: ${res.error.message}` : null,
+                          ].filter(Boolean)
+                          setSmsTestResult(lines.join('\n'))
+                        } catch (e) {
+                          setSmsTestResult(e instanceof Error ? e.message : 'Test failed')
+                        } finally {
+                          setSmsTestBusy(false)
+                        }
+                      }}
+                    >
+                      {smsTestBusy ? 'Sending…' : 'Send test SMS'}
+                    </button>
+                  </div>
+                </div>
+                {smsTestResult ? (
+                  <pre className="small bg-light rounded p-3 mt-3 mb-0 font-monospace" style={{ whiteSpace: 'pre-wrap' }}>
+                    {smsTestResult}
+                  </pre>
+                ) : null}
+              </div>
+            </div>
+          </div>
           <div className="col-lg-7">
             <div className="card border-0 shadow-sm">
               <div className="card-header bg-transparent">

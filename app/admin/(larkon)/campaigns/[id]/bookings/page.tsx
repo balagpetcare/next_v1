@@ -19,6 +19,7 @@ import {
   type CampaignBookingRow,
   type CampaignExportFormat,
 } from '@/lib/campaignApi'
+import { normalizeBangladeshPhone } from '@/lib/phone'
 
 const PAGE_SIZE = 20
 
@@ -87,7 +88,10 @@ function buildListParams(
   if (filters.paymentStatus) params.paymentStatus = filters.paymentStatus
   if (filters.dateFrom) params.dateFrom = filters.dateFrom
   if (filters.dateTo) params.dateTo = filters.dateTo
-  if (filters.phone.trim()) params.phone = filters.phone.trim()
+  if (filters.phone.trim()) {
+    const normalized = normalizeBangladeshPhone(filters.phone.trim())
+    params.phone = normalized || filters.phone.trim()
+  }
   if (filters.reference.trim()) params.reference = filters.reference.trim()
   if (filters.petCountMin !== '') params.petCountMin = Number(filters.petCountMin)
   if (filters.petCountMax !== '') params.petCountMax = Number(filters.petCountMax)

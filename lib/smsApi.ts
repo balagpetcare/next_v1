@@ -80,3 +80,21 @@ export async function adminSmsBulk(body: { phones: string[]; message: string }) 
 export async function adminSmsRetry(logId: number) {
   return apiPost<{ success: boolean; data: unknown }>(`${admin}/retry/${logId}`, {});
 }
+
+export type SmsTestResult = {
+  success: boolean;
+  data?: {
+    success?: boolean;
+    logId?: number;
+    messageId?: string;
+    provider?: string;
+    error?: string;
+    queued?: boolean;
+  };
+  error?: { code?: string; message?: string };
+};
+
+/** Gateway connectivity test — POST /api/v1/notifications/sms/test */
+export async function adminSmsGatewayTest(phone: string): Promise<SmsTestResult> {
+  return apiPost<SmsTestResult>("/api/v1/notifications/sms/test", { phone });
+}
