@@ -1200,11 +1200,18 @@ export function campaignBookingPath(booking: { bookingRef: string; id?: number }
 // Campaign Config Engine
 // ============================================================================
 
+export type CampaignPaymentChannelMode =
+  | "SMS_ONLY"
+  | "EPS_ONLY"
+  | "SMS_AND_EPS"
+  | "EPS_WITH_SMS_FALLBACK";
+
 export type CampaignConfigData = {
   campaignId: number;
   version: number;
   bookingEnabled: boolean;
   onlinePaymentEnabled: boolean;
+  paymentChannelMode?: CampaignPaymentChannelMode;
   payAtVenueEnabled: boolean;
   walkInAllowed: boolean;
   approvalRequired: boolean;

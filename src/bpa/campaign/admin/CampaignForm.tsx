@@ -24,6 +24,7 @@ export type CampaignFormValues = {
   // Config engine switches
   bookingEnabled: boolean
   onlinePaymentEnabled: boolean
+  paymentChannelMode: 'SMS_ONLY' | 'EPS_ONLY' | 'SMS_AND_EPS' | 'EPS_WITH_SMS_FALLBACK'
   payAtVenueEnabled: boolean
   approvalRequired: boolean
   slotRequired: boolean
@@ -32,6 +33,16 @@ export type CampaignFormValues = {
   lateBookingAllowed: boolean
   maxCapacity: number
 }
+
+const PAYMENT_CHANNEL_OPTIONS = [
+  { value: 'SMS_ONLY', label: 'SMS only (bKash, Nagad, Rocket)' },
+  { value: 'EPS_ONLY', label: 'EPS only (online gateway)' },
+  { value: 'SMS_AND_EPS', label: 'SMS + EPS (customer chooses)' },
+  {
+    value: 'EPS_WITH_SMS_FALLBACK',
+    label: 'EPS with SMS fallback (recommended)',
+  },
+] as const
 
 const defaults: CampaignFormValues = {
   name: '',
@@ -54,6 +65,7 @@ const defaults: CampaignFormValues = {
   walkInQuotaPercent: 20,
   bookingEnabled: true,
   onlinePaymentEnabled: false,
+  paymentChannelMode: 'SMS_ONLY',
   payAtVenueEnabled: false,
   approvalRequired: false,
   slotRequired: true,
@@ -316,6 +328,39 @@ export default function CampaignForm({ initial, submitLabel = 'Save', onSubmit, 
               <input className="form-check-input" type="checkbox" role="switch" id="sw-online" checked={values.onlinePaymentEnabled} onChange={(e) => patch('onlinePaymentEnabled', e.target.checked)} />
               <label className="form-check-label" htmlFor="sw-online">Online Payment</label>
             </div>
+            {values.onlinePaymentEnabled ? (
+              <div className="mb-3">
+                <label className="form-label" htmlFor="payment-channel-mode">
+                  Payment Strategy
+                </label>
+                <select
+                  id="payment-channel-mode"
+                  className="form-select"
+                  value={values.paymentChannelMode}
+                  onChange={(e) =>
+                    patch(
+                      'paymentChannelMode',
+                      e.target.value as CampaignFormValues['paymentChannelMode'],
+                    )
+                  }
+                >
+                  {PAYMENT_CHANNEL_OPTIONS.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </select>
+                <div className="form-text">
+                  Controls which online payment methods appear on the public booking payment page.
+                  <strong> SMS only</strong> uses MFS numbers configured for this campaign.{' '}
+                  <strong>EPS only</strong> requires the EPS gateway on the vaccination API.{' '}
+                  <strong>SMS + EPS</strong> lets customers pick a channel.{' '}
+                  <strong>EPS with SMS fallback</strong> tries EPS first; if the gateway cannot
+                  start a session, customers are guided to bKash, Nagad, or Rocket without losing
+                  their booking.
+                </div>
+              </div>
+            ) : null}
             <div className="form-check form-switch mb-2">
               <input className="form-check-input" type="checkbox" role="switch" id="sw-venue" checked={values.payAtVenueEnabled} onChange={(e) => patch('payAtVenueEnabled', e.target.checked)} />
               <label className="form-check-label" htmlFor="sw-venue">Pay At Venue</label>
@@ -401,6 +446,7 @@ export function campaignFormToPayload(v: CampaignFormValues) {
     config: {
       bookingEnabled: v.bookingEnabled,
       onlinePaymentEnabled: v.onlinePaymentEnabled,
+      paymentChannelMode: v.paymentChannelMode,
       payAtVenueEnabled: v.payAtVenueEnabled,
       walkInAllowed: v.allowWalkIns,
       approvalRequired: v.approvalRequired,
@@ -437,6 +483,7 @@ export function campaignToFormValues(c: {
   config?: {
     bookingEnabled?: boolean
     onlinePaymentEnabled?: boolean
+    paymentChannelMode?: CampaignFormValues['paymentChannelMode']
     payAtVenueEnabled?: boolean
     walkInAllowed?: boolean
     approvalRequired?: boolean
@@ -479,6 +526,7 @@ export function campaignToFormValues(c: {
     walkInQuotaPercent: c.walkInQuotaPercent ?? 20,
     bookingEnabled: cfg?.bookingEnabled ?? true,
     onlinePaymentEnabled: cfg?.onlinePaymentEnabled ?? false,
+    paymentChannelMode: cfg?.paymentChannelMode ?? 'SMS_ONLY',
     payAtVenueEnabled: cfg?.payAtVenueEnabled ?? false,
     approvalRequired: cfg?.approvalRequired ?? false,
     slotRequired: cfg?.slotRequired ?? true,
